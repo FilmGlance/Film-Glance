@@ -695,6 +695,10 @@ export default function FilmGlance() {
   const [awardsOpen, setAwardsOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPw, setAuthPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
   const [showFavs, setShowFavs] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -925,11 +929,44 @@ export default function FilmGlance() {
             <button onClick={() => setShowAuth(false)} style={{ position: "absolute", top: 14, right: 14, background: "none", border: "none", color: "#444", cursor: "pointer" }}><X size={17} /></button>
             <div style={{ textAlign: "center", marginBottom: 26 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, margin: "0 auto 12px", background: "linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.06))", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,215,0,0.1)" }}><Film size={20} style={{ color: "#FFD700" }} /></div>
-              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: "#fff", margin: 0 }}>Welcome Back</h2>
+              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: "#fff", margin: 0 }}>{authMode === "signup" ? "Create Account" : "Welcome Back"}</h2>
+              <p style={{ color: "#444", fontSize: 12, marginTop: 6 }}>{authMode === "signup" ? "Sign up to start rating" : "Sign in to continue"}</p>
             </div>
-            <button style={{ width: "100%", padding: "10px", borderRadius: 11, border: "1px solid #1e1e1e", background: "#0c0c0c", color: "#ccc", fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9, marginBottom: 20 }}
+            <button style={{ width: "100%", padding: "10px", borderRadius: 11, border: "1px solid #1e1e1e", background: "#0c0c0c", color: "#ccc", fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9, marginBottom: 16 }}
               onClick={loginWithGoogle}>Continue with Google</button>
-            <button onClick={loginWithGoogle} style={{ width: "100%", padding: "12px", borderRadius: 11, border: "none", background: "linear-gradient(135deg,#FFD700,#E8A000)", color: "#050505", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>Sign In</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1, height: 1, background: "#1a1a1a" }} />
+              <span style={{ color: "#333", fontSize: 11 }}>or</span>
+              <div style={{ flex: 1, height: 1, background: "#1a1a1a" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+              <div style={{ position: "relative" }}>
+                <Mail size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#333" }} />
+                <input type="email" placeholder="Email address" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: 10, border: "1px solid #1a1a1a", background: "#0a0a0a", color: "#fff", fontSize: 13, fontFamily: "'Syne',sans-serif" }} />
+              </div>
+              <div style={{ position: "relative" }}>
+                <Lock size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#333" }} />
+                <input type={showPw ? "text" : "password"} placeholder="Password" value={authPw} onChange={e => setAuthPw(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { authMode === "signup" ? signUpWithEmail(authEmail, authPw) : loginWithEmail(authEmail, authPw); } }}
+                  style={{ width: "100%", padding: "10px 36px 10px 36px", borderRadius: 10, border: "1px solid #1a1a1a", background: "#0a0a0a", color: "#fff", fontSize: 13, fontFamily: "'Syne',sans-serif" }} />
+                <button onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#333", cursor: "pointer" }}>
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            {errMsg && <p style={{ color: "#ef4444", fontSize: 11, marginBottom: 10, textAlign: "center" }}>{errMsg}</p>}
+            <button onClick={() => { authMode === "signup" ? signUpWithEmail(authEmail, authPw) : loginWithEmail(authEmail, authPw); }}
+              style={{ width: "100%", padding: "12px", borderRadius: 11, border: "none", background: "linear-gradient(135deg,#FFD700,#E8A000)", color: "#050505", fontSize: 13.5, fontWeight: 700, cursor: "pointer", marginBottom: 14 }}>
+              {authMode === "signup" ? "Create Account" : "Sign In"}
+            </button>
+            <p style={{ textAlign: "center", fontSize: 11.5, color: "#444" }}>
+              {authMode === "signup" ? "Already have an account?" : "Don't have an account?"}{" "}
+              <span onClick={() => { setAuthMode(authMode === "signup" ? "signin" : "signup"); setErrMsg(null); }}
+                style={{ color: "#FFD700", cursor: "pointer", fontWeight: 600 }}>
+                {authMode === "signup" ? "Sign In" : "Sign Up"}
+              </span>
+            </p>
           </div>
         </div>
       )}
