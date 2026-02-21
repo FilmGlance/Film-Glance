@@ -1,8 +1,8 @@
 // lib/supabase-browser.ts
 // Browser-side Supabase client for authentication and user-scoped queries.
 // Uses the ANON key — all queries go through RLS.
-// Uses implicit flow for OAuth (Google) so session comes back in URL hash
-// and is automatically detected by onAuthStateChange listener.
+// flowType: 'implicit' ensures OAuth redirects use hash fragments (#access_token=...)
+// which the browser client can handle directly without a server callback.
 
 import { createClient } from "@supabase/supabase-js";
 
