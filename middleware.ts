@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 // Routes that require authentication
 const PROTECTED_API_ROUTES = ["/api/search", "/api/favorites"];
 
-// Routes that should NOT require auth (webhooks, auth callbacks)
-const PUBLIC_API_ROUTES = ["/api/webhooks", "/api/auth"];
+// Routes that should NOT require auth (webhooks, auth callbacks, TMDB enrichment)
+const PUBLIC_API_ROUTES = ["/api/webhooks", "/api/auth", "/api/enrich"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
