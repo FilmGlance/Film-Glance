@@ -177,11 +177,12 @@ function CastMember({ name, character, img, idx, visible }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    STREAMING PLATFORMS
    ═══════════════════════════════════════════════════════════════════════════ */
-function StreamingBadge({ platform, url, idx, visible }) {
+function StreamingBadge({ platform, url, idx, visible, title }) {
   const [hov, setHov] = useState(false);
+  const href = title ? streamingSearchUrl(platform, title) : url;
   return (
     <a
-      href={url} target="_blank" rel="noopener noreferrer"
+      href={href} target="_blank" rel="noopener noreferrer"
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         display: "inline-flex", alignItems: "center", gap: 7,
@@ -206,6 +207,34 @@ function StreamingBadge({ platform, url, idx, visible }) {
 }
 
 const W = (platform, url) => ({ platform, url });
+
+function streamingSearchUrl(platform, title) {
+  const t = encodeURIComponent(title);
+  const p = platform.toLowerCase();
+  if (p === "netflix") return `https://www.netflix.com/search?q=${t}`;
+  if (p === "hulu") return `https://www.hulu.com/search?q=${t}`;
+  if (p.includes("disney")) return `https://www.disneyplus.com/search/${t}`;
+  if (p.includes("prime") || p.includes("amazon")) return `https://www.amazon.com/s?k=${t}&i=instant-video`;
+  if (p === "max" || p.includes("hbo")) return `https://play.max.com/search?q=${t}`;
+  if (p === "tubi") return `https://tubitv.com/search/${t}`;
+  if (p.includes("apple")) return `https://tv.apple.com/search?term=${t}`;
+  if (p === "peacock") return `https://www.peacocktv.com/search?q=${t}`;
+  if (p.includes("paramount")) return `https://www.paramountplus.com/search/${t}/`;
+  if (p.includes("pluto")) return `https://pluto.tv/search/details/${t}`;
+  return `https://www.justwatch.com/us/search?q=${t}`;
+}
+
+async function enrichCachedMovie(title, year, castNames) {
+  try {
+    const r = await fetch("/api/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, year, cast: castNames }),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
 
 
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
@@ -699,6 +728,7 @@ export default function FilmGlance() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPw, setAuthPw] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
   const [showFavs, setShowFavs] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -753,7 +783,7 @@ export default function FilmGlance() {
   const loginWithGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/api/auth/callback` },
+      options: { redirectTo: window.location.origin },
     });
   };
 
@@ -798,6 +828,33 @@ export default function FilmGlance() {
       // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
       setLoading(false);
       setTimeout(() => setSrcOpen(true), 300);
+      // Enrich cached movie with real TMDB images in background
+      const castNames = cached.cast?.map(c => ({ name: c.name, character: c.character }));
+      enrichCachedMovie(cached.title, cached.year, castNames).then(tmdb => {
+        if (!tmdb) return;
+        setResult(prev => {
+          if (!prev || prev.title !== cached.title) return prev;
+          const updated = { ...prev };
+          if (tmdb.poster_path) updated.poster = IMG + "w500" + tmdb.poster_path;
+          if (tmdb.cast && tmdb.cast.length > 0) {
+            updated.cast = tmdb.cast.map((tc, i) => ({
+              name: tc.name,
+              character: tc.character || prev.cast?.[i]?.character || "",
+              img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
+            }));
+          }
+          return updated;
+        });
+        // Update client cache so next view doesn't need enrichment
+        if (tmdb.poster_path) cached.poster = IMG + "w500" + tmdb.poster_path;
+        if (tmdb.cast && tmdb.cast.length > 0) {
+          cached.cast = tmdb.cast.map((tc, i) => ({
+            name: tc.name,
+            character: tc.character || cached.cast?.[i]?.character || "",
+            img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
+          }));
+        }
+      });
       return;
     }
 
@@ -806,6 +863,12 @@ export default function FilmGlance() {
     try {
       // Get auth token if user is signed in (for Supabase session)
       const token = user?._session?.access_token || null;
+      if (!token) {
+        setErrMsg("Sign in to search for more movies.");
+        setResult({ notFound: true, query: q });
+        setLoading(false);
+        return;
+      }
       const mv = await fetchMovieAPI(q, token);
 
       // [ARCHIVED — PRICING DORMANT] Uncomment to re-enable limit enforcement:
@@ -835,22 +898,26 @@ export default function FilmGlance() {
   const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); };
 
   const toggleFav = async (movieResult) => {
-    if (!user) return;
+    if (!user) { setShowAuth(true); return; }
     const exists = favorites.find(f => f.title === movieResult.title && f.year === movieResult.year);
     if (exists) {
       // Remove favorite
+      const prevFavs = [...favorites];
       setFavorites(prev => prev.filter(f => !(f.title === movieResult.title && f.year === movieResult.year)));
-      await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", movieResult.title).eq("year", movieResult.year);
+      const { error } = await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", movieResult.title).eq("year", movieResult.year);
+      if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
     } else {
       // Add favorite
       const newFav = { title: movieResult.title, year: movieResult.year, genre: movieResult.genre, poster: movieResult.poster, score: movieResult.score, searchKey: movieResult.title.toLowerCase() };
+      const prevFavs = [...favorites];
       setFavorites(prev => [...prev, newFav]);
-      await supabase.from("favorites").insert({
+      const { error } = await supabase.from("favorites").insert({
         user_id: user.id, title: movieResult.title, year: movieResult.year,
         genre: movieResult.genre, poster_url: movieResult.poster,
         score_ten: movieResult.score?.ten, score_stars: movieResult.score?.stars,
         search_key: movieResult.title.toLowerCase(),
       });
+      if (error) { console.error("Add fav error:", error); setFavorites(prevFavs); }
     }
   };
 
@@ -863,7 +930,7 @@ export default function FilmGlance() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", fontFamily: "'Syne',sans-serif" }}>
+    <div onClick={() => showAccountMenu && setShowAccountMenu(false)} style={{ minHeight: "100vh", background: "#050505", color: "#fff", fontFamily: "'Syne',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -906,15 +973,28 @@ export default function FilmGlance() {
             </button>
           )}
           {user ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, position: "relative" }}>
               {/* [ARCHIVED — PRICING DORMANT] Search counter + plan badge:
               {plan === "free" && <span style={{ fontSize: 9.5, color: remain <= 1 ? "#f97316" : "#666", background: remain <= 1 ? "rgba(249,115,22,0.06)" : "rgba(255,255,255,0.03)", padding: "2px 7px", borderRadius: 7, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{remain}/{FREE_LIMIT}</span>}
               <span style={{ fontSize: 9.5, color: "#FFD700", background: "rgba(255,215,0,0.06)", padding: "2px 9px", borderRadius: 7, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>{plan === "pro" ? "PRO" : plan}</span>
               */}
               <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FFD700,#E8A000)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                onClick={logout}>
+                onClick={() => setShowAccountMenu(!showAccountMenu)}>
                 <User size={13} style={{ color: "#050505" }} />
               </div>
+              {showAccountMenu && (
+                <div style={{ position: "absolute", top: 40, right: 0, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.1)", borderRadius: 12, padding: "12px 0", minWidth: 200, zIndex: 100, animation: "fadeIn 0.2s" }}
+                  onClick={e => e.stopPropagation()}>
+                  <div style={{ padding: "6px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 2 }}>My Account</p>
+                    <p style={{ fontSize: 10.5, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
+                  </div>
+                  <button onClick={() => { setShowAccountMenu(false); logout(); }}
+                    style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
+                    <X size={12} /> Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button onClick={() => setShowAuth(true)} style={{ padding: "6px 16px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Sign In</button>
@@ -1202,7 +1282,7 @@ export default function FilmGlance() {
               {result.streaming && result.streaming.length > 0 && (
                 <Accordion icon={<Tv size={13} />} label="Watch It Now" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} idx={i} visible={watchOpen} />)}
+                    {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
               )}
