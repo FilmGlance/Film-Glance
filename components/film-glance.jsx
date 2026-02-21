@@ -782,16 +782,6 @@ export default function FilmGlance() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-trigger pending search after login
-  useEffect(() => {
-    if (user && pendingSearch) {
-      const q = pendingSearch;
-      setPendingSearch(null);
-      setQuery(q);
-      setTimeout(() => doSearch(q), 300);
-    }
-  }, [user, pendingSearch, doSearch]);
-
   const loginWithGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -902,6 +892,16 @@ export default function FilmGlance() {
     }
     setLoading(false);
   }, [query, atLimit, user, plan]);
+
+  // Auto-trigger pending search after login
+  useEffect(() => {
+    if (user && pendingSearch) {
+      const q = pendingSearch;
+      setPendingSearch(null);
+      setQuery(q);
+      setTimeout(() => doSearch(q), 300);
+    }
+  }, [user, pendingSearch, doSearch]);
 
   const filt = query.length > 0
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
