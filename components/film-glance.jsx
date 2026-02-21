@@ -237,8 +237,34 @@ async function enrichCachedMovie(title, year, castNames) {
 }
 
 
+function formatBoxOfficeVal(val, label) {
+  if (!val || val === "N/A") return "N/A";
+  // Already formatted (has $ or %)
+  if (typeof val === "string" && (val.includes("$") || val.includes("%"))) return val;
+  // ROI — add % or x
+  const lb = (label || "").toLowerCase();
+  if (lb.includes("roi")) {
+    const n = parseFloat(String(val).replace(/[^0-9.\-]/g, ""));
+    if (isNaN(n)) return val;
+    return n > 20 ? `${n.toFixed(0)}%` : `${n.toFixed(2)}x`;
+  }
+  // Numeric — format as currency or plain number
+  const raw = String(val).replace(/[,$\s]/g, "");
+  const n = parseFloat(raw);
+  if (isNaN(n)) return val;
+  const isMoney = lb.includes("budget") || lb.includes("gross") || lb.includes("opening") || lb.includes("domestic") || lb.includes("international") || lb.includes("worldwide") || lb.includes("pta");
+  if (isMoney) {
+    if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+    if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+    if (n >= 1e3) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    return `$${n.toLocaleString("en-US")}`;
+  }
+  return n.toLocaleString("en-US");
+}
+
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
-  const showRank = rank && rank !== "#N/A";
+  const showRank = rank && rank !== "#N/A" && rank !== "N/A";
+  const formatted = formatBoxOfficeVal(val, label);
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -250,7 +276,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
     }}>
       <span style={{ fontSize: 11.5, color: "#888", fontWeight: 500 }}>{label}</span>
       <span style={{ fontSize: 12, color: "#fff", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>
-        {val || "N/A"}{showRank && <span> / {rank} all-time</span>}
+        {formatted}{showRank && <span style={{ color: "#FFD700", fontWeight: 600 }}> / {rank} all-time</span>}
       </span>
     </div>
   );
@@ -593,14 +619,17 @@ async function fetchMovieAPI(title, authToken) {
 }
 
 function calcScore(sources) {
-  const n = sources.map(s =>
+  // Filter out sources with 0 or null scores (unreleased/too-new movies)
+  const valid = sources.filter(s => s.score != null && s.score > 0);
+  if (valid.length === 0) return { ten: null, stars: 0, count: 0 };
+  const n = valid.map(s =>
     s.max === 100 ? s.score : s.max === 10 ? s.score * 10 : s.max === 5 ? s.score * 20 : (s.score / s.max) * 100
   );
   const m = n.reduce((a, b) => a + b, 0) / n.length;
   return {
     ten: Math.round((m / 10) * 10) / 10,
     stars: Math.round((m / 20) * 2) / 2,
-    count: sources.length
+    count: valid.length
   };
 }
 
@@ -743,36 +772,47 @@ export default function FilmGlance() {
 
   // Supabase auth listener — syncs session, loads profile + favorites
   useEffect(() => {
+    const loadUserData = async (session) => {
+      if (!session?.user) return;
+      setUser({ email: session.user.email, id: session.user.id, _session: session });
+      // Fetch profile (plan, search count)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan_id, searches_this_month, search_month")
+        .eq("id", session.user.id)
+        .single();
+      if (profile) {
+        const unlimitedPlans = ["pro_monthly", "pro_annual", "unlimited"];
+        setPlan(unlimitedPlans.includes(profile.plan_id) ? "pro" : profile.plan_id);
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        setSearches(profile.search_month === currentMonth ? profile.searches_this_month : 0);
+      }
+      // Fetch favorites
+      const { data: favs, error: favErr } = await supabase
+        .from("favorites")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+      if (favErr) console.error("Fetch favorites error:", favErr);
+      if (favs) {
+        setFavorites(favs.map(f => ({
+          title: f.title, year: f.year, genre: f.genre,
+          poster: f.poster_url, score: { ten: f.score_ten, stars: f.score_stars },
+          searchKey: f.search_key
+        })));
+      }
+      setShowAuth(false);
+    };
+
+    // Check for existing session on mount (handles page refresh)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) loadUserData(session);
+    });
+
+    // Listen for auth changes (handles sign-in, sign-out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        setUser({ email: session.user.email, id: session.user.id, _session: session });
-        // Fetch profile (plan, search count)
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("plan_id, searches_this_month, search_month")
-          .eq("id", session.user.id)
-          .single();
-        if (profile) {
-          // All plans with unlimited access map to "pro" for UI purposes
-          const unlimitedPlans = ["pro_monthly", "pro_annual", "unlimited"];
-          setPlan(unlimitedPlans.includes(profile.plan_id) ? "pro" : profile.plan_id);
-          const currentMonth = new Date().toISOString().slice(0, 7);
-          setSearches(profile.search_month === currentMonth ? profile.searches_this_month : 0);
-        }
-        // Fetch favorites
-        const { data: favs } = await supabase
-          .from("favorites")
-          .select("*")
-          .eq("user_id", session.user.id)
-          .order("created_at", { ascending: false });
-        if (favs) {
-          setFavorites(favs.map(f => ({
-            title: f.title, year: f.year, genre: f.genre,
-            poster: f.poster_url, score: { ten: f.score_ten, stars: f.score_stars },
-            searchKey: f.search_key
-          })));
-        }
-        setShowAuth(false);
+        await loadUserData(session);
       } else {
         setUser(null); setPlan("free"); setSearches(0); setFavorites([]);
       }
@@ -798,8 +838,9 @@ export default function FilmGlance() {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null); setSearches(0); setPlan("free"); setFavorites([]);
+    try { await supabase.auth.signOut(); } catch (e) { console.error("Logout error:", e); }
+    setUser(null); setSearches(0); setPlan("free"); setFavorites([]); setShowAccountMenu(false);
+    window.location.href = window.location.origin;
   };
 
   const doSearch = useCallback(async (sq) => {
@@ -989,7 +1030,7 @@ export default function FilmGlance() {
                     <p style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 2 }}>My Account</p>
                     <p style={{ fontSize: 10.5, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
                   </div>
-                  <button onClick={() => { setShowAccountMenu(false); logout(); }}
+                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowAccountMenu(false); logout(); }}
                     style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
                     <X size={12} /> Sign Out
                   </button>
@@ -1122,6 +1163,12 @@ export default function FilmGlance() {
                 <p style={{ color: "#4a4a4a", fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
                 </p>
+                {!user && (
+                  <button onClick={() => setShowAuth(true)}
+                    style={{ marginTop: 18, padding: "10px 28px", borderRadius: 11, border: "none", background: "linear-gradient(135deg,#FFD700,#E8A000)", color: "#050505", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <User size={14} /> Sign In to Search
+                  </button>
+                )}
               </div>
             )}
             <div style={{ position: "relative", maxWidth: 560, margin: "0 auto" }}>
@@ -1204,14 +1251,23 @@ export default function FilmGlance() {
                     {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
                     {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
                     <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both", opacity: 0.85 }}>Averaged Movie Score Across Major Review Sites</p>
-                    <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
-                      <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
-                      <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both" }}>
-                      <StarDisplay rating={result.score.stars} sz={20} />
-                      <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{result.score.stars}/5</span>
-                    </div>
+                    {result.score.ten != null ? (
+                      <>
+                        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
+                          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
+                          <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both" }}>
+                          <StarDisplay rating={result.score.stars} sz={20} />
+                          <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{result.score.stars}/5</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ animation: "fadeIn 0.5s 0.35s both" }}>
+                        <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 700, color: "#555", marginBottom: 4 }}>Ratings Pending</p>
+                        <p style={{ color: "#333", fontSize: 11 }}>This film is too new — scores will populate as reviews come in.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1296,10 +1352,17 @@ export default function FilmGlance() {
               <AlertCircle size={34} style={{ color: "#f97316", marginBottom: 12 }} />
               <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: "#4a4a4a", marginBottom: 6 }}>No results for "{result.query}"</h3>
               <p style={{ color: "#2a2a2a", fontSize: 11.5, marginBottom: 16 }}>{errMsg || "Try a different title."}</p>
-              <button onClick={() => { setResult(null); setErrMsg(null); inputRef.current?.focus(); }}
-                style={{ padding: "8px 20px", borderRadius: 10, border: "1px solid rgba(255,215,0,0.15)", background: "rgba(255,215,0,0.04)", color: "#FFD700", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <RefreshCw size={13} /> Try Again
-              </button>
+              {!user && errMsg?.includes("Sign in") ? (
+                <button onClick={() => { setResult(null); setErrMsg(null); setShowAuth(true); }}
+                  style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#FFD700,#E8A000)", color: "#050505", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <User size={13} /> Sign In
+                </button>
+              ) : (
+                <button onClick={() => { setResult(null); setErrMsg(null); inputRef.current?.focus(); }}
+                  style={{ padding: "8px 20px", borderRadius: 10, border: "1px solid rgba(255,215,0,0.15)", background: "rgba(255,215,0,0.04)", color: "#FFD700", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <RefreshCw size={13} /> Try Again
+                </button>
+              )}
             </div>
           )}
 
