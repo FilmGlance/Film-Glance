@@ -986,6 +986,14 @@ export default function FilmGlance() {
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
               const updated = { ...prev };
+              if (tmdb.poster_path) updated.poster = IMG + "w500" + tmdb.poster_path;
+              if (tmdb.cast && tmdb.cast.length > 0) {
+                updated.cast = tmdb.cast.map((tc, i) => ({
+                  name: tc.name,
+                  character: tc.character || prev.cast?.[i]?.character || "",
+                  img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
+                }));
+              }
               if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
               // Always overwrite — never serve stale cached data
               updated.trailer_key = tmdb.trailer_key || null;
