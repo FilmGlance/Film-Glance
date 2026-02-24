@@ -1,3 +1,4 @@
+// v2 deploy
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
