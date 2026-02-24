@@ -1,8 +1,6 @@
 // lib/tmdb.ts
-// TMDB API integration for verified movie poster and cast images.
-// Called by /api/search after getting movie data from Claude.
-// This ensures all images are REAL TMDB paths, not guessed ones.
-//
+// TMDB API integration for verified movie poster, cast images, and streaming availability.
+// Called by /api/search and /api/enrich.
 // Free API key: https://www.themoviedb.org/settings/api (v3 auth)
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
@@ -26,15 +24,25 @@ interface TMDBCredits {
   cast: TMDBCastMember[];
 }
 
+interface WatchProvider {
+  provider_name: string;
+  provider_id: number;
+  logo_path: string | null;
+}
+
+export interface StreamingOption {
+  platform: string;
+  url: string;
+  type: "stream" | "rent" | "buy";
+  logo_path: string | null;
+}
+
 export interface TMDBEnrichment {
   poster_path: string | null;
   cast: { name: string; character: string; profile_path: string | null }[];
+  streaming: StreamingOption[];
 }
 
-/**
- * Search TMDB for a movie by title and optional year.
- * Returns the best-matching movie ID and poster_path.
- */
 async function searchMovie(
   title: string,
   year?: number
@@ -60,7 +68,6 @@ async function searchMovie(
 
     if (!results || results.length === 0) return null;
 
-    // If year provided, prefer exact year match
     if (year) {
       const exactYear = results.find(
         (r) => r.release_date && r.release_date.startsWith(String(year))
@@ -68,17 +75,12 @@ async function searchMovie(
       if (exactYear) return exactYear;
     }
 
-    // Otherwise return the first (most relevant) result
     return results[0];
   } catch {
     return null;
   }
 }
 
-/**
- * Fetch cast/credits for a TMDB movie ID.
- * Returns the top cast members with verified profile_path.
- */
 async function fetchCredits(
   movieId: number,
   maxCast: number = 8
@@ -101,34 +103,105 @@ async function fetchCredits(
 }
 
 /**
- * Enrich a movie result with verified TMDB images.
- * Takes the movie data from Claude (title, year, cast names)
- * and returns real TMDB poster_path and cast profile_paths.
- *
- * This is the main function called by /api/search.
+ * Fetch watch/streaming providers for a TMDB movie ID.
+ * Uses TMDB's /watch/providers endpoint which gives real, current availability.
+ * Returns providers for US region by default, with link to TMDB watch page.
  */
+async function fetchWatchProviders(
+  movieId: number,
+  region: string = "CA"
+): Promise<StreamingOption[]> {
+  if (!TMDB_KEY) return [];
+
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}/watch/providers?api_key=${TMDB_KEY}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const results = data.results || {};
+
+    // Try requested region first, then fall back to US
+    const regionData = results[region] || results["US"];
+    if (!regionData) return [];
+
+    const tmdbLink = regionData.link || `https://www.themoviedb.org/movie/${movieId}/watch`;
+    const streaming: StreamingOption[] = [];
+
+    // Flatrate = subscription streaming (Netflix, Disney+, etc.)
+    if (regionData.flatrate) {
+      for (const p of regionData.flatrate) {
+        streaming.push({
+          platform: p.provider_name,
+          url: tmdbLink,
+          type: "stream",
+          logo_path: p.logo_path,
+        });
+      }
+    }
+
+    // Rent
+    if (regionData.rent) {
+      for (const p of regionData.rent.slice(0, 3)) {
+        // Skip if already in streaming
+        if (streaming.some(s => s.platform === p.provider_name)) continue;
+        streaming.push({
+          platform: p.provider_name,
+          url: tmdbLink,
+          type: "rent",
+          logo_path: p.logo_path,
+        });
+      }
+    }
+
+    // Buy (limit to 2)
+    if (regionData.buy) {
+      for (const p of regionData.buy.slice(0, 2)) {
+        if (streaming.some(s => s.platform === p.provider_name)) continue;
+        streaming.push({
+          platform: p.provider_name,
+          url: tmdbLink,
+          type: "buy",
+          logo_path: p.logo_path,
+        });
+      }
+    }
+
+    return streaming;
+  } catch {
+    return [];
+  }
+}
+
 export async function enrichWithTMDB(
   title: string,
   year?: number,
   claudeCast?: { name: string; character: string }[]
 ): Promise<TMDBEnrichment> {
-  const result: TMDBEnrichment = { poster_path: null, cast: [] };
+  const result: TMDBEnrichment = { poster_path: null, cast: [], streaming: [] };
 
   if (!TMDB_KEY) return result;
 
   try {
-    // 1. Search for the movie
     const movie = await searchMovie(title, year);
     if (!movie) return result;
 
-    // 2. Set verified poster path
     result.poster_path = movie.poster_path;
 
-    // 3. Fetch credits for verified cast images
-    const credits = await fetchCredits(movie.id, 8);
+    // Fetch credits and watch providers in parallel
+    const [credits, streaming] = await Promise.all([
+      fetchCredits(movie.id, 8),
+      fetchWatchProviders(movie.id),
+    ]);
 
+    // Streaming
+    result.streaming = streaming;
+
+    // Cast
     if (credits.length > 0 && claudeCast && claudeCast.length > 0) {
-      // Match Claude's cast data with TMDB credits by name
       result.cast = claudeCast.map((cc) => {
         const tmdbMatch = credits.find(
           (tc) => tc.name.toLowerCase() === cc.name.toLowerCase()
@@ -140,7 +213,6 @@ export async function enrichWithTMDB(
         };
       });
     } else if (credits.length > 0) {
-      // No Claude cast — use TMDB credits directly
       result.cast = credits.map((tc) => ({
         name: tc.name,
         character: tc.character,
