@@ -606,7 +606,8 @@ async function fetchMovieAPI(title, authToken) {
     if (!mv.title || !mv.sources || mv.sources.length === 0) return null;
 
     // Construct image URLs from TMDB paths
-    if (mv.poster_path && !mv.poster) mv.poster = IMG + "w500" + mv.poster_path;
+    // Always prefer TMDB poster_path over any Claude-guessed poster URL
+    if (mv.poster_path) mv.poster = IMG + "w500" + mv.poster_path;
     if (mv.cast) {
       mv.cast = mv.cast.map(c => ({
         name: c.name,
