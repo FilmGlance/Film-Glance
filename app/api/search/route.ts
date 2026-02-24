@@ -105,10 +105,10 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
-          system: "You are a movie database. Return ONLY valid JSON. No markdown fences. No explanation.",
+          system: "You are a movie database. Return ONLY valid JSON. No markdown fences. No explanation. Always return data even for sequels — e.g. 'shrek 3' means 'Shrek the Third', 'star wars 4' means 'Star Wars: Episode IV – A New Hope'. Interpret numbered sequels intelligently.",
           messages: [{
             role: "user",
-            content: `Movie: "${query}"\n\nIMPORTANT: Return data for this EXACT movie title. If it is a sequel, return data for THAT specific sequel, NOT the original.\n\nReturn JSON with: title, year, genre, director, runtime, tagline, description, cast (6-8 with name and character), sources (all 10: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Criticker, MUBI — each with name/score/max/type/url), streaming (platform/url), boxOffice (budget, budgetRank, openingWeekend, openingRank, pta, domestic, domesticRank, international, worldwide, worldwideRank, roi, theaterCount, daysInTheater — ranks as all-time like #1, #54, never N/A, estimate if needed), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
+            content: `Movie: "${query}"\n\nIMPORTANT: Identify the correct movie. If a number is given (e.g. "3", "4"), find the matching sequel. Return data for THAT specific movie.\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 10: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Criticker, MUBI — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, budgetRank, openingWeekend, openingRank, pta, domestic, domesticRank, international, worldwide, worldwideRank, roi, theaterCount, daysInTheater — ranks as all-time like #1, #54, never N/A, estimate if needed), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
           }],
         }),
       });
