@@ -991,7 +991,7 @@ export default function FilmGlance() {
                 updated.cast = tmdb.cast.map((tc, i) => ({
                   name: tc.name,
                   character: tc.character || prev.cast?.[i]?.character || "",
-                  img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
+                  img: tc.profile_path ? IMG + "w185" + tc.profile_path : (prev.cast?.[i]?.img || "")
                 }));
               }
               if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
