@@ -379,6 +379,32 @@ async function fetchWatchProviders(
   }
 }
 
+// ─── Person Search (fallback for cast photos) ────────────────────────────
+
+async function searchPerson(name: string): Promise<string | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    const params = new URLSearchParams({
+      api_key: TMDB_KEY,
+      query: name,
+    });
+    const res = await fetch(`${TMDB_BASE}/search/person?${params}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const results = data.results || [];
+    if (results.length === 0) return null;
+    // Prefer exact name match, else take the first result (highest popularity)
+    const exact = results.find(
+      (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
+    );
+    return (exact || results[0])?.profile_path || null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Main Enrichment Function ─────────────────────────────────────────────
 
 export async function enrichWithTMDB(
@@ -418,21 +444,22 @@ export async function enrichWithTMDB(
     result.recommendations = recommendations;
     result.video_reviews = videoReviews;
 
-    // Cast — fuzzy match TMDB credits to Claude's cast data
+    // Cast — match TMDB credits to Claude's cast data, with person search fallback
     if (credits.length > 0 && claudeCast && claudeCast.length > 0) {
       const usedIndices = new Set<number>();
       
-      result.cast = claudeCast.map((cc, idx) => {
+      // Phase 1: Name matching (exact, fuzzy, positional)
+      const castWithMatches = claudeCast.map((cc, idx) => {
         const ccLower = cc.name.toLowerCase().trim();
         const ccParts = ccLower.split(/\s+/);
         const ccLast = ccParts[ccParts.length - 1];
         const ccFirst = ccParts[0];
         
-        // Try exact match first
+        // Try exact match
         let tmdbMatch = credits.find(
           (tc, i) => !usedIndices.has(i) && tc.name.toLowerCase().trim() === ccLower
         );
-        // Try last name + first initial match
+        // Try last name + first initial
         if (!tmdbMatch) {
           tmdbMatch = credits.find((tc, i) => {
             if (usedIndices.has(i)) return false;
@@ -442,7 +469,7 @@ export async function enrichWithTMDB(
             return tcLast === ccLast && tcParts[0][0] === ccParts[0][0];
           });
         }
-        // Try unique last name match
+        // Try unique last name
         if (!tmdbMatch) {
           const lastNameMatches = credits.filter((tc, i) => {
             if (usedIndices.has(i)) return false;
@@ -451,7 +478,7 @@ export async function enrichWithTMDB(
           });
           if (lastNameMatches.length === 1) tmdbMatch = lastNameMatches[0];
         }
-        // Try first name + partial last name or last name + partial first name
+        // Try partial name matching (first name + similar last name, or one contains other)
         if (!tmdbMatch) {
           tmdbMatch = credits.find((tc, i) => {
             if (usedIndices.has(i)) return false;
@@ -459,17 +486,13 @@ export async function enrichWithTMDB(
             const tcParts = tcLower.split(/\s+/);
             const tcFirst = tcParts[0];
             const tcLast = tcParts[tcParts.length - 1];
-            // First names match and last names start the same (3+ chars)
             if (tcFirst === ccFirst && ccLast.length >= 3 && tcLast.length >= 3 && 
                 (tcLast.startsWith(ccLast.substring(0, 3)) || ccLast.startsWith(tcLast.substring(0, 3)))) return true;
-            // Last names match and first names start the same
-            if (tcLast === ccLast && tcFirst[0] === ccFirst[0]) return true;
-            // One name contains the other (handles "John" matching "John Patrick")
             if (tcLower.includes(ccLower) || ccLower.includes(tcLower)) return true;
             return false;
           });
         }
-        // Positional fallback — use TMDB credit at the same index (billing order is usually consistent)
+        // Positional fallback — use TMDB credit at same billing position
         if (!tmdbMatch && idx < credits.length && !usedIndices.has(idx) && credits[idx].profile_path) {
           tmdbMatch = credits[idx];
         }
@@ -485,6 +508,24 @@ export async function enrichWithTMDB(
           profile_path: tmdbMatch?.profile_path || null,
         };
       });
+
+      // Phase 2: For any cast still missing photos, search TMDB person API directly
+      const needsLookup = castWithMatches
+        .map((c, i) => ({ ...c, idx: i }))
+        .filter(c => !c.profile_path);
+      
+      if (needsLookup.length > 0) {
+        const lookups = await Promise.all(
+          needsLookup.map(c => searchPerson(c.name))
+        );
+        for (let i = 0; i < needsLookup.length; i++) {
+          if (lookups[i]) {
+            castWithMatches[needsLookup[i].idx].profile_path = lookups[i];
+          }
+        }
+      }
+
+      result.cast = castWithMatches;
     } else if (credits.length > 0) {
       result.cast = credits.map((tc) => ({
         name: tc.name,
