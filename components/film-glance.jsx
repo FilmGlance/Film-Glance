@@ -730,6 +730,7 @@ export default function FilmGlance() {
   const [showPw, setShowPw] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [pendingSearch, setPendingSearch] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
   const [showPrice, setShowPrice] = useState(false);
   const [showFavs, setShowFavs] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -742,37 +743,50 @@ export default function FilmGlance() {
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
 
+  // Helper: load profile + favorites for a session
+  const loadUserData = async (session) => {
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan_id, searches_this_month, search_month")
+        .eq("id", session.user.id)
+        .single();
+      if (profile) {
+        const unlimitedPlans = ["pro_monthly", "pro_annual", "unlimited"];
+        setPlan(unlimitedPlans.includes(profile.plan_id) ? "pro" : profile.plan_id);
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        setSearches(profile.search_month === currentMonth ? profile.searches_this_month : 0);
+      }
+      const { data: favs, error: favErr } = await supabase
+        .from("favorites")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+      if (favErr) console.error("Load favorites error:", favErr);
+      if (favs) {
+        setFavorites(favs.map(f => ({
+          title: f.title, year: f.year, genre: f.genre,
+          poster: f.poster_url, score: { ten: f.score_ten, stars: f.score_stars },
+          searchKey: f.search_key
+        })));
+      }
+    } catch (e) { console.error("loadUserData error:", e); }
+  };
+
   // Supabase auth listener — syncs session, loads profile + favorites
   useEffect(() => {
+    // Check for existing session on page load (handles Google OAuth redirect)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({ email: session.user.email, id: session.user.id, _session: session });
+        loadUserData(session);
+      }
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser({ email: session.user.email, id: session.user.id, _session: session });
-        // Fetch profile (plan, search count)
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("plan_id, searches_this_month, search_month")
-          .eq("id", session.user.id)
-          .single();
-        if (profile) {
-          // All plans with unlimited access map to "pro" for UI purposes
-          const unlimitedPlans = ["pro_monthly", "pro_annual", "unlimited"];
-          setPlan(unlimitedPlans.includes(profile.plan_id) ? "pro" : profile.plan_id);
-          const currentMonth = new Date().toISOString().slice(0, 7);
-          setSearches(profile.search_month === currentMonth ? profile.searches_this_month : 0);
-        }
-        // Fetch favorites
-        const { data: favs } = await supabase
-          .from("favorites")
-          .select("*")
-          .eq("user_id", session.user.id)
-          .order("created_at", { ascending: false });
-        if (favs) {
-          setFavorites(favs.map(f => ({
-            title: f.title, year: f.year, genre: f.genre,
-            poster: f.poster_url, score: { ten: f.score_ten, stars: f.score_stars },
-            searchKey: f.search_key
-          })));
-        }
+        await loadUserData(session);
         setShowAuth(false);
         setAuthEmail(""); setAuthPw(""); setErrMsg(null);
       } else {
@@ -796,17 +810,30 @@ export default function FilmGlance() {
 
   const signUpWithEmail = async (email, password) => {
     const { error } = await supabase.auth.signUp({ email, password });
-    if (error) setErrMsg(error.message);
+    if (error) { setErrMsg(error.message); return; }
+    setShowAuth(false);
+    setAuthEmail(""); setAuthPw(""); setErrMsg(null);
+    setAuthNotice("Check your email for a verification link to activate your account.");
+    setTimeout(() => setAuthNotice(null), 8000);
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    try { await supabase.auth.signOut(); } catch (e) { console.error("Logout error:", e); }
     setUser(null); setSearches(0); setPlan("free"); setFavorites([]);
+    setShowAccountMenu(false); setShowFavs(false); setResult(null);
   };
 
   const doSearch = useCallback(async (sq) => {
     const q = (sq || query).trim().toLowerCase();
     if (!q) return;
+
+    // Auth gate — require sign-in for ALL searches
+    if (!user) {
+      setPendingSearch(q);
+      setShowAuth(true);
+      return;
+    }
+
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
     setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setShowSug(false); setErrMsg(null);
 
@@ -863,14 +890,7 @@ export default function FilmGlance() {
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
     try {
-      // Get auth token if user is signed in (for Supabase session)
       const token = user?._session?.access_token || null;
-      if (!token) {
-        setPendingSearch(q);
-        setShowAuth(true);
-        setLoading(false);
-        return;
-      }
       const mv = await fetchMovieAPI(q, token);
 
       // [ARCHIVED — PRICING DORMANT] Uncomment to re-enable limit enforcement:
@@ -986,19 +1006,14 @@ export default function FilmGlance() {
           )}
           {user ? (
             <div style={{ display: "flex", alignItems: "center", gap: 7, position: "relative" }}>
-              {/* [ARCHIVED — PRICING DORMANT] Search counter + plan badge:
-              {plan === "free" && <span style={{ fontSize: 9.5, color: remain <= 1 ? "#f97316" : "#666", background: remain <= 1 ? "rgba(249,115,22,0.06)" : "rgba(255,255,255,0.03)", padding: "2px 7px", borderRadius: 7, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{remain}/{FREE_LIMIT}</span>}
-              <span style={{ fontSize: 9.5, color: "#FFD700", background: "rgba(255,215,0,0.06)", padding: "2px 9px", borderRadius: 7, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>{plan === "pro" ? "PRO" : plan}</span>
-              */}
-              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FFD700,#E8A000)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                onClick={() => setShowAccountMenu(!showAccountMenu)}>
-                <User size={13} style={{ color: "#050505" }} />
-              </div>
+              <button onClick={(e) => { e.stopPropagation(); setShowAccountMenu(!showAccountMenu); }}
+                style={{ padding: "6px 14px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <User size={12} /> My Account
+              </button>
               {showAccountMenu && (
-                <div style={{ position: "absolute", top: 40, right: 0, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.1)", borderRadius: 12, padding: "12px 0", minWidth: 200, zIndex: 100, animation: "fadeIn 0.2s" }}
+                <div style={{ position: "absolute", top: 38, right: 0, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.1)", borderRadius: 12, padding: "12px 0", minWidth: 220, zIndex: 100, animation: "fadeIn 0.2s" }}
                   onClick={e => e.stopPropagation()}>
                   <div style={{ padding: "6px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 2 }}>My Account</p>
                     <p style={{ fontSize: 10.5, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
                   </div>
                   <button onClick={() => { setShowAccountMenu(false); logout(); }}
@@ -1013,6 +1028,15 @@ export default function FilmGlance() {
           )}
         </div>
       </header>
+
+      {/* Notification Banner */}
+      {authNotice && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 1100, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 12, padding: "14px 24px", maxWidth: 420, display: "flex", alignItems: "center", gap: 10, animation: "slideUp 0.4s", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
+          <Mail size={16} style={{ color: "#FFD700", flexShrink: 0 }} />
+          <p style={{ fontSize: 12.5, color: "#ccc", lineHeight: 1.4 }}>{authNotice}</p>
+          <button onClick={() => setAuthNotice(null)} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Auth Modal */}
       {showAuth && (
