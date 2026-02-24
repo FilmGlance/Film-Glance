@@ -212,7 +212,6 @@ function StreamingBadge({ platform, url, type, logo_path, idx, visible, title })
       {typeLabel && <span style={{ fontSize: 9, color: typeColor, opacity: 0.6, fontWeight: 500 }}>{typeLabel}</span>}
       <ExternalLink size={9} style={{ color: typeColor, opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
     </a>
-    </a>
   );
 }
 
