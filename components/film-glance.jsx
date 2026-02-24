@@ -1384,31 +1384,29 @@ export default function FilmGlance() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both" }}>
                       <StarDisplay rating={result.score.stars} sz={20} />
                       <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{result.score.stars}/5</span>
+                      {result.trailer_key && (
+                        <button
+                          onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                          style={{
+                            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+                            padding: "6px 14px", borderRadius: 8,
+                            background: "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))",
+                            border: "1px solid rgba(255,215,0,0.2)",
+                            color: "#FFD700", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            transition: "all 0.25s",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.18),rgba(255,165,0,0.1))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.4)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; }}
+                        >
+                          <Play size={11} fill="#FFD700" stroke="#FFD700" />
+                          Trailer
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Trailer Button */}
-              {result.trailer_key && (
-                <div style={{ padding: "4px 26px 18px", animation: "fadeIn 0.5s 0.4s both" }}>
-                  <button
-                    onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 9,
-                      padding: "10px 22px", borderRadius: 10,
-                      background: "rgba(255,215,0,0.06)", border: "1px solid rgba(255,215,0,0.18)",
-                      color: "#FFD700", fontSize: 12, fontWeight: 700, cursor: "pointer",
-                      transition: "all 0.25s",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.12)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.35)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,215,0,0.06)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.18)"; }}
-                  >
-                    <Play size={14} fill="#FFD700" stroke="#FFD700" />
-                    View Trailer
-                  </button>
-                </div>
-              )}
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
               <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" count={result.sources.length} open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
@@ -1424,14 +1422,6 @@ export default function FilmGlance() {
                   }).map((s, i) => <SourceRow key={`${s.name}-${s.type}-${i}`} source={s} idx={i} visible={srcOpen} />)}
                 </div>
               </Accordion>
-              )}
-
-              {result.cast && result.cast.length > 0 && (
-                <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
-                  <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
-                    {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
-                  </div>
-                </Accordion>
               )}
 
               {/* Video Reviews */}
@@ -1464,6 +1454,14 @@ export default function FilmGlance() {
                         </div>
                       </button>
                     ))}
+                  </div>
+                </Accordion>
+              )}
+
+              {result.cast && result.cast.length > 0 && (
+                <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
+                  <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
+                    {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                   </div>
                 </Accordion>
               )}
@@ -1523,14 +1521,13 @@ export default function FilmGlance() {
 
               {/* Similar Movies */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <div style={{ padding: "14px 18px 18px", borderTop: "1px solid rgba(255,255,255,0.03)" }}>
-                  <p style={{ fontSize: 10, letterSpacing: 1.5, color: "#555", textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>You Might Also Like</p>
-                  <div style={{ display: "flex", gap: 10 }}>
+                <Accordion icon={<Film size={13} />} label="You Might Also Like" count={result.recommendations.length} open={true} toggle={() => {}}>
+                  <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
                         onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
                         style={{
-                          flex: 1, maxWidth: "33%", background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
+                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
                           borderRadius: 10, overflow: "hidden", cursor: "pointer", textAlign: "left", padding: 0,
                           transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both`,
                         }}
@@ -1548,14 +1545,13 @@ export default function FilmGlance() {
                             </div>
                           )}
                         </div>
-                        <div style={{ padding: "6px 8px 7px" }}>
-                          <p style={{ fontSize: 10, fontWeight: 600, color: "#ccc", lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
-                          <p style={{ fontSize: 9, color: "#444", marginTop: 1 }}>{rec.year || ""}</p>
+                        <div style={{ padding: "6px 8px 8px" }}>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
                         </div>
                       </button>
                     ))}
                   </div>
-                </div>
+                </Accordion>
               )}
 
             </div>
