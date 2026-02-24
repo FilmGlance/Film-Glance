@@ -967,6 +967,14 @@ export default function FilmGlance() {
         try {
           const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
           setResult(res);
+          // Always enrich streaming from TMDB (server cache may have old links)
+          enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
+            if (!tmdb || !tmdb.streaming || tmdb.streaming.length === 0) return;
+            setResult(prev => {
+              if (!prev || prev.title !== res.title) return prev;
+              return { ...prev, streaming: tmdb.streaming };
+            });
+          });
         } catch (parseErr) {
           console.error("Result parse error:", parseErr);
           setErrMsg("Could not display this movie. Try a different title.");
