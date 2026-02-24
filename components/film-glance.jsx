@@ -645,6 +645,10 @@ function normalizeResult(mv) {
   if (!Array.isArray(r.sources)) r.sources = [];
   if (!Array.isArray(r.streaming)) r.streaming = [];
   if (!Array.isArray(r.awards)) r.awards = [];
+  if (!Array.isArray(r.recommendations)) r.recommendations = [];
+  if (!Array.isArray(r.video_reviews)) r.video_reviews = [];
+  // Ensure trailer_key is string or null
+  if (r.trailer_key && typeof r.trailer_key !== 'string') r.trailer_key = null;
   // Ensure boxOffice is object or null
   if (r.boxOffice && typeof r.boxOffice !== 'object') r.boxOffice = null;
   // Ensure strings
@@ -794,6 +798,7 @@ export default function FilmGlance() {
   const [watchOpen, setWatchOpen] = useState(false);
   const [boxOfficeOpen, setBoxOfficeOpen] = useState(false);
   const [awardsOpen, setAwardsOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
@@ -907,7 +912,7 @@ export default function FilmGlance() {
     }
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setShowSug(false); setErrMsg(null);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setShowSug(false); setErrMsg(null);
 
     // Check client-side cache — exact match only (prevents sequel mismatches)
     let cached = DB[q];
@@ -945,9 +950,10 @@ export default function FilmGlance() {
               img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
             }));
           }
-          if (tmdb.streaming && tmdb.streaming.length > 0) {
-            updated.streaming = tmdb.streaming;
-          }
+          if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
+          if (tmdb.trailer_key) updated.trailer_key = tmdb.trailer_key;
+          if (tmdb.recommendations && tmdb.recommendations.length > 0) updated.recommendations = tmdb.recommendations;
+          if (tmdb.video_reviews && tmdb.video_reviews.length > 0) updated.video_reviews = tmdb.video_reviews;
           return updated;
         });
       });
@@ -967,12 +973,17 @@ export default function FilmGlance() {
         try {
           const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
           setResult(res);
-          // Always enrich streaming from TMDB (server cache may have old links)
+          // Always enrich from TMDB (server cache may have old data)
           enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
-            if (!tmdb || !tmdb.streaming || tmdb.streaming.length === 0) return;
+            if (!tmdb) return;
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
-              return { ...prev, streaming: tmdb.streaming };
+              const updated = { ...prev };
+              if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
+              if (tmdb.trailer_key) updated.trailer_key = tmdb.trailer_key;
+              if (tmdb.recommendations && tmdb.recommendations.length > 0) updated.recommendations = tmdb.recommendations;
+              if (tmdb.video_reviews && tmdb.video_reviews.length > 0) updated.video_reviews = tmdb.video_reviews;
+              return updated;
             });
           });
         } catch (parseErr) {
@@ -1347,6 +1358,21 @@ export default function FilmGlance() {
                 </div>
               </div>
 
+              {/* Trailer */}
+              {result.trailer_key && (
+                <div style={{ padding: "0 26px 22px" }}>
+                  <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", aspectRatio: "16/9", animation: "fadeIn 0.6s 0.5s both" }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${result.trailer_key}?rel=0&modestbranding=1`}
+                      title="Official Trailer"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      style={{ width: "100%", height: "100%", border: "none" }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
               <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" count={result.sources.length} open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
                 <div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1367,6 +1393,33 @@ export default function FilmGlance() {
                 <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
                   <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
                     {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                  </div>
+                </Accordion>
+              )}
+
+              {/* Video Reviews */}
+              {result.video_reviews && result.video_reviews.length > 0 && (
+                <Accordion icon={<Play size={13} />} label="Video Reviews" count={result.video_reviews.length} open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                  <div style={{ padding: "8px 18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {result.video_reviews.map((vr, i) => (
+                      <div key={vr.video_id} style={{
+                        opacity: reviewsOpen ? 1 : 0,
+                        transform: reviewsOpen ? "translateY(0)" : "translateY(8px)",
+                        transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.08}s`,
+                      }}>
+                        <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", aspectRatio: "16/9", marginBottom: 6 }}>
+                          <iframe
+                            src={`https://www.youtube.com/embed/${vr.video_id}?rel=0&modestbranding=1`}
+                            title={vr.title}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                            style={{ width: "100%", height: "100%", border: "none" }}
+                          />
+                        </div>
+                        <p style={{ fontSize: 11, color: "#888", fontWeight: 500 }}>{vr.channel}</p>
+                      </div>
+                    ))}
                   </div>
                 </Accordion>
               )}
@@ -1422,6 +1475,43 @@ export default function FilmGlance() {
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
+              )}
+
+              {/* Similar Movies */}
+              {result.recommendations && result.recommendations.length > 0 && (
+                <div style={{ padding: "16px 26px 22px", borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                  <p style={{ fontSize: 10.5, letterSpacing: 1.5, color: "#555", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>You Might Also Like</p>
+                  <div style={{ display: "flex", gap: 14 }}>
+                    {result.recommendations.map((rec, i) => (
+                      <button key={`${rec.title}-${i}`}
+                        onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
+                        style={{
+                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
+                          borderRadius: 12, overflow: "hidden", cursor: "pointer", textAlign: "left", padding: 0,
+                          transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both`,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
+                      >
+                        <div style={{ aspectRatio: "2/3", background: "#111", position: "relative" }}>
+                          {rec.poster_path ? (
+                            <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              onError={e => { e.target.style.display = "none"; }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <Film size={24} style={{ color: "#222" }} />
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ padding: "8px 10px 10px" }}>
+                          <p style={{ fontSize: 11, fontWeight: 600, color: "#ccc", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                          <p style={{ fontSize: 10, color: "#444", marginTop: 2 }}>{rec.year || ""}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
             </div>
