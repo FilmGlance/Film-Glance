@@ -184,9 +184,11 @@ async function fetchYouTubeReviews(
       part: "snippet",
       q: query,
       type: "video",
-      maxResults: String(max),
+      maxResults: String(max + 3), // Fetch extras to filter
+      order: "viewCount", // Prioritize popular channels with more views
       relevanceLanguage: "en",
-      videoDuration: "medium",
+      videoDuration: "medium", // 4-20 min — filters out clips and full movies
+      videoDefinition: "high", // HD only — better thumbnail quality
       key: YOUTUBE_KEY,
     });
 
@@ -197,12 +199,20 @@ async function fetchYouTubeReviews(
     if (!res.ok) return [];
 
     const data = await res.json();
-    return (data.items || []).map((item: any) => ({
-      video_id: item.id?.videoId || "",
-      title: item.snippet?.title || "",
-      channel: item.snippet?.channelTitle || "",
-      thumbnail: item.snippet?.thumbnails?.medium?.url || "",
-    })).filter((v: VideoReview) => v.video_id);
+    const items = (data.items || [])
+      .map((item: any) => ({
+        video_id: item.id?.videoId || "",
+        title: item.snippet?.title || "",
+        channel: item.snippet?.channelTitle || "",
+        thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
+        published: item.snippet?.publishedAt || "",
+      }))
+      .filter((v: any) => v.video_id)
+      // Sort by publish date (newer first) as secondary sort after viewCount ordering
+      .sort((a: any, b: any) => (b.published || "").localeCompare(a.published || ""))
+      .slice(0, max);
+
+    return items;
   } catch {
     return [];
   }
