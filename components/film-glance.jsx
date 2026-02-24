@@ -177,15 +177,19 @@ function CastMember({ name, character, img, idx, visible }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    STREAMING PLATFORMS
    ═══════════════════════════════════════════════════════════════════════════ */
-function StreamingBadge({ platform, url, idx, visible, title }) {
+function StreamingBadge({ platform, url, type, logo_path, idx, visible, title }) {
   const [hov, setHov] = useState(false);
-  const href = title ? streamingSearchUrl(platform, title) : url;
+  // Use direct URL if provided, otherwise search URL fallback
+  const href = url || (title ? streamingSearchUrl(platform, title) : "#");
+  const typeLabel = type === "rent" ? "Rent" : type === "buy" ? "Buy" : "";
+  const typeColor = type === "rent" ? "#60a5fa" : type === "buy" ? "#a78bfa" : "#FFD700";
+  const logoUrl = logo_path ? `https://image.tmdb.org/t/p/w45${logo_path}` : null;
   return (
     <a
       href={href} target="_blank" rel="noopener noreferrer"
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
-        display: "inline-flex", alignItems: "center", gap: 7,
+        display: "inline-flex", alignItems: "center", gap: 8,
         padding: "9px 16px", borderRadius: 10,
         background: hov ? "rgba(255,215,0,0.1)" : "rgba(255,215,0,0.04)",
         border: `1px solid ${hov ? "rgba(255,215,0,0.3)" : "rgba(255,215,0,0.12)"}`,
@@ -195,13 +199,19 @@ function StreamingBadge({ platform, url, idx, visible, title }) {
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
       }}
     >
-      <Play size={11} fill="#FFD700" stroke="#FFD700" style={{ opacity: hov ? 1 : 0.7, transition: "opacity 0.2s" }} />
+      {logoUrl ? (
+        <img src={logoUrl} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
+      ) : (
+        <Play size={11} fill={typeColor} stroke={typeColor} style={{ opacity: hov ? 1 : 0.7, transition: "opacity 0.2s" }} />
+      )}
       <span style={{
-        fontSize: 11.5, fontWeight: 600, color: "#FFD700",
+        fontSize: 11.5, fontWeight: 600, color: typeColor,
         opacity: hov ? 1 : 0.8, transition: "opacity 0.2s",
         whiteSpace: "nowrap",
       }}>{platform}</span>
-      <ExternalLink size={9} style={{ color: "#FFD700", opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
+      {typeLabel && <span style={{ fontSize: 9, color: typeColor, opacity: 0.6, fontWeight: 500 }}>{typeLabel}</span>}
+      <ExternalLink size={9} style={{ color: typeColor, opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
+    </a>
     </a>
   );
 }
@@ -607,13 +617,44 @@ async function fetchMovieAPI(title, authToken) {
         img: c.profile_path ? IMG + "w185" + c.profile_path : (c.img || "")
       }));
     }
-    // Replace streaming with single reliable JustWatch link
-    mv.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(mv.title)}` }];
+    // Use TMDB streaming if available, otherwise JustWatch fallback
+    if (mv.streaming && Array.isArray(mv.streaming) && mv.streaming.length > 0) {
+      // streaming from TMDB enrichment already has platform/url/type
+    } else {
+      mv.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(mv.title)}`, type: "stream" }];
+    }
     return mv;
   } catch (e) {
     clearTimeout(timer);
     return null;
   }
+}
+
+// Ensures all result properties are safe to render — prevents crashes from unexpected API data
+function normalizeResult(mv) {
+  if (!mv) return null;
+  const r = { ...mv };
+  // Ensure score exists
+  if (!r.score || typeof r.score !== 'object') {
+    r.score = r.sources ? calcScore(r.sources) : { ten: 0, stars: 0, count: 0 };
+  }
+  if (typeof r.score.ten === 'undefined') r.score.ten = 0;
+  if (typeof r.score.stars === 'undefined') r.score.stars = 0;
+  // Ensure genre is a string
+  if (Array.isArray(r.genre)) r.genre = r.genre.join(" · ");
+  if (r.genre && typeof r.genre !== 'string') r.genre = String(r.genre);
+  // Ensure arrays
+  if (!Array.isArray(r.cast)) r.cast = [];
+  if (!Array.isArray(r.sources)) r.sources = [];
+  if (!Array.isArray(r.streaming)) r.streaming = [];
+  if (!Array.isArray(r.awards)) r.awards = [];
+  // Ensure boxOffice is object or null
+  if (r.boxOffice && typeof r.boxOffice !== 'object') r.boxOffice = null;
+  // Ensure strings
+  if (typeof r.title !== 'string') r.title = String(r.title || "Unknown");
+  if (typeof r.year !== 'number' && typeof r.year !== 'string') r.year = "";
+  if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
+  return r;
 }
 
 function calcScore(sources) {
@@ -886,14 +927,12 @@ export default function FilmGlance() {
     if (cached) {
       setLoadMsg("Scanning Movie Studio Vault...");
       await new Promise(r => setTimeout(r, 500 + Math.random() * 400));
-      const cachedResult = { ...cached, score: calcScore(cached.sources) };
-      // Override streaming with reliable JustWatch link
-      cachedResult.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(cached.title)}` }];
+      const cachedResult = normalizeResult({ ...cached, score: calcScore(cached.sources) });
       setResult(cachedResult);
       // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
       setLoading(false);
       setTimeout(() => setSrcOpen(true), 300);
-      // Enrich cached movie with real TMDB images in background
+      // Enrich cached movie with real TMDB images + streaming in background
       const castNames = cached.cast?.map(c => ({ name: c.name, character: c.character }));
       enrichCachedMovie(cached.title, cached.year, castNames).then(tmdb => {
         if (!tmdb) return;
@@ -908,17 +947,11 @@ export default function FilmGlance() {
               img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
             }));
           }
+          if (tmdb.streaming && tmdb.streaming.length > 0) {
+            updated.streaming = tmdb.streaming;
+          }
           return updated;
         });
-        // Update client cache so next view doesn't need enrichment
-        if (tmdb.poster_path) cached.poster = IMG + "w500" + tmdb.poster_path;
-        if (tmdb.cast && tmdb.cast.length > 0) {
-          cached.cast = tmdb.cast.map((tc, i) => ({
-            name: tc.name,
-            character: tc.character || cached.cast?.[i]?.character || "",
-            img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
-          }));
-        }
       });
       return;
     }
@@ -934,13 +967,7 @@ export default function FilmGlance() {
 
       if (mv && mv.sources && mv.sources.length > 0) {
         try {
-          const res = { ...mv, score: mv.score || calcScore(mv.sources) };
-          // Ensure cast is an array
-          if (!Array.isArray(res.cast)) res.cast = [];
-          // Ensure streaming is an array
-          if (!Array.isArray(res.streaming)) res.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(res.title)}` }];
-          // Ensure boxOffice is an object or null
-          if (res.boxOffice && typeof res.boxOffice !== 'object') res.boxOffice = null;
+          const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
           setResult(res);
         } catch (parseErr) {
           console.error("Result parse error:", parseErr);
@@ -1372,7 +1399,7 @@ export default function FilmGlance() {
               {result.streaming && result.streaming.length > 0 && (
                 <Accordion icon={<Tv size={13} />} label="Where to Watch" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} title={result.title} idx={i} visible={watchOpen} />)}
+                    {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
               )}
