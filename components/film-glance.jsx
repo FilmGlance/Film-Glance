@@ -1399,7 +1399,7 @@ export default function FilmGlance() {
                           onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; }}
                         >
                           <Play size={11} fill="#FFD700" stroke="#FFD700" />
-                          Trailer
+                          Watch Trailer
                         </button>
                       )}
                     </div>
@@ -1528,15 +1528,15 @@ export default function FilmGlance() {
                         onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
                         style={{
                           flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                          borderRadius: 10, overflow: "hidden", cursor: "pointer", textAlign: "left", padding: 0,
+                          borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
                           transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both`,
                         }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
-                        <div style={{ aspectRatio: "2/3", background: "#111" }}>
+                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
                           {rec.poster_path ? (
-                            <img src={`https://image.tmdb.org/t/p/w185${rec.poster_path}`} alt={rec.title}
+                            <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title}
                               style={{ width: "100%", height: "100%", objectFit: "cover" }}
                               onError={e => { e.target.style.display = "none"; }} />
                           ) : (
