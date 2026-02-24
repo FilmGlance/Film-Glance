@@ -146,6 +146,15 @@ export async function POST(req: NextRequest) {
       if ((tmdb as any).streaming && (tmdb as any).streaming.length > 0) {
         mv.streaming = (tmdb as any).streaming;
       }
+      if ((tmdb as any).trailer_key) {
+        mv.trailer_key = (tmdb as any).trailer_key;
+      }
+      if ((tmdb as any).recommendations && (tmdb as any).recommendations.length > 0) {
+        mv.recommendations = (tmdb as any).recommendations;
+      }
+      if ((tmdb as any).video_reviews && (tmdb as any).video_reviews.length > 0) {
+        mv.video_reviews = (tmdb as any).video_reviews;
+      }
 
       // 8. Cache the enriched result (30-day TTL)
       await supabaseAdmin.from("movie_cache").upsert({
