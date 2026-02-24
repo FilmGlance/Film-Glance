@@ -799,6 +799,7 @@ export default function FilmGlance() {
   const [boxOfficeOpen, setBoxOfficeOpen] = useState(false);
   const [awardsOpen, setAwardsOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [videoModal, setVideoModal] = useState(null); // { id, title } or null
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
@@ -912,7 +913,7 @@ export default function FilmGlance() {
     }
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setShowSug(false); setErrMsg(null);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null);
 
     // Check client-side cache — exact match only (prevents sequel mismatches)
     let cached = DB[q];
@@ -1134,6 +1135,36 @@ export default function FilmGlance() {
           )}
         </div>
       </header>
+
+      {/* Video Modal */}
+      {videoModal && (
+        <div onClick={() => setVideoModal(null)} style={{
+          position: "fixed", inset: 0, zIndex: 1200,
+          background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 20, animation: "fadeIn 0.2s",
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 720, position: "relative" }}>
+            <button onClick={() => setVideoModal(null)} style={{
+              position: "absolute", top: -36, right: 0, background: "none", border: "none",
+              color: "#888", cursor: "pointer", fontSize: 13, fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              <X size={14} /> Close
+            </button>
+            <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,215,0,0.1)", aspectRatio: "16/9", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+              <iframe
+                src={`https://www.youtube.com/embed/${videoModal.id}?autoplay=1&rel=0&modestbranding=1`}
+                title={videoModal.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ width: "100%", height: "100%", border: "none" }}
+              />
+            </div>
+            <p style={{ textAlign: "center", color: "#666", fontSize: 11, marginTop: 10, fontWeight: 500 }}>{videoModal.title}</p>
+          </div>
+        </div>
+      )}
 
       {/* Notification Banner */}
       {authNotice && (
@@ -1358,18 +1389,24 @@ export default function FilmGlance() {
                 </div>
               </div>
 
-              {/* Trailer */}
+              {/* Trailer Button */}
               {result.trailer_key && (
-                <div style={{ padding: "0 26px 22px" }}>
-                  <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", aspectRatio: "16/9", animation: "fadeIn 0.6s 0.5s both" }}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${result.trailer_key}?rel=0&modestbranding=1`}
-                      title="Official Trailer"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      style={{ width: "100%", height: "100%", border: "none" }}
-                    />
-                  </div>
+                <div style={{ padding: "4px 26px 18px", animation: "fadeIn 0.5s 0.4s both" }}>
+                  <button
+                    onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 9,
+                      padding: "10px 22px", borderRadius: 10,
+                      background: "rgba(255,215,0,0.06)", border: "1px solid rgba(255,215,0,0.18)",
+                      color: "#FFD700", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      transition: "all 0.25s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.12)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.35)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,215,0,0.06)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.18)"; }}
+                  >
+                    <Play size={14} fill="#FFD700" stroke="#FFD700" />
+                    View Trailer
+                  </button>
                 </div>
               )}
 
@@ -1400,25 +1437,32 @@ export default function FilmGlance() {
               {/* Video Reviews */}
               {result.video_reviews && result.video_reviews.length > 0 && (
                 <Accordion icon={<Play size={13} />} label="Video Reviews" count={result.video_reviews.length} open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
-                  <div style={{ padding: "8px 18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.video_reviews.map((vr, i) => (
-                      <div key={vr.video_id} style={{
-                        opacity: reviewsOpen ? 1 : 0,
-                        transform: reviewsOpen ? "translateY(0)" : "translateY(8px)",
-                        transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.08}s`,
-                      }}>
-                        <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", aspectRatio: "16/9", marginBottom: 6 }}>
-                          <iframe
-                            src={`https://www.youtube.com/embed/${vr.video_id}?rel=0&modestbranding=1`}
-                            title={vr.title}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            loading="lazy"
-                            style={{ width: "100%", height: "100%", border: "none" }}
-                          />
+                      <button key={vr.video_id}
+                        onClick={() => setVideoModal({ id: vr.video_id, title: vr.title })}
+                        style={{
+                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
+                          borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
+                          opacity: reviewsOpen ? 1 : 0,
+                          transform: reviewsOpen ? "translateY(0)" : "translateY(8px)",
+                          transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.06}s`,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
+                      >
+                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
+                          <img src={`https://img.youtube.com/vi/${vr.video_id}/hqdefault.jpg`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}>
+                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,215,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <Play size={14} fill="#050505" stroke="#050505" style={{ marginLeft: 2 }} />
+                            </div>
+                          </div>
                         </div>
-                        <p style={{ fontSize: 11, color: "#888", fontWeight: 500 }}>{vr.channel}</p>
-                      </div>
+                        <div style={{ padding: "6px 8px 8px" }}>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vr.channel}</p>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 </Accordion>
@@ -1479,34 +1523,34 @@ export default function FilmGlance() {
 
               {/* Similar Movies */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <div style={{ padding: "16px 26px 22px", borderTop: "1px solid rgba(255,255,255,0.03)" }}>
-                  <p style={{ fontSize: 10.5, letterSpacing: 1.5, color: "#555", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>You Might Also Like</p>
-                  <div style={{ display: "flex", gap: 14 }}>
+                <div style={{ padding: "14px 18px 18px", borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                  <p style={{ fontSize: 10, letterSpacing: 1.5, color: "#555", textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>You Might Also Like</p>
+                  <div style={{ display: "flex", gap: 10 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
                         onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
                         style={{
-                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                          borderRadius: 12, overflow: "hidden", cursor: "pointer", textAlign: "left", padding: 0,
+                          flex: 1, maxWidth: "33%", background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
+                          borderRadius: 10, overflow: "hidden", cursor: "pointer", textAlign: "left", padding: 0,
                           transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both`,
                         }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
-                        <div style={{ aspectRatio: "2/3", background: "#111", position: "relative" }}>
+                        <div style={{ aspectRatio: "2/3", background: "#111" }}>
                           {rec.poster_path ? (
-                            <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title}
+                            <img src={`https://image.tmdb.org/t/p/w185${rec.poster_path}`} alt={rec.title}
                               style={{ width: "100%", height: "100%", objectFit: "cover" }}
                               onError={e => { e.target.style.display = "none"; }} />
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <Film size={24} style={{ color: "#222" }} />
+                              <Film size={18} style={{ color: "#222" }} />
                             </div>
                           )}
                         </div>
-                        <div style={{ padding: "8px 10px 10px" }}>
-                          <p style={{ fontSize: 11, fontWeight: 600, color: "#ccc", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
-                          <p style={{ fontSize: 10, color: "#444", marginTop: 2 }}>{rec.year || ""}</p>
+                        <div style={{ padding: "6px 8px 7px" }}>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: "#ccc", lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                          <p style={{ fontSize: 9, color: "#444", marginTop: 1 }}>{rec.year || ""}</p>
                         </div>
                       </button>
                     ))}
