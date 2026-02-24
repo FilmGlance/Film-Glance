@@ -179,16 +179,18 @@ async function fetchYouTubeReviews(
 ): Promise<VideoReview[]> {
   if (!YOUTUBE_KEY) return [];
   try {
-    const query = `${movieTitle} ${movieYear || ""} movie review`;
+    // Use strict "movie review" phrasing to avoid behind-the-scenes, trivia, etc.
+    const query = `"${movieTitle}" movie review ${movieYear || ""}`;
     const params = new URLSearchParams({
       part: "snippet",
       q: query,
       type: "video",
-      maxResults: String(max + 3), // Fetch extras to filter
-      order: "viewCount", // Prioritize popular channels with more views
+      maxResults: String(max + 5), // Fetch extras to filter
+      order: "relevance", // Relevance first to ensure actual reviews
       relevanceLanguage: "en",
-      videoDuration: "medium", // 4-20 min — filters out clips and full movies
-      videoDefinition: "high", // HD only — better thumbnail quality
+      videoDuration: "medium", // 4-20 min — real reviews
+      videoDefinition: "high", // HD only
+      videoEmbeddable: "true", // Only embeddable videos — prevents "unavailable" errors
       key: YOUTUBE_KEY,
     });
 
@@ -199,6 +201,7 @@ async function fetchYouTubeReviews(
     if (!res.ok) return [];
 
     const data = await res.json();
+    // Filter to only items whose title contains "review" (case-insensitive)
     const items = (data.items || [])
       .map((item: any) => ({
         video_id: item.id?.videoId || "",
@@ -207,12 +210,30 @@ async function fetchYouTubeReviews(
         thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
         published: item.snippet?.publishedAt || "",
       }))
-      .filter((v: any) => v.video_id)
-      // Sort by publish date (newer first) as secondary sort after viewCount ordering
-      .sort((a: any, b: any) => (b.published || "").localeCompare(a.published || ""))
+      .filter((v: any) => {
+        if (!v.video_id) return false;
+        const t = v.title.toLowerCase();
+        // Must contain "review" — excludes trivia, behind-the-scenes, explained, etc.
+        return t.includes("review");
+      })
       .slice(0, max);
 
-    return items;
+    // If strict filter yields too few, fall back to top results
+    if (items.length < max) {
+      const fallback = (data.items || [])
+        .map((item: any) => ({
+          video_id: item.id?.videoId || "",
+          title: item.snippet?.title || "",
+          channel: item.snippet?.channelTitle || "",
+          thumbnail: item.snippet?.thumbnails?.high?.url || "",
+          published: item.snippet?.publishedAt || "",
+        }))
+        .filter((v: any) => v.video_id && !items.some((i: any) => i.video_id === v.video_id))
+        .slice(0, max - items.length);
+      items.push(...fallback);
+    }
+
+    return items.slice(0, max);
   } catch {
     return [];
   }
