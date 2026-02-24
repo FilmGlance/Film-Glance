@@ -237,8 +237,30 @@ async function enrichCachedMovie(title, year, castNames) {
 }
 
 
+function formatBoxOfficeVal(val, label) {
+  if (!val || val === "N/A" || val === "$N/A") return "N/A";
+  const s = String(val).trim();
+  // Already formatted (has $ or % or #)
+  if (s.startsWith("$") || s.endsWith("%") || s.endsWith("days") || s.endsWith("days+")) return s;
+  // Raw number — format it
+  const num = parseFloat(s.replace(/[^0-9.-]/g, ""));
+  if (isNaN(num)) return s;
+  const lbl = label.toLowerCase();
+  const isDollar = lbl.includes("budget") || lbl.includes("gross") || lbl.includes("opening") || lbl.includes("domestic") || lbl.includes("international") || lbl.includes("worldwide") || lbl.includes("pta");
+  const isROI = lbl.includes("roi");
+  if (isROI) return num >= 1 ? `${Math.round(num)}%` : `${Math.round(num * 100)}%`;
+  if (isDollar) {
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
+    if (num >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
+    return `$${Math.round(num).toLocaleString()}`;
+  }
+  return Number.isInteger(num) ? num.toLocaleString() : s;
+}
+
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
-  const showRank = rank && rank !== "#N/A";
+  const showRank = rank && rank !== "#N/A" && rank !== "N/A";
+  const formatted = formatBoxOfficeVal(val, label);
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -249,8 +271,8 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
       transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04}s`,
     }}>
       <span style={{ fontSize: 11.5, color: "#888", fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 12, color: "#fff", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>
-        {val || "N/A"}{showRank && <span> / {rank} all-time</span>}
+      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.3 }}>
+        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank} all-time</span>}
       </span>
     </div>
   );
@@ -585,6 +607,8 @@ async function fetchMovieAPI(title, authToken) {
         img: c.profile_path ? IMG + "w185" + c.profile_path : (c.img || "")
       }));
     }
+    // Replace streaming with single reliable JustWatch link
+    mv.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(mv.title)}` }];
     return mv;
   } catch (e) {
     clearTimeout(timer);
@@ -593,9 +617,16 @@ async function fetchMovieAPI(title, authToken) {
 }
 
 function calcScore(sources) {
-  const n = sources.map(s =>
-    s.max === 100 ? s.score : s.max === 10 ? s.score * 10 : s.max === 5 ? s.score * 20 : (s.score / s.max) * 100
-  );
+  if (!sources || !Array.isArray(sources) || sources.length === 0) return { ten: 0, stars: 0, count: 0 };
+  const valid = sources.filter(s => s && typeof s.score !== 'undefined' && s.score !== null && s.max > 0);
+  if (valid.length === 0) return { ten: 0, stars: 0, count: 0 };
+  const n = valid.map(s => {
+    const score = typeof s.score === 'string' ? parseFloat(s.score) : s.score;
+    const max = typeof s.max === 'string' ? parseFloat(s.max) : s.max;
+    if (isNaN(score) || isNaN(max) || max === 0) return null;
+    return max === 100 ? score : max === 10 ? score * 10 : max === 5 ? score * 20 : (score / max) * 100;
+  }).filter(v => v !== null && !isNaN(v));
+  if (n.length === 0) return { ten: 0, stars: 0, count: sources.length };
   const m = n.reduce((a, b) => a + b, 0) / n.length;
   return {
     ten: Math.round((m / 10) * 10) / 10,
@@ -641,7 +672,9 @@ function Skeleton() {
 }
 
 function SourceRow({ source, idx, visible }) {
-  const norm = source.max === 100 ? source.score : source.max === 10 ? source.score * 10 : source.max === 5 ? source.score * 20 : (source.score / source.max) * 100;
+  const score = typeof source.score === 'string' ? parseFloat(source.score) : source.score;
+  const max = typeof source.max === 'string' ? parseFloat(source.max) : source.max;
+  const norm = (!isNaN(score) && !isNaN(max) && max > 0) ? (max === 100 ? score : max === 10 ? score * 10 : max === 5 ? score * 20 : (score / max) * 100) : 0;
   const clr = norm >= 80 ? "#22c55e" : norm >= 60 ? "#eab308" : norm >= 40 ? "#f97316" : "#ef4444";
   const [h, setH] = useState(false);
   return (
@@ -853,7 +886,10 @@ export default function FilmGlance() {
     if (cached) {
       setLoadMsg("Scanning Movie Studio Vault...");
       await new Promise(r => setTimeout(r, 500 + Math.random() * 400));
-      setResult({ ...cached, score: calcScore(cached.sources) });
+      const cachedResult = { ...cached, score: calcScore(cached.sources) };
+      // Override streaming with reliable JustWatch link
+      cachedResult.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(cached.title)}` }];
+      setResult(cachedResult);
       // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
       setLoading(false);
       setTimeout(() => setSrcOpen(true), 300);
@@ -897,8 +933,20 @@ export default function FilmGlance() {
       // if (mv && mv.limitReached) { setShowPrice(true); setLoading(false); return; }
 
       if (mv && mv.sources && mv.sources.length > 0) {
-        const res = { ...mv, score: mv.score || calcScore(mv.sources) };
-        setResult(res);
+        try {
+          const res = { ...mv, score: mv.score || calcScore(mv.sources) };
+          // Ensure cast is an array
+          if (!Array.isArray(res.cast)) res.cast = [];
+          // Ensure streaming is an array
+          if (!Array.isArray(res.streaming)) res.streaming = [{ platform: "JustWatch", url: `https://www.justwatch.com/us/search?q=${encodeURIComponent(res.title)}` }];
+          // Ensure boxOffice is an object or null
+          if (res.boxOffice && typeof res.boxOffice !== 'object') res.boxOffice = null;
+          setResult(res);
+        } catch (parseErr) {
+          console.error("Result parse error:", parseErr);
+          setErrMsg("Could not display this movie. Try a different title.");
+          setResult({ notFound: true, query: q });
+        }
         // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
         DB[q] = mv; // Client-side session cache
         setTimeout(() => setSrcOpen(true), 300);
@@ -1252,15 +1300,21 @@ export default function FilmGlance() {
                 </div>
               </div>
 
+              {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
               <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" count={result.sources.length} open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
                 <div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
                   {[...result.sources].sort((a, b) => {
-                    const na = a.max === 100 ? a.score : a.max === 10 ? a.score * 10 : a.max === 5 ? a.score * 20 : (a.score / a.max) * 100;
-                    const nb = b.max === 100 ? b.score : b.max === 10 ? b.score * 10 : b.max === 5 ? b.score * 20 : (b.score / b.max) * 100;
+                    const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
+                    const am = typeof a.max === 'string' ? parseFloat(a.max) : a.max;
+                    const bs = typeof b.score === 'string' ? parseFloat(b.score) : b.score;
+                    const bm = typeof b.max === 'string' ? parseFloat(b.max) : b.max;
+                    const na = am === 100 ? as : am === 10 ? as * 10 : am === 5 ? as * 20 : am > 0 ? (as / am) * 100 : 0;
+                    const nb = bm === 100 ? bs : bm === 10 ? bs * 10 : bm === 5 ? bs * 20 : bm > 0 ? (bs / bm) * 100 : 0;
                     return nb - na;
                   }).map((s, i) => <SourceRow key={`${s.name}-${s.type}-${i}`} source={s} idx={i} visible={srcOpen} />)}
                 </div>
               </Accordion>
+              )}
 
               {result.cast && result.cast.length > 0 && (
                 <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
@@ -1316,7 +1370,7 @@ export default function FilmGlance() {
               )}
 
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={13} />} label="Watch It Now" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                <Accordion icon={<Tv size={13} />} label="Where to Watch" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
