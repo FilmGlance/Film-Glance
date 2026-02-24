@@ -103,12 +103,38 @@ async function fetchCredits(
 }
 
 /**
+ * Generate a platform-specific search URL for a movie.
+ */
+function platformSearchUrl(providerName: string, movieTitle: string): string {
+  const t = encodeURIComponent(movieTitle);
+  const p = providerName.toLowerCase();
+  if (p.includes("netflix")) return `https://www.netflix.com/search?q=${t}`;
+  if (p.includes("disney")) return `https://www.disneyplus.com/search/${t}`;
+  if (p.includes("amazon") || p.includes("prime")) return `https://www.amazon.com/s?k=${t}&i=instant-video`;
+  if (p.includes("crave")) return `https://www.crave.ca/en/search/${t}`;
+  if (p.includes("apple")) return `https://tv.apple.com/search?term=${t}`;
+  if (p.includes("hulu")) return `https://www.hulu.com/search?q=${t}`;
+  if (p.includes("max") || p.includes("hbo")) return `https://play.max.com/search?q=${t}`;
+  if (p.includes("paramount")) return `https://www.paramountplus.com/search/${t}/`;
+  if (p.includes("peacock")) return `https://www.peacocktv.com/search?q=${t}`;
+  if (p.includes("tubi")) return `https://tubitv.com/search/${t}`;
+  if (p.includes("google play")) return `https://play.google.com/store/search?q=${t}&c=movies`;
+  if (p.includes("youtube")) return `https://www.youtube.com/results?search_query=${t}+full+movie`;
+  if (p.includes("vudu") || p.includes("fandango")) return `https://www.vudu.com/content/movies/search?searchString=${t}`;
+  if (p.includes("mubi")) return `https://mubi.com/search?query=${t}`;
+  if (p.includes("pluto")) return `https://pluto.tv/search/details/${t}`;
+  if (p.includes("starz")) return `https://www.starz.com/search?q=${t}`;
+  return `https://www.justwatch.com/ca/search?q=${t}`;
+}
+
+/**
  * Fetch watch/streaming providers for a TMDB movie ID.
  * Uses TMDB's /watch/providers endpoint which gives real, current availability.
- * Returns providers for US region by default, with link to TMDB watch page.
+ * Each provider gets its own platform-specific search URL.
  */
 async function fetchWatchProviders(
   movieId: number,
+  movieTitle: string,
   region: string = "CA"
 ): Promise<StreamingOption[]> {
   if (!TMDB_KEY) return [];
@@ -130,13 +156,16 @@ async function fetchWatchProviders(
 
     const tmdbLink = regionData.link || `https://www.themoviedb.org/movie/${movieId}/watch`;
     const streaming: StreamingOption[] = [];
+    const seen = new Set<string>();
 
     // Flatrate = subscription streaming (Netflix, Disney+, etc.)
     if (regionData.flatrate) {
       for (const p of regionData.flatrate) {
+        if (seen.has(p.provider_name)) continue;
+        seen.add(p.provider_name);
         streaming.push({
           platform: p.provider_name,
-          url: tmdbLink,
+          url: platformSearchUrl(p.provider_name, movieTitle),
           type: "stream",
           logo_path: p.logo_path,
         });
@@ -146,11 +175,11 @@ async function fetchWatchProviders(
     // Rent
     if (regionData.rent) {
       for (const p of regionData.rent.slice(0, 3)) {
-        // Skip if already in streaming
-        if (streaming.some(s => s.platform === p.provider_name)) continue;
+        if (seen.has(p.provider_name)) continue;
+        seen.add(p.provider_name);
         streaming.push({
           platform: p.provider_name,
-          url: tmdbLink,
+          url: platformSearchUrl(p.provider_name, movieTitle),
           type: "rent",
           logo_path: p.logo_path,
         });
@@ -160,10 +189,11 @@ async function fetchWatchProviders(
     // Buy (limit to 2)
     if (regionData.buy) {
       for (const p of regionData.buy.slice(0, 2)) {
-        if (streaming.some(s => s.platform === p.provider_name)) continue;
+        if (seen.has(p.provider_name)) continue;
+        seen.add(p.provider_name);
         streaming.push({
           platform: p.provider_name,
-          url: tmdbLink,
+          url: platformSearchUrl(p.provider_name, movieTitle),
           type: "buy",
           logo_path: p.logo_path,
         });
@@ -194,7 +224,7 @@ export async function enrichWithTMDB(
     // Fetch credits and watch providers in parallel
     const [credits, streaming] = await Promise.all([
       fetchCredits(movie.id, 8),
-      fetchWatchProviders(movie.id),
+      fetchWatchProviders(movie.id, title),
     ]);
 
     // Streaming
