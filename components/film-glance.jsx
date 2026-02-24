@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "2.1";
+const FG_VERSION = "3.0";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -215,7 +215,7 @@ function StreamingBadge({ platform, url, type, logo_path, idx, visible, title })
   );
 }
 
-const W = (platform, url) => ({ platform, url });
+
 
 function streamingSearchUrl(platform, title) {
   const t = encodeURIComponent(title);
@@ -288,295 +288,17 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MOVIE DATABASE
+   SUGGESTIONS — popular movie titles for search chips
    ═══════════════════════════════════════════════════════════════════════════ */
-function mkS(rtc, rta, mc, mcu, imdb, lb, tmdb, trakt, crit, mubi, sl) {
-  const [r, m, i, l, t, tr, cr, mu] = sl;
-  const o = [];
-  if (rtc != null) o.push({ name: "Rotten Tomatoes", score: rtc, max: 100, type: "Critics", url: `https://www.rottentomatoes.com/m/${r}` });
-  if (rta != null) o.push({ name: "Rotten Tomatoes", score: rta, max: 100, type: "Audience", url: `https://www.rottentomatoes.com/m/${r}` });
-  if (mc != null) o.push({ name: "Metacritic", score: mc, max: 100, type: "Metascore", url: `https://www.metacritic.com/movie/${m}` });
-  if (mcu != null) o.push({ name: "Metacritic", score: mcu, max: 10, type: "User Score", url: `https://www.metacritic.com/movie/${m}` });
-  if (imdb != null) o.push({ name: "IMDb", score: imdb, max: 10, type: "Rating", url: `https://www.imdb.com/title/${i}/` });
-  if (lb != null) o.push({ name: "Letterboxd", score: lb, max: 5, type: "Average", url: `https://letterboxd.com/film/${l}/` });
-  if (tmdb != null) o.push({ name: "TMDB", score: tmdb, max: 10, type: "Rating", url: `https://www.themoviedb.org/movie/${t}` });
-  if (trakt != null) o.push({ name: "Trakt", score: trakt, max: 10, type: "Rating", url: `https://trakt.tv/movies/${tr}` });
-  if (crit != null) o.push({ name: "Criticker", score: crit, max: 100, type: "TCI", url: `https://www.criticker.com/film/${cr}/` });
-  if (mubi != null) o.push({ name: "MUBI", score: mubi, max: 5, type: "Rating", url: `https://mubi.com/films/${mu}` });
-  return o;
-}
-
-const P = (path) => IMG + "w500" + path;
-const H = (path) => IMG + "w185" + path;
-
-const DB = {
-  "inception": {
-    title: "Inception", year: 2010, genre: "Sci-Fi · Action · Thriller", director: "Christopher Nolan", runtime: "148 min", tagline: "Your mind is the scene of the crime.",
-    description: "A skilled thief who steals secrets from within the subconscious is offered a chance to have his criminal record erased if he can successfully plant an idea into a target's mind.",
-    poster: P("/ljsZTbVsrQSqZgWeep2B1QiDKuh.jpg"),
-    cast: [
-      { name: "Leonardo DiCaprio", character: "Dom Cobb", img: H("/wo2hJpn04vbtmh0B9utCFdsQhxM.jpg") },
-      { name: "Joseph Gordon-Levitt", character: "Arthur", img: H("/zSuXCR6xCKIgo9GAbUJLfzSW4NV.jpg") },
-      { name: "Elliot Page", character: "Ariadne", img: H("/jqBIJGA8XB6MZo0VNrHwMUBc0pZ.jpg") },
-      { name: "Tom Hardy", character: "Eames", img: H("/d81K0RH8UX7tZj49tZaQhZ9ewH.jpg") },
-      { name: "Ken Watanabe", character: "Saito", img: H("/psAXOYp9SBOXvg7WXNnmPKMI0yR.jpg") },
-      { name: "Cillian Murphy", character: "Robert Fischer", img: H("/dm6V24JJJVG2AXCVnMQ2VGPEDLb.jpg") },
-    ],
-    sources: mkS(87, 91, 74, 8.8, 8.8, 4.2, 8.4, 8.6, 82, 3.9, ["inception", "inception", "tt1375666", "inception", "27205", "inception-2010", "Inception", "inception"]),
-    streaming: [W("Netflix","https://www.netflix.com/title/70131314"),W("Prime Video","https://www.amazon.com/dp/B0047WJ11G"),W("Peacock","https://www.peacocktv.com/watch/asset/movies/inception/")],
-    boxOffice: {"budgetRank":"#67","budget":"$160M","openingRank":"#54","openingWeekend":"$62.8M","pta":"$14,129","domesticRank":"#89","domestic":"$292.6M","international":"$543.7M","worldwideRank":"#68","worldwide":"$836.8M","roi":"423%","theaterCount":"3,792","daysInTheater":"168"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"4 Wins (Cinematography, Sound Editing, Sound Mixing, Visual Effects)"},{"award":"Academy Awards","result":"Nominated","detail":"4 Additional Nominations (Best Picture, Original Screenplay, Art Direction, Original Score)"},{"award":"BAFTA Awards","result":"Won","detail":"Best Special Visual Effects, Best Sound"},{"award":"Golden Globe Awards","result":"Nominated","detail":"Best Original Score"}],
-  },
-  "the dark knight": {
-    title: "The Dark Knight", year: 2008, genre: "Action · Crime · Drama", director: "Christopher Nolan", runtime: "152 min", tagline: "Why so serious?",
-    description: "Batman faces his greatest psychological and physical challenge when the menacing Joker wreaks havoc on Gotham, forcing the Dark Knight to confront chaos itself.",
-    poster: P("/qJ2tW6WMUDux911BTUgMe1nPCT.jpg"),
-    cast: [
-      { name: "Christian Bale", character: "Bruce Wayne", img: H("/qCpZn2e3dimwbryLnqxZuI88PTi.jpg") },
-      { name: "Heath Ledger", character: "The Joker", img: H("/5Y9HnYYa1jB4Ia1iIOCVMYndyYT.jpg") },
-      { name: "Aaron Eckhart", character: "Harvey Dent", img: H("/bZ1gMnIZqRhMNws28JIlgqDIIat.jpg") },
-      { name: "Gary Oldman", character: "Jim Gordon", img: H("/2v9FVVBUrrkW2m3QOcYkuhq9A6o.jpg") },
-      { name: "Morgan Freeman", character: "Lucius Fox", img: H("/oIciQWr8VGbnBGixHniVqNp7l2x.jpg") },
-    ],
-    sources: mkS(94, 94, 84, 9.0, 9.0, 4.4, 8.5, 9.0, 88, 3.8, ["the_dark_knight", "the-dark-knight", "tt0468569", "the-dark-knight", "155", "the-dark-knight-2008", "The-Dark-Knight", "the-dark-knight"]),
-    streaming: [W("Max","https://play.max.com/movie/the-dark-knight"),W("Prime Video","https://www.amazon.com/dp/B001I189MK"),W("Apple TV+","https://tv.apple.com/movie/the-dark-knight/umc.cmc.37ybx7kle")],
-    boxOffice: {"budgetRank":"#52","budget":"$185M","openingRank":"#12","openingWeekend":"$158.4M","pta":"$36,283","domesticRank":"#25","domestic":"$533.3M","international":"$468.6M","worldwideRank":"#48","worldwide":"$1.005B","roi":"443%","theaterCount":"4,366","daysInTheater":"231"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"2 Wins (Supporting Actor - Heath Ledger, Sound Editing)"},{"award":"Academy Awards","result":"Nominated","detail":"6 Additional Nominations"},{"award":"SAG Awards","result":"Won","detail":"Best Supporting Actor - Heath Ledger"},{"award":"BAFTA Awards","result":"Won","detail":"Best Supporting Actor - Heath Ledger"},{"award":"Golden Globe Awards","result":"Won","detail":"Best Supporting Actor - Heath Ledger"}],
-  },
-  "die hard": {
-    title: "Die Hard", year: 1988, genre: "Action · Thriller", director: "John McTiernan", runtime: "132 min", tagline: "40 stories of sheer adventure!",
-    description: "An NYPD officer finds himself trapped in a Los Angeles skyscraper on Christmas Eve, battling a group of terrorists who have taken hostages during an office party.",
-    poster: P("/yFihWxQcmqcaBR31QM6Y8gT6aYV.jpg"),
-    cast: [
-      { name: "Bruce Willis", character: "John McClane", img: H("/A1YFIBcUo865wkGEzqAVU2FZJCE.jpg") },
-      { name: "Alan Rickman", character: "Hans Gruber", img: H("/hS1sW58ZHiMj1eFjLsNPD1VRcCp.jpg") },
-      { name: "Bonnie Bedelia", character: "Holly", img: H("/lMjWENje5TkCp3XuoEqaI4bxlnf.jpg") },
-      { name: "Reginald VelJohnson", character: "Sgt. Powell", img: H("/4QG7VzcLHx0GyS7dh5dQ4W7AtBl.jpg") },
-    ],
-    sources: mkS(94, 94, 72, 7.6, 8.2, 4.1, 7.8, 8.4, 78, 3.5, ["die_hard", "die-hard", "tt0095016", "die-hard", "562", "die-hard-1988", "Die-Hard", "die-hard"]),
-    streaming: [W("Hulu","https://www.hulu.com/movie/die-hard"),W("Disney+","https://www.disneyplus.com/movies/die-hard/"),W("Prime Video","https://www.amazon.com/dp/B000SP16FY"),W("Tubi","https://tubitv.com/movies/die-hard")],
-    boxOffice: {"budgetRank":"#420","budget":"$28M","openingRank":"#950","openingWeekend":"$7.1M","pta":"$4,611","domesticRank":"#482","domestic":"$83.0M","international":"$57.0M","worldwideRank":"#588","worldwide":"$140.8M","roi":"403%","theaterCount":"1,538","daysInTheater":"154"},
-    awards: [{"award":"Academy Awards","result":"Nominated","detail":"4 Nominations (Editing, Sound, Sound Effects Editing, Visual Effects)"},{"award":"BAFTA Awards","result":"Nominated","detail":"Best Special Effects"}],
-  },
-  "rounders": {
-    title: "Rounders", year: 1998, genre: "Crime · Drama", director: "John Dahl", runtime: "121 min", tagline: "In the poker game of life, women are the rake.",
-    description: "A reformed gambler is drawn back into the world of high-stakes poker to help a friend pay off a dangerous debt, risking everything he's rebuilt.",
-    poster: P("/gMJngTNfaqCSCqpMtNRFHwpe3uy.jpg"),
-    cast: [
-      { name: "Matt Damon", character: "Mike McDermott", img: H("/elSlNgV8xVifsbHpFsqrPGxJToZ.jpg") },
-      { name: "Edward Norton", character: "Worm", img: H("/8nytsqL59SFJTVYVrN72k6qkGgJ.jpg") },
-      { name: "John Malkovich", character: "Teddy KGB", img: H("/dQfT22Jkqdc3JJYtIVbAiSGylO8.jpg") },
-      { name: "Gretchen Mol", character: "Jo", img: H("/3fATiEkDGSYnKE1sDlBSa0MF4qy.jpg") },
-      { name: "John Turturro", character: "Joey Knish", img: H("/8Ihu4MNEugq3eTTFgWCshCeiHg9.jpg") },
-      { name: "Famke Janssen", character: "Petra", img: H("/tHlgJQBSLq8aDplafJjmGBxrxuv.jpg") },
-    ],
-    sources: mkS(65, 81, 54, 7.4, 7.3, 3.5, 7.0, 7.5, 68, 3.1, ["rounders", "rounders", "tt0128442", "rounders", "14536", "rounders-1998", "Rounders", "rounders"]),
-    streaming: [W("Paramount+","https://www.paramountplus.com/movies/rounders/"),W("Prime Video","https://www.amazon.com/dp/B000IBMYF0"),W("Pluto TV","https://pluto.tv/on-demand/movies/rounders")],
-    boxOffice: {"budgetRank":"#1200","budget":"$12M","openingRank":"#780","openingWeekend":"$8.4M","pta":"$3,558","domesticRank":"#1450","domestic":"$22.9M","international":"$10.1M","worldwideRank":"#2100","worldwide":"$33.0M","roi":"175%","theaterCount":"2,372","daysInTheater":"77"},
-    awards: [],
-  },
-  "avatar": {
-    title: "Avatar", year: 2009, genre: "Action · Adventure · Sci-Fi", director: "James Cameron", runtime: "162 min", tagline: "Enter the world.",
-    description: "A paralyzed Marine is sent to the alien world of Pandora, where he falls in love with the land and its people, and must choose between following orders and protecting his new home.",
-    poster: P("/kyeqWdyUXW608qlYkRqosgbbJyK.jpg"),
-    cast: [
-      { name: "Sam Worthington", character: "Jake Sully", img: H("/blKKsHlJIL9PZqcDQGiOXHBP98g.jpg") },
-      { name: "Zoe Saldana", character: "Neytiri", img: H("/iOVbUH20il632nj2v01NCtYYeSg.jpg") },
-      { name: "Sigourney Weaver", character: "Dr. Augustine", img: H("/flfhep27iBxseZIlxOMHpODFHjq.jpg") },
-      { name: "Stephen Lang", character: "Col. Quaritch", img: H("/7fNX2vM5ByaROJlGTCc0e6WNcJp.jpg") },
-    ],
-    sources: mkS(82, 82, 83, 7.8, 7.9, 3.3, 7.6, 7.8, 66, 2.9, ["avatar", "avatar", "tt0499549", "avatar", "19995", "avatar-2009", "Avatar", "avatar"]),
-    streaming: [W("Disney+","https://www.disneyplus.com/movies/avatar/pfxDzMKN2jax"),W("Prime Video","https://www.amazon.com/dp/B0CG1DRHBF"),W("Apple TV+","https://tv.apple.com/movie/avatar/umc.cmc.4yqfwqr3")],
-    boxOffice: {"budgetRank":"#14","budget":"$237M","openingRank":"#38","openingWeekend":"$77.0M","pta":"$22,829","domesticRank":"#2","domestic":"$760.5M","international":"$2.13B","worldwideRank":"#1","worldwide":"$2.92B","roi":"1,132%","theaterCount":"3,452","daysInTheater":"238"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"3 Wins (Cinematography, Visual Effects, Art Direction)"},{"award":"Academy Awards","result":"Nominated","detail":"6 Additional Nominations (Best Picture, Best Director)"},{"award":"Golden Globe Awards","result":"Won","detail":"Best Motion Picture - Drama, Best Director"},{"award":"BAFTA Awards","result":"Won","detail":"Best Production Design, Best Special Visual Effects"}],
-  },
-  "ransom": {
-    title: "Ransom", year: 1996, genre: "Action · Crime · Thriller", director: "Ron Howard", runtime: "121 min", tagline: "Someone is going to pay.",
-    description: "A wealthy airline owner defies FBI advice and turns the tables on his son's kidnappers by offering the ransom money as a bounty on their heads.",
-    poster: P("/sPAHiG7FMz7gGKT8iPCKHCh3r1d.jpg"),
-    cast: [
-      { name: "Mel Gibson", character: "Tom Mullen", img: "" },
-      { name: "Rene Russo", character: "Kate Mullen", img: "" },
-      { name: "Gary Sinise", character: "Jimmy Shaker", img: "" },
-      { name: "Delroy Lindo", character: "Lonnie Hawkins", img: "" },
-      { name: "Liev Schreiber", character: "Clark Barnes", img: "" },
-    ],
-    sources: mkS(74, 68, 59, 6.2, 6.7, 3.1, 6.5, 6.8, 60, 2.8, ["ransom", "ransom", "tt0117438", "ransom", "11450", "ransom-1996", "Ransom_1996", "ransom"]),
-    streaming: [W("Prime Video","https://www.amazon.com/dp/B001AGXEAG"),W("Paramount+","https://www.paramountplus.com/movies/ransom/"),W("Tubi","https://tubitv.com/movies/ransom")],
-    boxOffice: {"budgetRank":"#185","budget":"$80M","openingRank":"#140","openingWeekend":"$34.2M","pta":"$13,095","domesticRank":"#246","domestic":"$136.5M","international":"$173.5M","worldwideRank":"#320","worldwide":"$309.5M","roi":"287%","theaterCount":"2,612","daysInTheater":"119"},
-    awards: [],
-  },
-  "the godfather": {
-    title: "The Godfather", year: 1972, genre: "Crime · Drama", director: "Francis Ford Coppola", runtime: "175 min", tagline: "An offer you can't refuse.",
-    description: "The aging patriarch of an organized crime dynasty transfers control of his empire to his reluctant youngest son, who transforms into a ruthless mafia boss.",
-    poster: P("/3bhkrj58Vtu7enYsRolD1fZdja1.jpg"),
-    cast: [
-      { name: "Marlon Brando", character: "Don Corleone", img: H("/fuTMKmGOSNY9a93VastVMOcpCq3.jpg") },
-      { name: "Al Pacino", character: "Michael", img: H("/2dGBb1fOAwaGOHc0Y5tifX7OPKV.jpg") },
-      { name: "James Caan", character: "Sonny", img: H("/v3flJtQEyczxENfnBr3eJGiRv1g.jpg") },
-      { name: "Robert Duvall", character: "Tom Hagen", img: H("/ybMmK25h4IVtPoON4vL3BFMZDIE.jpg") },
-    ],
-    sources: mkS(97, 98, 100, 9.2, 9.2, 4.6, 8.7, 9.1, 96, 4.3, ["the_godfather", "the-godfather", "tt0068646", "the-godfather", "238", "the-godfather-1972", "The-Godfather", "the-godfather"]),
-    streaming: [W("Paramount+","https://www.paramountplus.com/movies/the-godfather/"),W("Prime Video","https://www.amazon.com/dp/B001AQR3JE"),W("Apple TV+","https://tv.apple.com/movie/the-godfather/umc.cmc.5tm73zh")],
-    boxOffice: {"budgetRank":"#2500","budget":"$6M","openingRank":"#200","openingWeekend":"$26.1M","pta":"$82,595","domesticRank":"#127","domestic":"$134.9M","international":"$111.1M","worldwideRank":"#340","worldwide":"$246.1M","roi":"4,002%","theaterCount":"316","daysInTheater":"350+"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"3 Wins (Best Picture, Best Actor - Marlon Brando, Best Adapted Screenplay)"},{"award":"Academy Awards","result":"Nominated","detail":"8 Additional Nominations (Best Director, Supporting Actor x3)"},{"award":"Golden Globe Awards","result":"Won","detail":"5 Wins including Best Picture - Drama, Best Director, Best Actor, Best Score"}],
-  },
-  "pulp fiction": {
-    title: "Pulp Fiction", year: 1994, genre: "Crime · Drama", director: "Quentin Tarantino", runtime: "154 min", tagline: "You won't know the facts until you've seen the fiction.",
-    description: "The lives of two hitmen, a boxer, a gangster, and his wife interweave in a series of darkly comic episodes of violence, redemption, and chance in Los Angeles.",
-    poster: P("/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg"),
-    cast: [
-      { name: "John Travolta", character: "Vincent Vega", img: H("/ns8uZHEHzV7S8K3HISAS2QSMFGO.jpg") },
-      { name: "Uma Thurman", character: "Mia Wallace", img: H("/rfX3oOyvguxfI0GnEXzXOljKEWG.jpg") },
-      { name: "Samuel L. Jackson", character: "Jules", img: H("/mXNiAKjR2EplRvq5kg8kTCdG1Yq.jpg") },
-      { name: "Bruce Willis", character: "Butch", img: H("/A1YFIBcUo865wkGEzqAVU2FZJCE.jpg") },
-    ],
-    sources: mkS(92, 96, 95, 9.0, 8.9, 4.4, 8.5, 9.0, 90, 4.1, ["pulp_fiction", "pulp-fiction", "tt0110912", "pulp-fiction", "680", "pulp-fiction-1994", "Pulp-Fiction", "pulp-fiction"]),
-    streaming: [W("Prime Video","https://www.amazon.com/dp/B000I9YTX0"),W("Paramount+","https://www.paramountplus.com/movies/pulp-fiction/"),W("Apple TV+","https://tv.apple.com/movie/pulp-fiction/umc.cmc.1h0k8dz")],
-    boxOffice: {"budgetRank":"#1800","budget":"$8M","openingRank":"#680","openingWeekend":"$9.3M","pta":"$12,075","domesticRank":"#174","domestic":"$107.9M","international":"$105.6M","worldwideRank":"#376","worldwide":"$213.9M","roi":"2,574%","theaterCount":"1,338","daysInTheater":"252"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"Best Original Screenplay"},{"award":"Academy Awards","result":"Nominated","detail":"6 Additional Nominations (Best Picture, Best Director, Best Actor)"},{"award":"Cannes Film Festival","result":"Won","detail":"Palme d'Or"},{"award":"BAFTA Awards","result":"Won","detail":"Best Supporting Actor - Samuel L. Jackson"},{"award":"Golden Globe Awards","result":"Won","detail":"Best Screenplay"}],
-  },
-  "the matrix": {
-    title: "The Matrix", year: 1999, genre: "Action · Sci-Fi", director: "Lana and Lilly Wachowski", runtime: "136 min", tagline: "Welcome to the Real World.",
-    description: "A computer hacker discovers that reality as he knows it is a simulation created by machines, and joins a rebellion to free humanity from its digital prison.",
-    poster: P("/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg"),
-    cast: [
-      { name: "Keanu Reeves", character: "Neo", img: H("/4D0PpNI0cyR2oZMzUevYR5t3AI.jpg") },
-      { name: "Laurence Fishburne", character: "Morpheus", img: H("/8suOhUmPbfKqDQ17jQ1Gy0mI3P3.jpg") },
-      { name: "Carrie-Anne Moss", character: "Trinity", img: H("/xD4jTA3KmVp5Rq3aHcymfp1Lbmx.jpg") },
-      { name: "Hugo Weaving", character: "Agent Smith", img: H("/n1HdPBRFVhYRWzHq0EG8DVNA1Am.jpg") },
-    ],
-    sources: mkS(88, 85, 73, 8.7, 8.7, 4.3, 8.2, 8.9, 85, 3.8, ["the_matrix", "the-matrix", "tt0133093", "the-matrix", "603", "the-matrix-1999", "The-Matrix", "the-matrix"]),
-    streaming: [W("Max","https://play.max.com/movie/the-matrix"),W("Prime Video","https://www.amazon.com/dp/B000GJPL9K"),W("Apple TV+","https://tv.apple.com/movie/the-matrix/umc.cmc.1eijolhg")],
-    boxOffice: {"budgetRank":"#250","budget":"$63M","openingRank":"#180","openingWeekend":"$27.8M","pta":"$10,203","domesticRank":"#138","domestic":"$171.5M","international":"$295.1M","worldwideRank":"#169","worldwide":"$466.6M","roi":"641%","theaterCount":"2,849","daysInTheater":"196"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"4 Wins (Film Editing, Sound, Sound Effects Editing, Visual Effects)"},{"award":"BAFTA Awards","result":"Won","detail":"Best Sound, Best Achievement in Special Visual Effects"}],
-  },
-  "interstellar": {
-    title: "Interstellar", year: 2014, genre: "Sci-Fi · Adventure · Drama", director: "Christopher Nolan", runtime: "169 min", tagline: "Mankind was born on Earth. It was never meant to die here.",
-    description: "A team of astronauts travels through a wormhole near Saturn in search of a new habitable planet as Earth faces an extinction-level agricultural crisis.",
-    poster: P("/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg"),
-    cast: [
-      { name: "Matthew McConaughey", character: "Cooper", img: H("/sY2mwpafMA0VrhyAOaJg7jvGkLy.jpg") },
-      { name: "Anne Hathaway", character: "Dr. Brand", img: H("/s6tflSD53eDLzGLl7OhSCRrKNiS.jpg") },
-      { name: "Jessica Chastain", character: "Murph", img: H("/lodMzLKSdrPcBry6TdoDsMN3Vge.jpg") },
-      { name: "Michael Caine", character: "Prof. Brand", img: H("/bGZn5RBzLEKHFnHJyRTUr9yYIbd.jpg") },
-    ],
-    sources: mkS(73, 85, 74, 8.8, 8.7, 4.3, 8.4, 8.8, 80, 3.7, ["interstellar_2014", "interstellar", "tt0816692", "interstellar", "157336", "interstellar-2014", "Interstellar", "interstellar"]),
-    streaming: [W("Paramount+","https://www.paramountplus.com/movies/interstellar/"),W("Prime Video","https://www.amazon.com/dp/B00TU9UFTS"),W("Apple TV+","https://tv.apple.com/movie/interstellar/umc.cmc.1q0mz9xs")],
-    boxOffice: {"budgetRank":"#59","budget":"$165M","openingRank":"#82","openingWeekend":"$47.5M","pta":"$13,851","domesticRank":"#162","domestic":"$188.0M","international":"$489.4M","worldwideRank":"#80","worldwide":"$677.5M","roi":"311%","theaterCount":"3,561","daysInTheater":"168"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"Best Visual Effects"},{"award":"Academy Awards","result":"Nominated","detail":"4 Additional Nominations (Best Original Score, Sound Mixing, Sound Editing, Production Design)"},{"award":"BAFTA Awards","result":"Nominated","detail":"Best Special Visual Effects"}],
-  },
-  "oppenheimer": {
-    title: "Oppenheimer", year: 2023, genre: "Biography · Drama · History", director: "Christopher Nolan", runtime: "180 min", tagline: "The world forever changes.",
-    description: "The story of J. Robert Oppenheimer and his role in developing the atomic bomb during World War II, and the moral consequences that followed.",
-    poster: P("/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg"),
-    cast: [
-      { name: "Cillian Murphy", character: "Oppenheimer", img: H("/dm6V24JJJVG2AXCVnMQ2VGPEDLb.jpg") },
-      { name: "Emily Blunt", character: "Kitty", img: H("/nPJXaFWOf8Yj2iE37WKSG4MbNjR.jpg") },
-      { name: "Robert Downey Jr.", character: "Strauss", img: H("/im9SAqJPWKEbcuKNCm2mLRIhOXB.jpg") },
-      { name: "Matt Damon", character: "Groves", img: H("/elSlNgV8xVifsbHpFsqrPGxJToZ.jpg") },
-      { name: "Florence Pugh", character: "Jean Tatlock", img: H("/6fXFj5sFomYRnGcb6YCb5UhMkEN.jpg") },
-    ],
-    sources: mkS(93, 91, 88, 8.6, 8.3, 4.3, 8.1, 8.5, 84, 3.9, ["oppenheimer_2023", "oppenheimer", "tt15398776", "oppenheimer-2023", "872585", "oppenheimer-2023", "Oppenheimer", "oppenheimer"]),
-    streaming: [W("Peacock","https://www.peacocktv.com/watch/asset/movies/oppenheimer/"),W("Prime Video","https://www.amazon.com/dp/B0CG14LKBC"),W("Apple TV+","https://tv.apple.com/movie/oppenheimer/umc.cmc.27mbpkha")],
-    boxOffice: {"budgetRank":"#120","budget":"$100M","openingRank":"#30","openingWeekend":"$82.5M","pta":"$22,419","domesticRank":"#41","domestic":"$326.7M","international":"$625.4M","worldwideRank":"#54","worldwide":"$952.1M","roi":"852%","theaterCount":"3,890","daysInTheater":"175"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"7 Wins (Best Picture, Best Director, Best Actor, Best Supporting Actor, Film Editing, Cinematography, Original Score)"},{"award":"Golden Globe Awards","result":"Won","detail":"5 Wins including Best Picture - Drama, Best Director, Best Actor"},{"award":"BAFTA Awards","result":"Won","detail":"7 Wins including Best Film, Best Director, Best Actor"},{"award":"SAG Awards","result":"Won","detail":"3 Wins including Outstanding Cast"}],
-  },
-  "the shawshank redemption": {
-    title: "The Shawshank Redemption", year: 1994, genre: "Drama", director: "Frank Darabont", runtime: "142 min", tagline: "Fear can hold you prisoner. Hope can set you free.",
-    description: "A banker sentenced to life in Shawshank prison befriends a fellow inmate over decades, finding solace and eventual redemption through acts of common decency.",
-    poster: P("/9cjIJTKGmGKhlkMEsIHQlifpNhA.jpg"),
-    cast: [
-      { name: "Tim Robbins", character: "Andy Dufresne", img: H("/hsCu1JUzQQ4pl7uFxAVFLOs9yHh.jpg") },
-      { name: "Morgan Freeman", character: "Red", img: H("/oIciQWr8VGbnBGixHniVqNp7l2x.jpg") },
-      { name: "Bob Gunton", character: "Warden Norton", img: "" },
-      { name: "Clancy Brown", character: "Capt. Hadley", img: "" },
-    ],
-    sources: mkS(91, 98, 82, 9.1, 9.3, 4.6, 8.7, 9.2, 95, 4.2, ["shawshank_redemption", "the-shawshank-redemption", "tt0111161", "the-shawshank-redemption", "278", "the-shawshank-redemption-1994", "The-Shawshank-Redemption", "the-shawshank-redemption"]),
-    streaming: [W("Max","https://play.max.com/movie/the-shawshank-redemption"),W("Prime Video","https://www.amazon.com/dp/B000I9X1JE"),W("Apple TV+","https://tv.apple.com/movie/the-shawshank-redemption/umc.cmc.2hz9bm0q")],
-    boxOffice: {"budgetRank":"#480","budget":"$25M","openingRank":"#3800","openingWeekend":"$727K","pta":"$2,244","domesticRank":"#2200","domestic":"$16.0M","international":"$42.3M","worldwideRank":"#1400","worldwide":"$58.3M","roi":"133%","theaterCount":"944","daysInTheater":"126"},
-    awards: [{"award":"Academy Awards","result":"Nominated","detail":"7 Nominations (Best Picture, Best Actor, Cinematography, Film Editing, Original Score, Sound Mixing, Adapted Screenplay)"},{"award":"Golden Globe Awards","result":"Nominated","detail":"Best Actor - Morgan Freeman"}],
-  },
-  "the departed": {
-    title: "The Departed", year: 2006, genre: "Crime · Drama · Thriller", director: "Martin Scorsese", runtime: "151 min", tagline: "Lies. Betrayal. Sacrifice.",
-    description: "An undercover cop and a mole in the police force attempt to identify each other while infiltrating an Irish gang in South Boston.",
-    poster: P("/nT97ifVT2J1yMQmeq21Gelm58UB.jpg"),
-    cast: [
-      { name: "Leonardo DiCaprio", character: "Billy Costigan", img: H("/wo2hJpn04vbtmh0B9utCFdsQhxM.jpg") },
-      { name: "Matt Damon", character: "Colin Sullivan", img: H("/elSlNgV8xVifsbHpFsqrPGxJToZ.jpg") },
-      { name: "Jack Nicholson", character: "Costello", img: H("/hCqFSeid3xDAzYMAKiXcGBiSM6s.jpg") },
-      { name: "Mark Wahlberg", character: "Dignam", img: H("/bTEFpaWd7A6AZVWOqKKBWzKEQB.jpg") },
-      { name: "Martin Sheen", character: "Queenan", img: "" },
-      { name: "Vera Farmiga", character: "Madolyn", img: H("/7TyTsFMNE3GxyDmqUOMBemJctn1.jpg") },
-    ],
-    sources: mkS(91, 94, 85, 8.5, 8.5, 4.3, 8.2, 8.6, 82, 3.7, ["departed", "the-departed", "tt0407887", "the-departed", "1422", "the-departed-2006", "The-Departed", "the-departed"]),
-    streaming: [W("Max","https://play.max.com/movie/the-departed"),W("Prime Video","https://www.amazon.com/dp/B000O1BOJ6"),W("Apple TV+","https://tv.apple.com/movie/the-departed/umc.cmc.3h4vc1ax")],
-    boxOffice: {"budgetRank":"#500","budget":"$90M","openingRank":"#500","openingWeekend":"$26.9M","pta":"$8,015","domesticRank":"#500","domestic":"$132.4M","international":"$157.0M","worldwideRank":"#500","worldwide":"$289.8M","roi":"222%","theaterCount":"3,356","daysInTheater":"140"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"4 Wins (Best Picture, Best Director, Best Adapted Screenplay, Best Film Editing)"},{"award":"Academy Awards","result":"Nominated","detail":"1 Additional Nomination (Best Supporting Actor - Mark Wahlberg)"},{"award":"Golden Globe Awards","result":"Nominated","detail":"6 Nominations including Best Picture - Drama, Best Director"},{"award":"BAFTA Awards","result":"Nominated","detail":"Best Director, Best Adapted Screenplay"},{"award":"SAG Awards","result":"Nominated","detail":"Outstanding Cast"}],
-  },
-  "goodfellas": {
-    title: "Goodfellas", year: 1990, genre: "Crime · Drama", director: "Martin Scorsese", runtime: "146 min", tagline: "As far back as I can remember, I always wanted to be a gangster.",
-    description: "The story of Henry Hill and his life in the mob, from his teenage years through his eventual decision to become a government witness.",
-    poster: P("/aKuFiU82s5ISJpGZp7YkIr3kCUd.jpg"),
-    cast: [
-      { name: "Robert De Niro", character: "James Conway", img: H("/cT8htcckIuyI1Lqwt1CqYKOlKs.jpg") },
-      { name: "Ray Liotta", character: "Henry Hill", img: H("/pYGScvMc1jUZbfC6KpOMrtbLfHr.jpg") },
-      { name: "Joe Pesci", character: "Tommy DeVito", img: H("/5JKNO4t0isRMiACmKFnAbHq7JOj.jpg") },
-      { name: "Lorraine Bracco", character: "Karen Hill", img: H("/p5m0pLD6KS9a2VXQX0r6rFr09WP.jpg") },
-    ],
-    sources: mkS(96, 97, 90, 9.0, 8.7, 4.5, 8.5, 8.9, 91, 4.0, ["goodfellas", "goodfellas", "tt0099685", "goodfellas", "769", "goodfellas-1990", "GoodFellas", "goodfellas"]),
-    streaming: [W("Max","https://play.max.com/movie/goodfellas"),W("Prime Video","https://www.amazon.com/dp/B001AQO4CM"),W("Apple TV+","https://tv.apple.com/movie/goodfellas/umc.cmc.2u0ew62c")],
-    boxOffice: {"budgetRank":"#500","budget":"$25M","openingRank":"#500","openingWeekend":"$6.3M","pta":"$4,753","domesticRank":"#500","domestic":"$46.8M","international":"$N/A","worldwideRank":"#500","worldwide":"$46.8M","roi":"87%","theaterCount":"1,326","daysInTheater":"140"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"Best Supporting Actor - Joe Pesci"},{"award":"Academy Awards","result":"Nominated","detail":"5 Additional Nominations (Best Picture, Best Director, Best Supporting Actress, Best Adapted Screenplay, Best Film Editing)"},{"award":"BAFTA Awards","result":"Won","detail":"Best Film, Best Director"},{"award":"Venice Film Festival","result":"Won","detail":"Silver Lion - Best Director"}],
-  },
-  "fight club": {
-    title: "Fight Club", year: 1999, genre: "Drama · Thriller", director: "David Fincher", runtime: "139 min", tagline: "Mischief. Mayhem. Soap.",
-    description: "An insomniac office worker and a devil-may-care soap maker form an underground fight club that evolves into an anarchist movement.",
-    poster: P("/pB8BM7pdSp6B6Ih7QI4S2t0POD.jpg"),
-    cast: [
-      { name: "Brad Pitt", character: "Tyler Durden", img: H("/cckcYc2v0yh1tc9QjRelptcOBko.jpg") },
-      { name: "Edward Norton", character: "The Narrator", img: H("/8nytsqL59SFJTVYVrN72k6qkGgJ.jpg") },
-      { name: "Helena Bonham Carter", character: "Marla", img: H("/DPnessSsaJOGIOnVzclVdHrGbP.jpg") },
-    ],
-    sources: mkS(79, 96, 66, 8.8, 8.8, 4.3, 8.4, 8.9, 84, 3.8, ["fight_club", "fight-club", "tt0137523", "fight-club", "550", "fight-club-1999", "Fight-Club", "fight-club"]),
-    streaming: [W("Hulu","https://www.hulu.com/movie/fight-club"),W("Prime Video","https://www.amazon.com/dp/B000SP15RE"),W("Apple TV+","https://tv.apple.com/movie/fight-club/umc.cmc.72c2pj2q")],
-    boxOffice: {"budgetRank":"#500","budget":"$63M","openingRank":"#500","openingWeekend":"$11.0M","pta":"$4,228","domesticRank":"#500","domestic":"$37.0M","international":"$63.8M","worldwideRank":"#500","worldwide":"$101.2M","roi":"61%","theaterCount":"2,603","daysInTheater":"112"},
-    awards: [{"award":"Academy Awards","result":"Nominated","detail":"1 Nomination (Best Sound Effects Editing)"},{"award":"BAFTA Awards","result":"Nominated","detail":"Best Sound"}],
-  },
-  "forrest gump": {
-    title: "Forrest Gump", year: 1994, genre: "Drama · Romance · Comedy", director: "Robert Zemeckis", runtime: "142 min", tagline: "Life is like a box of chocolates.",
-    description: "The story of a man with a low IQ who inadvertently influences several major historical events in America while pursuing his one true love.",
-    poster: P("/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg"),
-    cast: [
-      { name: "Tom Hanks", character: "Forrest Gump", img: H("/xndWFsBlClOJFRdhSt4NBwiPq2o.jpg") },
-      { name: "Robin Wright", character: "Jenny", img: H("/cODq3oumOaILlhpGSnAaW6oSCGb.jpg") },
-      { name: "Gary Sinise", character: "Lt. Dan", img: H("/hCjNRGKanBuMf0mxoQPkrkYk3HG.jpg") },
-      { name: "Sally Field", character: "Mrs. Gump", img: H("/z7bcSXCRPYpVbmPWapqPbddNWMa.jpg") },
-    ],
-    sources: mkS(71, 95, 82, 8.7, 8.8, 4.0, 8.5, 8.6, 80, 3.4, ["forrest_gump", "forrest-gump", "tt0109830", "forrest-gump", "13", "forrest-gump-1994", "Forrest-Gump", "forrest-gump"]),
-    streaming: [W("Paramount+","https://www.paramountplus.com/movies/forrest-gump/"),W("Prime Video","https://www.amazon.com/dp/B000I9X54K"),W("Apple TV+","https://tv.apple.com/movie/forrest-gump/umc.cmc.4t02t5hk")],
-    boxOffice: {"budgetRank":"#500","budget":"$55M","openingRank":"#500","openingWeekend":"$24.5M","pta":"$10,048","domesticRank":"#42","domestic":"$330.5M","international":"$347.7M","worldwideRank":"#74","worldwide":"$678.2M","roi":"1,133%","theaterCount":"2,441","daysInTheater":"252"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"6 Wins (Best Picture, Best Director, Best Actor - Tom Hanks, Best Adapted Screenplay, Best Film Editing, Best Visual Effects)"},{"award":"Academy Awards","result":"Nominated","detail":"7 Additional Nominations"},{"award":"Golden Globe Awards","result":"Won","detail":"3 Wins (Best Picture - Drama, Best Director, Best Actor)"}],
-  },
-  "gladiator": {
-    title: "Gladiator", year: 2000, genre: "Action · Adventure · Drama", director: "Ridley Scott", runtime: "155 min", tagline: "What we do in life echoes in eternity.",
-    description: "A former Roman general sets out to exact vengeance against the corrupt emperor who murdered his family and sent him into slavery.",
-    poster: P("/ty8TGRuvJLPUmAR1H1nRIsgCLkN.jpg"),
-    cast: [
-      { name: "Russell Crowe", character: "Maximus", img: H("/uxjQGhMsNCoLvJbcEYBOyGMNGcj.jpg") },
-      { name: "Joaquin Phoenix", character: "Commodus", img: H("/nXMzvVF6xR3OXOedozfOcoA20xh.jpg") },
-      { name: "Connie Nielsen", character: "Lucilla", img: H("/b2JWnTMNyK0KK4FRsMIKEgYBPB4.jpg") },
-      { name: "Oliver Reed", character: "Proximo", img: "" },
-      { name: "Richard Harris", character: "Marcus Aurelius", img: "" },
-    ],
-    sources: mkS(80, 87, 67, 8.5, 8.5, 4.0, 8.2, 8.4, 78, 3.4, ["gladiator", "gladiator", "tt0172495", "gladiator", "98", "gladiator-2000", "Gladiator", "gladiator"]),
-    streaming: [W("Paramount+","https://www.paramountplus.com/movies/gladiator/"),W("Prime Video","https://www.amazon.com/dp/B00AYB0JZ8"),W("Peacock","https://www.peacocktv.com/watch/asset/movies/gladiator/")],
-    boxOffice: {"budgetRank":"#500","budget":"$103M","openingRank":"#500","openingWeekend":"$34.8M","pta":"$12,434","domesticRank":"#117","domestic":"$187.7M","international":"$269.8M","worldwideRank":"#120","worldwide":"$457.6M","roi":"344%","theaterCount":"2,938","daysInTheater":"196"},
-    awards: [{"award":"Academy Awards","result":"Won","detail":"5 Wins (Best Picture, Best Actor - Russell Crowe, Best Costume Design, Best Sound, Best Visual Effects)"},{"award":"Academy Awards","result":"Nominated","detail":"7 Additional Nominations"},{"award":"Golden Globe Awards","result":"Won","detail":"Best Picture - Drama"},{"award":"BAFTA Awards","result":"Won","detail":"4 Wins including Best Film, Best Cinematography"}],
-  },
-};
-
-const SUGGESTIONS = Object.keys(DB).map(k => DB[k].title);
+const SUGGESTIONS = [
+  "Inception", "The Dark Knight", "Interstellar", "Pulp Fiction", "The Matrix",
+  "The Shawshank Redemption", "Fight Club", "Goodfellas", "The Godfather",
+  "Forrest Gump", "Parasite", "The Social Network", "Whiplash", "Gladiator",
+  "Se7en", "Schindler's List", "Saving Private Ryan", "Avatar",
+  "Django Unchained", "The Wolf of Wall Street"
+];
+// Session-only runtime cache (populated as user searches, not persisted)
+const DB = {};
 // [ARCHIVED — PRICING DORMANT] Search limit for free tier. Uncomment atLimit logic to re-enable.
 const FREE_LIMIT = 8;
 
@@ -607,8 +329,7 @@ async function fetchMovieAPI(title, authToken) {
     const mv = await r.json();
     if (!mv.title || !mv.sources || mv.sources.length === 0) return null;
 
-    console.log("[FG] Server:", { poster: mv.poster, poster_path: mv.poster_path, castPhotos: mv.cast?.filter(c => c.profile_path).length, castTotal: mv.cast?.length });
-
+    // Construct image URLs from TMDB paths
     // Always prefer TMDB poster_path
     if (mv.poster_path) mv.poster = IMG + "w500" + mv.poster_path;
     if (mv.cast) {
@@ -924,53 +645,6 @@ export default function FilmGlance() {
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
     setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null);
 
-    // Check client-side cache — exact match only (prevents sequel mismatches)
-    let cached = DB[q];
-    if (!cached) {
-      const k = Object.keys(DB).find(k => {
-        const title = DB[k].title.toLowerCase();
-        if (title === q) return true;
-        if (q === "the " + k || k === "the " + q) return true;
-        if (q === "the " + title || title === "the " + q) return true;
-        return false;
-      });
-      if (k) cached = DB[k];
-    }
-
-    if (cached) {
-      setLoadMsg("Scanning Movie Studio Vault...");
-      await new Promise(r => setTimeout(r, 500 + Math.random() * 400));
-      const cachedResult = normalizeResult({ ...cached, score: calcScore(cached.sources) });
-      setResult(cachedResult);
-      // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
-      setLoading(false);
-      setTimeout(() => setSrcOpen(true), 300);
-      // Enrich cached movie with real TMDB images + streaming in background
-      const castNames = cached.cast?.map(c => ({ name: c.name, character: c.character }));
-      enrichCachedMovie(cached.title, cached.year, castNames).then(tmdb => {
-        if (!tmdb) return;
-        setResult(prev => {
-          if (!prev || prev.title !== cached.title) return prev;
-          const updated = { ...prev };
-          if (tmdb.poster_path) updated.poster = IMG + "w500" + tmdb.poster_path;
-          if (tmdb.cast && tmdb.cast.length > 0) {
-            updated.cast = tmdb.cast.map((tc, i) => ({
-              name: tc.name,
-              character: tc.character || prev.cast?.[i]?.character || "",
-              img: tc.profile_path ? IMG + "w185" + tc.profile_path : ""
-            }));
-          }
-          if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
-          // Always overwrite these — never serve stale cached data
-          updated.trailer_key = tmdb.trailer_key || null;
-          updated.recommendations = tmdb.recommendations || [];
-          updated.video_reviews = tmdb.video_reviews || [];
-          return updated;
-        });
-      });
-      return;
-    }
-
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
     try {
@@ -986,7 +660,6 @@ export default function FilmGlance() {
           setResult(res);
           // Always enrich from TMDB (server cache may have old data)
           enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
-            console.log("[FG] Enrich:", { poster_path: tmdb?.poster_path, castPhotos: tmdb?.cast?.filter(c => c.profile_path).length, castTotal: tmdb?.cast?.length });
             if (!tmdb) return;
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
@@ -1618,7 +1291,7 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v2.1</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.0</span>
             </div>
           </footer>
         </main>
