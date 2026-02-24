@@ -605,7 +605,15 @@ async function fetchMovieAPI(title, authToken) {
     const mv = await r.json();
     if (!mv.title || !mv.sources || mv.sources.length === 0) return null;
 
-    // Construct image URLs from TMDB paths
+    // DEBUG — log what the server returned
+    console.log("[FilmGlance] Server response:", {
+      poster: mv.poster,
+      poster_path: mv.poster_path,
+      castWithPhotos: mv.cast?.filter(c => c.profile_path).length,
+      castTotal: mv.cast?.length,
+      castSample: mv.cast?.slice(0, 3).map(c => ({ name: c.name, profile_path: c.profile_path })),
+    });
+
     // Always prefer TMDB poster_path over any Claude-guessed poster URL
     if (mv.poster_path) mv.poster = IMG + "w500" + mv.poster_path;
     if (mv.cast) {
@@ -983,6 +991,12 @@ export default function FilmGlance() {
           setResult(res);
           // Always enrich from TMDB (server cache may have old data)
           enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
+            console.log("[FilmGlance] Enrich response:", {
+              poster_path: tmdb?.poster_path,
+              castWithPhotos: tmdb?.cast?.filter(c => c.profile_path).length,
+              castTotal: tmdb?.cast?.length,
+              castSample: tmdb?.cast?.slice(0, 3).map(c => ({ name: c.name, profile_path: c.profile_path })),
+            });
             if (!tmdb) return;
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
@@ -1002,7 +1016,7 @@ export default function FilmGlance() {
               updated.video_reviews = tmdb.video_reviews || [];
               return updated;
             });
-          });
+          }).catch(err => console.error("[FilmGlance] Enrich error:", err));
         } catch (parseErr) {
           console.error("Result parse error:", parseErr);
           setErrMsg("Could not display this movie. Try a different title.");
