@@ -179,11 +179,9 @@ function CastMember({ name, character, img, idx, visible }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 function StreamingBadge({ platform, url, type, logo_path, idx, visible, title }) {
   const [hov, setHov] = useState(false);
-  // Use direct URL if provided, otherwise search URL fallback
-  const href = url || (title ? streamingSearchUrl(platform, title) : "#");
-  const typeLabel = type === "rent" ? "Rent" : type === "buy" ? "Buy" : "";
-  const typeColor = type === "rent" ? "#60a5fa" : type === "buy" ? "#a78bfa" : "#FFD700";
+  const href = url || "#";
   const logoUrl = logo_path ? `https://image.tmdb.org/t/p/w45${logo_path}` : null;
+  const typeLabel = type === "rent" ? "Rent" : type === "buy" ? "Buy" : "";
   return (
     <a
       href={href} target="_blank" rel="noopener noreferrer"
@@ -202,15 +200,15 @@ function StreamingBadge({ platform, url, type, logo_path, idx, visible, title })
       {logoUrl ? (
         <img src={logoUrl} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
       ) : (
-        <Play size={11} fill={typeColor} stroke={typeColor} style={{ opacity: hov ? 1 : 0.7, transition: "opacity 0.2s" }} />
+        <Play size={11} fill="#FFD700" stroke="#FFD700" style={{ opacity: hov ? 1 : 0.7, transition: "opacity 0.2s" }} />
       )}
       <span style={{
-        fontSize: 11.5, fontWeight: 600, color: typeColor,
+        fontSize: 11.5, fontWeight: 600, color: "#FFD700",
         opacity: hov ? 1 : 0.8, transition: "opacity 0.2s",
         whiteSpace: "nowrap",
       }}>{platform}</span>
-      {typeLabel && <span style={{ fontSize: 9, color: typeColor, opacity: 0.6, fontWeight: 500 }}>{typeLabel}</span>}
-      <ExternalLink size={9} style={{ color: typeColor, opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
+      {typeLabel && <span style={{ fontSize: 9, color: "#FFD700", opacity: 0.5, fontWeight: 500 }}>{typeLabel}</span>}
+      <ExternalLink size={9} style={{ color: "#FFD700", opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
     </a>
   );
 }
@@ -651,7 +649,8 @@ function normalizeResult(mv) {
   if (r.boxOffice && typeof r.boxOffice !== 'object') r.boxOffice = null;
   // Ensure strings
   if (typeof r.title !== 'string') r.title = String(r.title || "Unknown");
-  if (typeof r.year !== 'number' && typeof r.year !== 'string') r.year = "";
+  if (typeof r.year !== 'number' && typeof r.year !== 'string') r.year = 0;
+  if (typeof r.year === 'string') r.year = parseInt(r.year) || 0;
   if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
   return r;
 }
@@ -1005,29 +1004,43 @@ export default function FilmGlance() {
 
   const toggleFav = async (movieResult) => {
     if (!user) { setShowAuth(true); return; }
-    const exists = favorites.find(f => f.title === movieResult.title && f.year === movieResult.year);
+    // Normalize values for DB
+    const title = String(movieResult.title || "");
+    const year = typeof movieResult.year === 'string' ? parseInt(movieResult.year) || 0 : (movieResult.year || 0);
+    const genre = Array.isArray(movieResult.genre) ? movieResult.genre.join(" · ") : String(movieResult.genre || "");
+    
+    const exists = favorites.find(f => f.title === title && f.year === year);
     if (exists) {
       // Remove favorite
       const prevFavs = [...favorites];
-      setFavorites(prev => prev.filter(f => !(f.title === movieResult.title && f.year === movieResult.year)));
-      const { error } = await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", movieResult.title).eq("year", movieResult.year);
-      if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
+      setFavorites(prev => prev.filter(f => !(f.title === title && f.year === year)));
+      try {
+        const { error } = await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", title).eq("year", year);
+        if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
+      } catch (e) { console.error("Remove fav exception:", e); setFavorites(prevFavs); }
     } else {
       // Add favorite
-      const newFav = { title: movieResult.title, year: movieResult.year, genre: movieResult.genre, poster: movieResult.poster, score: movieResult.score, searchKey: movieResult.title.toLowerCase() };
+      const newFav = { title, year, genre, poster: movieResult.poster || "", score: movieResult.score || { ten: 0, stars: 0 }, searchKey: title.toLowerCase() };
       const prevFavs = [...favorites];
       setFavorites(prev => [...prev, newFav]);
-      const { error } = await supabase.from("favorites").insert({
-        user_id: user.id, title: movieResult.title, year: movieResult.year,
-        genre: movieResult.genre, poster_url: movieResult.poster,
-        score_ten: movieResult.score?.ten, score_stars: movieResult.score?.stars,
-        search_key: movieResult.title.toLowerCase(),
-      });
-      if (error) { console.error("Add fav error:", error); setFavorites(prevFavs); }
+      try {
+        const { error } = await supabase.from("favorites").insert({
+          user_id: user.id, title, year,
+          genre, poster_url: movieResult.poster || "",
+          score_ten: movieResult.score?.ten || 0, score_stars: movieResult.score?.stars || 0,
+          search_key: title.toLowerCase(),
+        });
+        if (error) { console.error("Add fav error:", error, "Data:", { title, year, genre }); setFavorites(prevFavs); }
+      } catch (e) { console.error("Add fav exception:", e); setFavorites(prevFavs); }
     }
   };
 
-  const isFav = (r) => r && favorites.some(f => f.title === r.title && f.year === r.year);
+  const isFav = (r) => {
+    if (!r) return false;
+    const title = String(r.title || "");
+    const year = typeof r.year === 'string' ? parseInt(r.year) || 0 : (r.year || 0);
+    return favorites.some(f => f.title === title && f.year === year);
+  };
 
   const loadFav = (fav) => {
     setShowFavs(false);
