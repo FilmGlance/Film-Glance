@@ -1,4 +1,3 @@
-// v2 deploy
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
@@ -6,6 +5,8 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
+const FG_VERSION = "2.1";
+if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HELPERS
@@ -606,16 +607,9 @@ async function fetchMovieAPI(title, authToken) {
     const mv = await r.json();
     if (!mv.title || !mv.sources || mv.sources.length === 0) return null;
 
-    // DEBUG — log what the server returned
-    console.log("[FilmGlance] Server response:", {
-      poster: mv.poster,
-      poster_path: mv.poster_path,
-      castWithPhotos: mv.cast?.filter(c => c.profile_path).length,
-      castTotal: mv.cast?.length,
-      castSample: mv.cast?.slice(0, 3).map(c => ({ name: c.name, profile_path: c.profile_path })),
-    });
+    console.log("[FG] Server:", { poster: mv.poster, poster_path: mv.poster_path, castPhotos: mv.cast?.filter(c => c.profile_path).length, castTotal: mv.cast?.length });
 
-    // Always prefer TMDB poster_path over any Claude-guessed poster URL
+    // Always prefer TMDB poster_path
     if (mv.poster_path) mv.poster = IMG + "w500" + mv.poster_path;
     if (mv.cast) {
       mv.cast = mv.cast.map(c => ({
@@ -992,12 +986,7 @@ export default function FilmGlance() {
           setResult(res);
           // Always enrich from TMDB (server cache may have old data)
           enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
-            console.log("[FilmGlance] Enrich response:", {
-              poster_path: tmdb?.poster_path,
-              castWithPhotos: tmdb?.cast?.filter(c => c.profile_path).length,
-              castTotal: tmdb?.cast?.length,
-              castSample: tmdb?.cast?.slice(0, 3).map(c => ({ name: c.name, profile_path: c.profile_path })),
-            });
+            console.log("[FG] Enrich:", { poster_path: tmdb?.poster_path, castPhotos: tmdb?.cast?.filter(c => c.profile_path).length, castTotal: tmdb?.cast?.length });
             if (!tmdb) return;
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
@@ -1011,13 +1000,12 @@ export default function FilmGlance() {
                 }));
               }
               if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
-              // Always overwrite — never serve stale cached data
               updated.trailer_key = tmdb.trailer_key || null;
               updated.recommendations = tmdb.recommendations || [];
               updated.video_reviews = tmdb.video_reviews || [];
               return updated;
             });
-          }).catch(err => console.error("[FilmGlance] Enrich error:", err));
+          }).catch(err => console.error("[FG] Enrich error:", err));
         } catch (parseErr) {
           console.error("Result parse error:", parseErr);
           setErrMsg("Could not display this movie. Try a different title.");
@@ -1630,7 +1618,7 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v2.1</span>
             </div>
           </footer>
         </main>
