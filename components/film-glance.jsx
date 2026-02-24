@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
-  Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart
+  Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 
@@ -1069,6 +1069,17 @@ export default function FilmGlance() {
     return favorites.some(f => f.title === title && f.year === year);
   };
 
+  const removeFav = async (fav, e) => {
+    e.stopPropagation();
+    if (!user) return;
+    const prevFavs = [...favorites];
+    setFavorites(prev => prev.filter(f => !(f.title === fav.title && f.year === fav.year)));
+    try {
+      const { error } = await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", fav.title).eq("year", fav.year);
+      if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
+    } catch (e2) { console.error("Remove fav exception:", e2); setFavorites(prevFavs); }
+  };
+
   const loadFav = (fav) => {
     setShowFavs(false);
     setQuery(fav.title);
@@ -1257,9 +1268,9 @@ export default function FilmGlance() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {favorites.map((fav, idx) => (
                 <div key={`${fav.title}-${fav.year}`} style={{
-                  display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+                  display: "flex", alignItems: "center", gap: 14, padding: "14px 18px 24px 18px",
                   background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                  borderRadius: 13, cursor: "pointer",
+                  borderRadius: 13, cursor: "pointer", position: "relative",
                   animation: `slideUp 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s both`,
                   transition: "border-color 0.2s, background 0.2s",
                 }}
@@ -1284,6 +1295,21 @@ export default function FilmGlance() {
                     <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{fav.score.ten}</span>
                     <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>/10</span>
                   </div>
+                  <button
+                    onClick={(e) => removeFav(fav, e)}
+                    title="Remove from favourites"
+                    style={{
+                      position: "absolute", bottom: 8, right: 10,
+                      background: "transparent", border: "none", cursor: "pointer",
+                      padding: 4, borderRadius: 6,
+                      color: "rgba(255,255,255,0.15)", transition: "color 0.2s",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = "#e53e3e"; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.15)"; }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               ))}
             </div>
