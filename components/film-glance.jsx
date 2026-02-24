@@ -867,6 +867,11 @@ export default function FilmGlance() {
         await loadUserData(session);
         setShowAuth(false);
         setAuthEmail(""); setAuthPw(""); setErrMsg(null);
+        // Show sign-in notification (only for explicit sign-in, not page reload)
+        if (event === "SIGNED_IN") {
+          setAuthNotice("You're signed in! Welcome back to Film Glance.");
+          setTimeout(() => setAuthNotice(null), 4000);
+        }
       } else {
         setUser(null); setPlan("free"); setSearches(0); setFavorites([]);
       }
@@ -952,9 +957,10 @@ export default function FilmGlance() {
             }));
           }
           if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
-          if (tmdb.trailer_key) updated.trailer_key = tmdb.trailer_key;
-          if (tmdb.recommendations && tmdb.recommendations.length > 0) updated.recommendations = tmdb.recommendations;
-          if (tmdb.video_reviews && tmdb.video_reviews.length > 0) updated.video_reviews = tmdb.video_reviews;
+          // Always overwrite these — never serve stale cached data
+          updated.trailer_key = tmdb.trailer_key || null;
+          updated.recommendations = tmdb.recommendations || [];
+          updated.video_reviews = tmdb.video_reviews || [];
           return updated;
         });
       });
@@ -981,9 +987,10 @@ export default function FilmGlance() {
               if (!prev || prev.title !== res.title) return prev;
               const updated = { ...prev };
               if (tmdb.streaming && tmdb.streaming.length > 0) updated.streaming = tmdb.streaming;
-              if (tmdb.trailer_key) updated.trailer_key = tmdb.trailer_key;
-              if (tmdb.recommendations && tmdb.recommendations.length > 0) updated.recommendations = tmdb.recommendations;
-              if (tmdb.video_reviews && tmdb.video_reviews.length > 0) updated.video_reviews = tmdb.video_reviews;
+              // Always overwrite — never serve stale cached data
+              updated.trailer_key = tmdb.trailer_key || null;
+              updated.recommendations = tmdb.recommendations || [];
+              updated.video_reviews = tmdb.video_reviews || [];
               return updated;
             });
           });
