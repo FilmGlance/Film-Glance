@@ -202,26 +202,22 @@ async function fetchRecommendations(
 
 /**
  * Check if a video title is relevant to the movie we're looking for.
- * Requires at least one significant word from the movie title to appear.
+ * Requires the movie title (or significant words) to appear in the video title.
  */
 function isRelevantReview(videoTitle: string, movieTitle: string): boolean {
   const vt = videoTitle.toLowerCase();
   const mt = movieTitle.toLowerCase();
   
-  // Must contain "review"
-  if (!vt.includes("review")) return false;
-  
   // Check if the full movie title appears
   if (vt.includes(mt)) return true;
   
-  // Check if significant words from movie title appear (2+ char words)
-  const words = mt.split(/\s+/).filter(w => w.length > 2);
+  // Check if significant words from movie title appear (3+ char words)
+  const stopWords = new Set(["the", "and", "for", "from", "with", "that", "this"]);
+  const words = mt.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
   if (words.length === 0) return vt.includes(mt);
   
-  // For multi-word titles, require at least 60% of significant words to match
-  const matchCount = words.filter(w => vt.includes(w)).length;
-  const threshold = words.length === 1 ? 1 : Math.ceil(words.length * 0.6);
-  return matchCount >= threshold;
+  // All significant words must appear
+  return words.every(w => vt.includes(w));
 }
 
 async function fetchYouTubeReviews(
@@ -232,16 +228,15 @@ async function fetchYouTubeReviews(
   if (!YOUTUBE_KEY) return [];
   try {
     const yearStr = movieYear ? ` ${movieYear}` : "";
-    const query = `"${movieTitle}"${yearStr} movie review`;
+    // Search with movie title + "movie review" — no restrictive duration/definition filters
+    const query = `${movieTitle}${yearStr} movie review`;
     const params = new URLSearchParams({
       part: "snippet",
       q: query,
       type: "video",
-      maxResults: String(max + 8), // Fetch extra to filter aggressively
+      maxResults: String(max + 10),
       order: "relevance",
       relevanceLanguage: "en",
-      videoDuration: "medium",
-      videoDefinition: "high",
       videoEmbeddable: "true",
       key: YOUTUBE_KEY,
     });
@@ -254,7 +249,8 @@ async function fetchYouTubeReviews(
 
     const data = await res.json();
 
-    const items = (data.items || [])
+    // First pass: must have "review" in title AND be about this movie
+    const strict = (data.items || [])
       .map((item: any) => ({
         video_id: item.id?.videoId || "",
         title: item.snippet?.title || "",
@@ -262,11 +258,41 @@ async function fetchYouTubeReviews(
         thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
         published: item.snippet?.publishedAt || "",
       }))
-      .filter((v: any) => v.video_id && isRelevantReview(v.title, movieTitle))
+      .filter((v: any) => {
+        if (!v.video_id) return false;
+        const t = v.title.toLowerCase();
+        if (!t.includes("review")) return false;
+        return isRelevantReview(v.title, movieTitle);
+      })
       .slice(0, max);
 
+    if (strict.length >= max) return strict;
+
+    // Second pass: relax "review" requirement — accept videos that have 
+    // the movie title AND words like "review", "reaction", "discussion", "breakdown"
+    const reviewWords = ["review", "reaction", "breakdown", "discussion", "critique", "analysis"];
+    const relaxed = (data.items || [])
+      .map((item: any) => ({
+        video_id: item.id?.videoId || "",
+        title: item.snippet?.title || "",
+        channel: item.snippet?.channelTitle || "",
+        thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
+        published: item.snippet?.publishedAt || "",
+      }))
+      .filter((v: any) => {
+        if (!v.video_id) return false;
+        if (strict.some(s => s.video_id === v.video_id)) return false;
+        const t = v.title.toLowerCase();
+        const hasReviewWord = reviewWords.some(w => t.includes(w));
+        if (!hasReviewWord) return false;
+        return isRelevantReview(v.title, movieTitle);
+      })
+      .slice(0, max - strict.length);
+
+    const combined = [...strict, ...relaxed];
+    
     // Return only verified results — show nothing rather than wrong content
-    return items;
+    return combined;
   } catch {
     return [];
   }
