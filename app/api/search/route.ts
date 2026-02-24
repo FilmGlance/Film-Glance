@@ -135,7 +135,13 @@ export async function POST(req: NextRequest) {
         mv.cast?.map((c: any) => ({ name: c.name, character: c.character }))
       );
 
-      if (tmdb.poster_path) mv.poster_path = tmdb.poster_path;
+      if (tmdb.poster_path) {
+        mv.poster_path = tmdb.poster_path;
+        mv.poster = `https://image.tmdb.org/t/p/w500${tmdb.poster_path}`;
+      }
+      // Delete any Claude-guessed poster fields that might be wrong
+      if (!mv.poster_path) delete mv.poster;
+      
       if (tmdb.cast && tmdb.cast.length > 0) {
         mv.cast = tmdb.cast.map((tc) => ({
           name: tc.name,
