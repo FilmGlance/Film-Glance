@@ -406,7 +406,7 @@ export async function enrichWithTMDB(
     // Fetch everything in parallel for speed
     const [credits, streaming, trailerKey, recommendations, videoReviews] =
       await Promise.all([
-        fetchCredits(movie.id, 15),
+        fetchCredits(movie.id, 20),
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
@@ -420,31 +420,63 @@ export async function enrichWithTMDB(
 
     // Cast — fuzzy match TMDB credits to Claude's cast data
     if (credits.length > 0 && claudeCast && claudeCast.length > 0) {
-      result.cast = claudeCast.map((cc) => {
+      const usedIndices = new Set<number>();
+      
+      result.cast = claudeCast.map((cc, idx) => {
         const ccLower = cc.name.toLowerCase().trim();
         const ccParts = ccLower.split(/\s+/);
         const ccLast = ccParts[ccParts.length - 1];
+        const ccFirst = ccParts[0];
         
         // Try exact match first
         let tmdbMatch = credits.find(
-          (tc) => tc.name.toLowerCase().trim() === ccLower
+          (tc, i) => !usedIndices.has(i) && tc.name.toLowerCase().trim() === ccLower
         );
         // Try last name + first initial match
         if (!tmdbMatch) {
-          tmdbMatch = credits.find((tc) => {
+          tmdbMatch = credits.find((tc, i) => {
+            if (usedIndices.has(i)) return false;
             const tcLower = tc.name.toLowerCase().trim();
             const tcParts = tcLower.split(/\s+/);
             const tcLast = tcParts[tcParts.length - 1];
             return tcLast === ccLast && tcParts[0][0] === ccParts[0][0];
           });
         }
-        // Try last name only match (if unique)
+        // Try unique last name match
         if (!tmdbMatch) {
-          const lastNameMatches = credits.filter((tc) => {
+          const lastNameMatches = credits.filter((tc, i) => {
+            if (usedIndices.has(i)) return false;
             const tcLast = tc.name.toLowerCase().trim().split(/\s+/).pop();
             return tcLast === ccLast;
           });
           if (lastNameMatches.length === 1) tmdbMatch = lastNameMatches[0];
+        }
+        // Try first name + partial last name or last name + partial first name
+        if (!tmdbMatch) {
+          tmdbMatch = credits.find((tc, i) => {
+            if (usedIndices.has(i)) return false;
+            const tcLower = tc.name.toLowerCase().trim();
+            const tcParts = tcLower.split(/\s+/);
+            const tcFirst = tcParts[0];
+            const tcLast = tcParts[tcParts.length - 1];
+            // First names match and last names start the same (3+ chars)
+            if (tcFirst === ccFirst && ccLast.length >= 3 && tcLast.length >= 3 && 
+                (tcLast.startsWith(ccLast.substring(0, 3)) || ccLast.startsWith(tcLast.substring(0, 3)))) return true;
+            // Last names match and first names start the same
+            if (tcLast === ccLast && tcFirst[0] === ccFirst[0]) return true;
+            // One name contains the other (handles "John" matching "John Patrick")
+            if (tcLower.includes(ccLower) || ccLower.includes(tcLower)) return true;
+            return false;
+          });
+        }
+        // Positional fallback — use TMDB credit at the same index (billing order is usually consistent)
+        if (!tmdbMatch && idx < credits.length && !usedIndices.has(idx) && credits[idx].profile_path) {
+          tmdbMatch = credits[idx];
+        }
+        
+        if (tmdbMatch) {
+          const matchIdx = credits.indexOf(tmdbMatch);
+          if (matchIdx >= 0) usedIndices.add(matchIdx);
         }
         
         return {
