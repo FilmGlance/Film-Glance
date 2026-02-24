@@ -164,13 +164,28 @@ async function fetchRecommendations(
 ): Promise<Recommendation[]> {
   if (!TMDB_KEY) return [];
   try {
-    const res = await fetch(
+    // Try recommendations first
+    let res = await fetch(
       `${TMDB_BASE}/movie/${movieId}/recommendations?api_key=${TMDB_KEY}&language=en-US&page=1`,
       { signal: AbortSignal.timeout(5000) }
     );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const results = data.results || [];
+    let results: any[] = [];
+    if (res.ok) {
+      const data = await res.json();
+      results = data.results || [];
+    }
+
+    // Fallback to /similar if recommendations is empty
+    if (results.length === 0) {
+      res = await fetch(
+        `${TMDB_BASE}/movie/${movieId}/similar?api_key=${TMDB_KEY}&language=en-US&page=1`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        results = data.results || [];
+      }
+    }
 
     return results.slice(0, max).map((r: any) => ({
       title: r.title,
@@ -185,6 +200,30 @@ async function fetchRecommendations(
 
 // ─── YouTube Video Reviews ────────────────────────────────────────────────
 
+/**
+ * Check if a video title is relevant to the movie we're looking for.
+ * Requires at least one significant word from the movie title to appear.
+ */
+function isRelevantReview(videoTitle: string, movieTitle: string): boolean {
+  const vt = videoTitle.toLowerCase();
+  const mt = movieTitle.toLowerCase();
+  
+  // Must contain "review"
+  if (!vt.includes("review")) return false;
+  
+  // Check if the full movie title appears
+  if (vt.includes(mt)) return true;
+  
+  // Check if significant words from movie title appear (2+ char words)
+  const words = mt.split(/\s+/).filter(w => w.length > 2);
+  if (words.length === 0) return vt.includes(mt);
+  
+  // For multi-word titles, require at least 60% of significant words to match
+  const matchCount = words.filter(w => vt.includes(w)).length;
+  const threshold = words.length === 1 ? 1 : Math.ceil(words.length * 0.6);
+  return matchCount >= threshold;
+}
+
 async function fetchYouTubeReviews(
   movieTitle: string,
   movieYear?: number,
@@ -192,14 +231,13 @@ async function fetchYouTubeReviews(
 ): Promise<VideoReview[]> {
   if (!YOUTUBE_KEY) return [];
   try {
-    // Include year prominently to distinguish sequels (e.g. "Avatar 2009 movie review")
     const yearStr = movieYear ? ` ${movieYear}` : "";
-    const query = `${movieTitle}${yearStr} movie review`;
+    const query = `"${movieTitle}"${yearStr} movie review`;
     const params = new URLSearchParams({
       part: "snippet",
       q: query,
       type: "video",
-      maxResults: String(max + 5),
+      maxResults: String(max + 8), // Fetch extra to filter aggressively
       order: "relevance",
       relevanceLanguage: "en",
       videoDuration: "medium",
@@ -215,10 +253,7 @@ async function fetchYouTubeReviews(
     if (!res.ok) return [];
 
     const data = await res.json();
-    const titleLower = movieTitle.toLowerCase();
-    const yearCheck = movieYear ? String(movieYear) : "";
 
-    // Filter to actual reviews, exclude wrong sequels
     const items = (data.items || [])
       .map((item: any) => ({
         video_id: item.id?.videoId || "",
@@ -227,35 +262,11 @@ async function fetchYouTubeReviews(
         thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
         published: item.snippet?.publishedAt || "",
       }))
-      .filter((v: any) => {
-        if (!v.video_id) return false;
-        const t = v.title.toLowerCase();
-        // Must contain "review"
-        if (!t.includes("review")) return false;
-        // Exclude videos that mention sequel numbers not in our title
-        // e.g. if searching "Avatar" (2009), reject "Avatar 2" or "Avatar 3" reviews
-        if (!titleLower.includes("2") && (t.includes("avatar 2") || t.includes("way of water"))) return false;
-        if (!titleLower.includes("3") && (t.includes("avatar 3") || t.includes("fire and ash"))) return false;
-        return true;
-      })
+      .filter((v: any) => v.video_id && isRelevantReview(v.title, movieTitle))
       .slice(0, max);
 
-    // Fallback if strict filter yields too few
-    if (items.length < max) {
-      const fallback = (data.items || [])
-        .map((item: any) => ({
-          video_id: item.id?.videoId || "",
-          title: item.snippet?.title || "",
-          channel: item.snippet?.channelTitle || "",
-          thumbnail: item.snippet?.thumbnails?.high?.url || "",
-          published: item.snippet?.publishedAt || "",
-        }))
-        .filter((v: any) => v.video_id && v.title.toLowerCase().includes("review") && !items.some((i: any) => i.video_id === v.video_id))
-        .slice(0, max - items.length);
-      items.push(...fallback);
-    }
-
-    return items.slice(0, max);
+    // Return only verified results — show nothing rather than wrong content
+    return items;
   } catch {
     return [];
   }
@@ -380,7 +391,7 @@ export async function enrichWithTMDB(
     // Fetch everything in parallel for speed
     const [credits, streaming, trailerKey, recommendations, videoReviews] =
       await Promise.all([
-        fetchCredits(movie.id, 8),
+        fetchCredits(movie.id, 15),
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
@@ -392,12 +403,35 @@ export async function enrichWithTMDB(
     result.recommendations = recommendations;
     result.video_reviews = videoReviews;
 
-    // Cast
+    // Cast — fuzzy match TMDB credits to Claude's cast data
     if (credits.length > 0 && claudeCast && claudeCast.length > 0) {
       result.cast = claudeCast.map((cc) => {
-        const tmdbMatch = credits.find(
-          (tc) => tc.name.toLowerCase() === cc.name.toLowerCase()
+        const ccLower = cc.name.toLowerCase().trim();
+        const ccParts = ccLower.split(/\s+/);
+        const ccLast = ccParts[ccParts.length - 1];
+        
+        // Try exact match first
+        let tmdbMatch = credits.find(
+          (tc) => tc.name.toLowerCase().trim() === ccLower
         );
+        // Try last name + first initial match
+        if (!tmdbMatch) {
+          tmdbMatch = credits.find((tc) => {
+            const tcLower = tc.name.toLowerCase().trim();
+            const tcParts = tcLower.split(/\s+/);
+            const tcLast = tcParts[tcParts.length - 1];
+            return tcLast === ccLast && tcParts[0][0] === ccParts[0][0];
+          });
+        }
+        // Try last name only match (if unique)
+        if (!tmdbMatch) {
+          const lastNameMatches = credits.filter((tc) => {
+            const tcLast = tc.name.toLowerCase().trim().split(/\s+/).pop();
+            return tcLast === ccLast;
+          });
+          if (lastNameMatches.length === 1) tmdbMatch = lastNameMatches[0];
+        }
+        
         return {
           name: cc.name,
           character: cc.character,
