@@ -281,7 +281,7 @@ async function fetchYouTubeReviews(
       }))
       .filter((v: any) => {
         if (!v.video_id) return false;
-        if (strict.some(s => s.video_id === v.video_id)) return false;
+        if (strict.some((s: any) => s.video_id === v.video_id)) return false;
         const t = v.title.toLowerCase();
         const hasReviewWord = reviewWords.some(w => t.includes(w));
         if (!hasReviewWord) return false;
