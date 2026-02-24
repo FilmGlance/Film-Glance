@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "3.0";
+const FG_VERSION = "3.1";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -541,6 +541,7 @@ export default function FilmGlance() {
   const [searches, setSearches] = useState(0);
   const [showSug, setShowSug] = useState(false);
   const [errMsg, setErrMsg] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
@@ -643,7 +644,7 @@ export default function FilmGlance() {
     }
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -690,6 +691,14 @@ export default function FilmGlance() {
       } else {
         setErrMsg("Could not find this movie. Check spelling or try the full title.");
         setResult({ notFound: true, query: q });
+        // Fetch "Did you mean?" suggestions from TMDB
+        try {
+          const sugRes = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
+          if (sugRes.ok) {
+            const { suggestions: sugs } = await sugRes.json();
+            if (sugs && sugs.length > 0) setSuggestions(sugs);
+          }
+        } catch (e) { /* silent */ }
       }
     } catch (e) {
       setErrMsg("Search timed out. Please try again.");
@@ -712,7 +721,7 @@ export default function FilmGlance() {
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
     : SUGGESTIONS.slice(0, 8);
 
-  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); };
+  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); setSuggestions([]); };
 
   const toggleFav = async (movieResult) => {
     if (!user) { setShowAuth(true); return; }
@@ -1279,9 +1288,44 @@ export default function FilmGlance() {
           {result && result.notFound && (
             <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, animation: "slideUp 0.4s" }}>
               <AlertCircle size={34} style={{ color: "#f97316", marginBottom: 12 }} />
-              <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: "#4a4a4a", marginBottom: 6 }}>No results for "{result.query}"</h3>
+              <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: "#4a4a4a", marginBottom: 6 }}>No results for &ldquo;{result.query}&rdquo;</h3>
               <p style={{ color: "#2a2a2a", fontSize: 11.5, marginBottom: 16 }}>{errMsg || "Try a different title."}</p>
-              <button onClick={() => { setResult(null); setErrMsg(null); inputRef.current?.focus(); }}
+
+              {suggestions.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ color: "#888", fontSize: 12, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Did you mean?</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                    {suggestions.map((s, i) => (
+                      <button key={`${s.title}-${s.year}-${i}`}
+                        onClick={() => { setQuery(s.title); doSearch(s.title); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 12,
+                          padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                          background: "rgba(255,215,0,0.03)", border: "1px solid rgba(255,215,0,0.12)",
+                          transition: "all 0.2s", width: "100%", maxWidth: 340,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.3)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,215,0,0.03)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.12)"; }}
+                      >
+                        {s.poster_path ? (
+                          <img src={IMG + "w92" + s.poster_path} alt="" style={{ width: 32, height: 48, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 32, height: 48, borderRadius: 5, background: "rgba(255,255,255,0.04)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Film size={14} style={{ color: "#555" }} />
+                          </div>
+                        )}
+                        <div style={{ textAlign: "left" }}>
+                          <span style={{ color: "#FFD700", fontSize: 13, fontWeight: 600 }}>{s.title}</span>
+                          {s.year && <span style={{ color: "#666", fontSize: 11, marginLeft: 6 }}>({s.year})</span>}
+                        </div>
+                        <Search size={13} style={{ color: "#888", marginLeft: "auto", flexShrink: 0 }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => { setResult(null); setErrMsg(null); setSuggestions([]); inputRef.current?.focus(); }}
                 style={{ padding: "8px 20px", borderRadius: 10, border: "1px solid rgba(255,215,0,0.15)", background: "rgba(255,215,0,0.04)", color: "#FFD700", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <RefreshCw size={13} /> Try Again
               </button>
@@ -1291,7 +1335,7 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.0</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.1</span>
             </div>
           </footer>
         </main>
