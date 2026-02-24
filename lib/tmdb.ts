@@ -226,76 +226,65 @@ async function fetchYouTubeReviews(
   max: number = 3
 ): Promise<VideoReview[]> {
   if (!YOUTUBE_KEY) return [];
-  try {
-    const yearStr = movieYear ? ` ${movieYear}` : "";
-    // Search with movie title + "movie review" — no restrictive duration/definition filters
-    const query = `${movieTitle}${yearStr} movie review`;
-    const params = new URLSearchParams({
-      part: "snippet",
-      q: query,
-      type: "video",
-      maxResults: String(max + 10),
-      order: "relevance",
-      relevanceLanguage: "en",
-      videoEmbeddable: "true",
-      key: YOUTUBE_KEY,
-    });
+  
+  // Try multiple query strategies
+  const yearStr = movieYear ? ` ${movieYear}` : "";
+  const queries = [
+    `${movieTitle}${yearStr} movie review`,
+    `${movieTitle} film review${yearStr}`,
+  ];
 
-    const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?${params}`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (!res.ok) return [];
+  for (const query of queries) {
+    try {
+      const params = new URLSearchParams({
+        part: "snippet",
+        q: query,
+        type: "video",
+        maxResults: "20",
+        order: "relevance",
+        relevanceLanguage: "en",
+        videoEmbeddable: "true",
+        key: YOUTUBE_KEY,
+      });
 
-    const data = await res.json();
+      const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?${params}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!res.ok) continue;
 
-    // First pass: must have "review" in title AND be about this movie
-    const strict = (data.items || [])
-      .map((item: any) => ({
-        video_id: item.id?.videoId || "",
-        title: item.snippet?.title || "",
-        channel: item.snippet?.channelTitle || "",
-        thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
-        published: item.snippet?.publishedAt || "",
-      }))
-      .filter((v: any) => {
-        if (!v.video_id) return false;
-        const t = v.title.toLowerCase();
-        if (!t.includes("review")) return false;
-        return isRelevantReview(v.title, movieTitle);
-      })
-      .slice(0, max);
+      const data = await res.json();
 
-    if (strict.length >= max) return strict;
+      const all = (data.items || [])
+        .map((item: any) => ({
+          video_id: item.id?.videoId || "",
+          title: item.snippet?.title || "",
+          channel: item.snippet?.channelTitle || "",
+          thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
+          published: item.snippet?.publishedAt || "",
+        }))
+        .filter((v: any) => v.video_id);
 
-    // Second pass: relax "review" requirement — accept videos that have 
-    // the movie title AND words like "review", "reaction", "discussion", "breakdown"
-    const reviewWords = ["review", "reaction", "breakdown", "discussion", "critique", "analysis"];
-    const relaxed = (data.items || [])
-      .map((item: any) => ({
-        video_id: item.id?.videoId || "",
-        title: item.snippet?.title || "",
-        channel: item.snippet?.channelTitle || "",
-        thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
-        published: item.snippet?.publishedAt || "",
-      }))
-      .filter((v: any) => {
-        if (!v.video_id) return false;
-        if (strict.some((s: any) => s.video_id === v.video_id)) return false;
-        const t = v.title.toLowerCase();
-        const hasReviewWord = reviewWords.some(w => t.includes(w));
-        if (!hasReviewWord) return false;
-        return isRelevantReview(v.title, movieTitle);
-      })
-      .slice(0, max - strict.length);
+      // Strict: "review" in title + movie title words match
+      const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
+      const items = all
+        .filter((v: any) => {
+          const t = v.title.toLowerCase();
+          const hasReviewWord = reviewWords.some((w: string) => t.includes(w));
+          if (!hasReviewWord) return false;
+          return isRelevantReview(v.title, movieTitle);
+        })
+        .slice(0, max);
 
-    const combined = [...strict, ...relaxed];
-    
-    // Return only verified results — show nothing rather than wrong content
-    return combined;
-  } catch {
-    return [];
+      if (items.length > 0) return items;
+      // If no results from this query, try the next one
+    } catch {
+      continue;
+    }
   }
+
+  // No verified results found with any query — show nothing
+  return [];
 }
 
 // ─── Platform Search URLs ─────────────────────────────────────────────────
