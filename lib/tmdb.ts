@@ -1,10 +1,11 @@
 // lib/tmdb.ts
-// TMDB API integration for verified movie poster, cast images, and streaming availability.
+// TMDB API integration for movie data: poster, cast, streaming, trailer, recommendations.
+// YouTube Data API integration for video reviews.
 // Called by /api/search and /api/enrich.
-// Free API key: https://www.themoviedb.org/settings/api (v3 auth)
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
+const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY;
 
 interface TMDBMovie {
   id: number;
@@ -24,12 +25,6 @@ interface TMDBCredits {
   cast: TMDBCastMember[];
 }
 
-interface WatchProvider {
-  provider_name: string;
-  provider_id: number;
-  logo_path: string | null;
-}
-
 export interface StreamingOption {
   platform: string;
   url: string;
@@ -37,18 +32,36 @@ export interface StreamingOption {
   logo_path: string | null;
 }
 
+export interface Recommendation {
+  title: string;
+  year: number;
+  poster_path: string | null;
+  vote_average: number;
+}
+
+export interface VideoReview {
+  video_id: string;
+  title: string;
+  channel: string;
+  thumbnail: string;
+}
+
 export interface TMDBEnrichment {
   poster_path: string | null;
   cast: { name: string; character: string; profile_path: string | null }[];
   streaming: StreamingOption[];
+  trailer_key: string | null;
+  recommendations: Recommendation[];
+  video_reviews: VideoReview[];
 }
+
+// ─── Search Movie ──────────────────────────────────────────────────────────
 
 async function searchMovie(
   title: string,
   year?: number
 ): Promise<TMDBMovie | null> {
   if (!TMDB_KEY) return null;
-
   try {
     const params = new URLSearchParams({
       api_key: TMDB_KEY,
@@ -60,12 +73,10 @@ async function searchMovie(
     const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
       signal: AbortSignal.timeout(5000),
     });
-
     if (!res.ok) return null;
 
     const data = await res.json();
     const results = data.results as TMDBMovie[];
-
     if (!results || results.length === 0) return null;
 
     if (year) {
@@ -74,27 +85,25 @@ async function searchMovie(
       );
       if (exactYear) return exactYear;
     }
-
     return results[0];
   } catch {
     return null;
   }
 }
 
+// ─── Credits ───────────────────────────────────────────────────────────────
+
 async function fetchCredits(
   movieId: number,
   maxCast: number = 8
 ): Promise<TMDBCastMember[]> {
   if (!TMDB_KEY) return [];
-
   try {
     const res = await fetch(
       `${TMDB_BASE}/movie/${movieId}/credits?api_key=${TMDB_KEY}`,
       { signal: AbortSignal.timeout(5000) }
     );
-
     if (!res.ok) return [];
-
     const data = (await res.json()) as TMDBCredits;
     return (data.cast || []).slice(0, maxCast);
   } catch {
@@ -102,9 +111,105 @@ async function fetchCredits(
   }
 }
 
-/**
- * Generate a platform-specific search URL for a movie.
- */
+// ─── Trailer (TMDB Videos) ────────────────────────────────────────────────
+
+async function fetchTrailer(movieId: number): Promise<string | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}/videos?api_key=${TMDB_KEY}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const videos = data.results || [];
+
+    // Prefer official YouTube trailers, then teasers
+    const trailer =
+      videos.find(
+        (v: any) =>
+          v.site === "YouTube" && v.type === "Trailer" && v.official === true
+      ) ||
+      videos.find(
+        (v: any) => v.site === "YouTube" && v.type === "Trailer"
+      ) ||
+      videos.find(
+        (v: any) => v.site === "YouTube" && v.type === "Teaser"
+      );
+
+    return trailer ? trailer.key : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Recommendations (TMDB) ───────────────────────────────────────────────
+
+async function fetchRecommendations(
+  movieId: number,
+  max: number = 3
+): Promise<Recommendation[]> {
+  if (!TMDB_KEY) return [];
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}/recommendations?api_key=${TMDB_KEY}&language=en-US&page=1`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = data.results || [];
+
+    return results.slice(0, max).map((r: any) => ({
+      title: r.title,
+      year: r.release_date ? parseInt(r.release_date.substring(0, 4)) : 0,
+      poster_path: r.poster_path,
+      vote_average: r.vote_average || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ─── YouTube Video Reviews ────────────────────────────────────────────────
+
+async function fetchYouTubeReviews(
+  movieTitle: string,
+  movieYear?: number,
+  max: number = 3
+): Promise<VideoReview[]> {
+  if (!YOUTUBE_KEY) return [];
+  try {
+    const query = `${movieTitle} ${movieYear || ""} movie review`;
+    const params = new URLSearchParams({
+      part: "snippet",
+      q: query,
+      type: "video",
+      maxResults: String(max),
+      relevanceLanguage: "en",
+      videoDuration: "medium",
+      key: YOUTUBE_KEY,
+    });
+
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?${params}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return (data.items || []).map((item: any) => ({
+      video_id: item.id?.videoId || "",
+      title: item.snippet?.title || "",
+      channel: item.snippet?.channelTitle || "",
+      thumbnail: item.snippet?.thumbnails?.medium?.url || "",
+    })).filter((v: VideoReview) => v.video_id);
+  } catch {
+    return [];
+  }
+}
+
+// ─── Platform Search URLs ─────────────────────────────────────────────────
+
 function platformSearchUrl(providerName: string, movieTitle: string): string {
   const t = encodeURIComponent(movieTitle);
   const p = providerName.toLowerCase();
@@ -127,38 +232,29 @@ function platformSearchUrl(providerName: string, movieTitle: string): string {
   return `https://www.justwatch.com/ca/search?q=${t}`;
 }
 
-/**
- * Fetch watch/streaming providers for a TMDB movie ID.
- * Uses TMDB's /watch/providers endpoint which gives real, current availability.
- * Each provider gets its own platform-specific search URL.
- */
+// ─── Watch Providers ──────────────────────────────────────────────────────
+
 async function fetchWatchProviders(
   movieId: number,
   movieTitle: string,
   region: string = "CA"
 ): Promise<StreamingOption[]> {
   if (!TMDB_KEY) return [];
-
   try {
     const res = await fetch(
       `${TMDB_BASE}/movie/${movieId}/watch/providers?api_key=${TMDB_KEY}`,
       { signal: AbortSignal.timeout(5000) }
     );
-
     if (!res.ok) return [];
 
     const data = await res.json();
     const results = data.results || {};
-
-    // Try requested region first, then fall back to US
     const regionData = results[region] || results["US"];
     if (!regionData) return [];
 
-    const tmdbLink = regionData.link || `https://www.themoviedb.org/movie/${movieId}/watch`;
     const streaming: StreamingOption[] = [];
     const seen = new Set<string>();
 
-    // Flatrate = subscription streaming (Netflix, Disney+, etc.)
     if (regionData.flatrate) {
       for (const p of regionData.flatrate) {
         if (seen.has(p.provider_name)) continue;
@@ -172,7 +268,6 @@ async function fetchWatchProviders(
       }
     }
 
-    // Rent
     if (regionData.rent) {
       for (const p of regionData.rent.slice(0, 3)) {
         if (seen.has(p.provider_name)) continue;
@@ -186,7 +281,6 @@ async function fetchWatchProviders(
       }
     }
 
-    // Buy (limit to 2)
     if (regionData.buy) {
       for (const p of regionData.buy.slice(0, 2)) {
         if (seen.has(p.provider_name)) continue;
@@ -206,12 +300,21 @@ async function fetchWatchProviders(
   }
 }
 
+// ─── Main Enrichment Function ─────────────────────────────────────────────
+
 export async function enrichWithTMDB(
   title: string,
   year?: number,
   claudeCast?: { name: string; character: string }[]
 ): Promise<TMDBEnrichment> {
-  const result: TMDBEnrichment = { poster_path: null, cast: [], streaming: [] };
+  const result: TMDBEnrichment = {
+    poster_path: null,
+    cast: [],
+    streaming: [],
+    trailer_key: null,
+    recommendations: [],
+    video_reviews: [],
+  };
 
   if (!TMDB_KEY) return result;
 
@@ -221,14 +324,20 @@ export async function enrichWithTMDB(
 
     result.poster_path = movie.poster_path;
 
-    // Fetch credits and watch providers in parallel
-    const [credits, streaming] = await Promise.all([
-      fetchCredits(movie.id, 8),
-      fetchWatchProviders(movie.id, title),
-    ]);
+    // Fetch everything in parallel for speed
+    const [credits, streaming, trailerKey, recommendations, videoReviews] =
+      await Promise.all([
+        fetchCredits(movie.id, 8),
+        fetchWatchProviders(movie.id, title),
+        fetchTrailer(movie.id),
+        fetchRecommendations(movie.id, 3),
+        fetchYouTubeReviews(title, year, 3),
+      ]);
 
-    // Streaming
     result.streaming = streaming;
+    result.trailer_key = trailerKey;
+    result.recommendations = recommendations;
+    result.video_reviews = videoReviews;
 
     // Cast
     if (credits.length > 0 && claudeCast && claudeCast.length > 0) {
