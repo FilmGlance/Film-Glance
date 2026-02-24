@@ -68,7 +68,8 @@ async function searchMovie(
       query: title,
       include_adult: "false",
     });
-    if (year) params.set("year", String(year));
+    // Use primary_release_year for strict matching (avoids sequels)
+    if (year && year > 1900) params.set("primary_release_year", String(year));
 
     const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
       signal: AbortSignal.timeout(5000),
@@ -76,9 +77,21 @@ async function searchMovie(
     if (!res.ok) return null;
 
     const data = await res.json();
-    const results = data.results as TMDBMovie[];
-    if (!results || results.length === 0) return null;
+    let results = data.results as TMDBMovie[];
+    if (!results || results.length === 0) {
+      // Retry without year constraint if strict search found nothing
+      if (year) {
+        const params2 = new URLSearchParams({ api_key: TMDB_KEY, query: title, include_adult: "false" });
+        const res2 = await fetch(`${TMDB_BASE}/search/movie?${params2}`, { signal: AbortSignal.timeout(5000) });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          results = data2.results as TMDBMovie[];
+        }
+      }
+      if (!results || results.length === 0) return null;
+    }
 
+    // Prefer exact year match
     if (year) {
       const exactYear = results.find(
         (r) => r.release_date && r.release_date.startsWith(String(year))
@@ -179,18 +192,19 @@ async function fetchYouTubeReviews(
 ): Promise<VideoReview[]> {
   if (!YOUTUBE_KEY) return [];
   try {
-    // Use strict "movie review" phrasing to avoid behind-the-scenes, trivia, etc.
-    const query = `"${movieTitle}" movie review ${movieYear || ""}`;
+    // Include year prominently to distinguish sequels (e.g. "Avatar 2009 movie review")
+    const yearStr = movieYear ? ` ${movieYear}` : "";
+    const query = `${movieTitle}${yearStr} movie review`;
     const params = new URLSearchParams({
       part: "snippet",
       q: query,
       type: "video",
-      maxResults: String(max + 5), // Fetch extras to filter
-      order: "relevance", // Relevance first to ensure actual reviews
+      maxResults: String(max + 5),
+      order: "relevance",
       relevanceLanguage: "en",
-      videoDuration: "medium", // 4-20 min — real reviews
-      videoDefinition: "high", // HD only
-      videoEmbeddable: "true", // Only embeddable videos — prevents "unavailable" errors
+      videoDuration: "medium",
+      videoDefinition: "high",
+      videoEmbeddable: "true",
       key: YOUTUBE_KEY,
     });
 
@@ -201,7 +215,10 @@ async function fetchYouTubeReviews(
     if (!res.ok) return [];
 
     const data = await res.json();
-    // Filter to only items whose title contains "review" (case-insensitive)
+    const titleLower = movieTitle.toLowerCase();
+    const yearCheck = movieYear ? String(movieYear) : "";
+
+    // Filter to actual reviews, exclude wrong sequels
     const items = (data.items || [])
       .map((item: any) => ({
         video_id: item.id?.videoId || "",
@@ -213,12 +230,17 @@ async function fetchYouTubeReviews(
       .filter((v: any) => {
         if (!v.video_id) return false;
         const t = v.title.toLowerCase();
-        // Must contain "review" — excludes trivia, behind-the-scenes, explained, etc.
-        return t.includes("review");
+        // Must contain "review"
+        if (!t.includes("review")) return false;
+        // Exclude videos that mention sequel numbers not in our title
+        // e.g. if searching "Avatar" (2009), reject "Avatar 2" or "Avatar 3" reviews
+        if (!titleLower.includes("2") && (t.includes("avatar 2") || t.includes("way of water"))) return false;
+        if (!titleLower.includes("3") && (t.includes("avatar 3") || t.includes("fire and ash"))) return false;
+        return true;
       })
       .slice(0, max);
 
-    // If strict filter yields too few, fall back to top results
+    // Fallback if strict filter yields too few
     if (items.length < max) {
       const fallback = (data.items || [])
         .map((item: any) => ({
@@ -228,7 +250,7 @@ async function fetchYouTubeReviews(
           thumbnail: item.snippet?.thumbnails?.high?.url || "",
           published: item.snippet?.publishedAt || "",
         }))
-        .filter((v: any) => v.video_id && !items.some((i: any) => i.video_id === v.video_id))
+        .filter((v: any) => v.video_id && v.title.toLowerCase().includes("review") && !items.some((i: any) => i.video_id === v.video_id))
         .slice(0, max - items.length);
       items.push(...fallback);
     }
