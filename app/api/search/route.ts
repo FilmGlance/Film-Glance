@@ -143,6 +143,9 @@ export async function POST(req: NextRequest) {
           profile_path: tc.profile_path,
         }));
       }
+      if ((tmdb as any).streaming && (tmdb as any).streaming.length > 0) {
+        mv.streaming = (tmdb as any).streaming;
+      }
 
       // 8. Cache the enriched result (30-day TTL)
       await supabaseAdmin.from("movie_cache").upsert({
