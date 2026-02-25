@@ -1,13 +1,15 @@
-// lib/ratings.ts — v5.1
+// lib/ratings.ts — v5.2
 // Fetches VERIFIED ratings from 5 APIs and constructs working URLs.
 //
-// v5.1 FIXES:
-//   - TMDB-first ID resolution (more reliable year filtering than OMDb)
-//   - Cross-validates OMDb results against expected title/year
+// v5.2 FIXES:
+//   - Removed MUBI (no API, unreliable estimates, broken links)
 //   - Removed Criticker (site is broken/offline)
-//   - 10 sources total: 9 verified + 1 estimated (MUBI only)
+//   - Improved sequel handling: normalizeSequelQuery() expands shorthand
+//     like "shrek 3" → "Shrek the Third" before querying APIs
+//   - Updated disclaimer text
+//   - 9 sources total, all verified
 //
-// VERIFIED SOURCES (9 of 10):
+// VERIFIED SOURCES (9):
 //   OMDb       → IMDb rating, RT Critics %, Metacritic score
 //   TMDB       → TMDB vote_average, tmdb_id, imdb_id
 //   Trakt      → Trakt community rating (0-10)
@@ -15,13 +17,9 @@
 //   RapidAPI   → RT Audience %, Metacritic User, Letterboxd (0-5)
 //                + direct URLs for RT, Metacritic, Letterboxd pages
 //
-// ESTIMATED SOURCES (1 of 10, from Claude):
-//   MUBI — no API exists
-//
 // URL STRATEGY:
 //   IMDb, TMDB, Trakt, Simkl → direct links via verified IDs
 //   RT, Metacritic, Letterboxd → direct links from RapidAPI response
-//   MUBI → search-page URL (always works)
 
 const OMDB_URL = "https://www.omdbapi.com";
 const OMDB_KEY = process.env.OMDB_API_KEY;
@@ -35,7 +33,7 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const RAPIDAPI_HOST = "movies-ratings2.p.rapidapi.com";
 
 export const RATINGS_DISCLAIMER =
-  "Please be advised there might be small discrepancies between various site ratings due to daily rating fluctuations and updates.";
+  "Please note slight discrepancies between site ratings due to daily rating fluctuations.";
 
 export interface VerifiedData {
   sources: Map<string, { score: number; max: number; url: string }>;
@@ -72,6 +70,118 @@ function yearMatches(expected?: number, actual?: string | number): boolean {
   const act = typeof actual === "string" ? parseInt(actual) : actual;
   if (isNaN(exp) || isNaN(act)) return true;
   return Math.abs(exp - act) <= 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sequel Normalization — helps APIs find the right movie
+// Converts shorthand like "shrek 3" to a search-friendly form and
+// uses TMDB as ground truth for the official title.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Detects if a query looks like a sequel shorthand (e.g., "shrek 3", "iron man 2")
+ * and performs a TMDB search to resolve the official title + year.
+ * Returns { title, year } if resolved, or null to use the original query.
+ */
+export async function resolveSequelTitle(
+  query: string
+): Promise<{ title: string; year: number } | null> {
+  if (!TMDB_KEY) return null;
+
+  // Match patterns like "shrek 3", "iron man 2", "toy story 4", "aliens 3"
+  const sequelMatch = query.match(/^(.+?)\s+(\d{1})$/);
+  if (!sequelMatch) return null;
+
+  const baseName = sequelMatch[1].trim();
+  const sequelNum = parseInt(sequelMatch[2]);
+  if (sequelNum < 2 || sequelNum > 9) return null;
+
+  try {
+    // Search TMDB for the base franchise — request more results to find sequels
+    const params = new URLSearchParams({
+      api_key: TMDB_KEY,
+      query: baseName,
+      include_adult: "false",
+    });
+    const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const results = data.results as { id: number; title: string; release_date: string }[];
+    if (!results || results.length === 0) return null;
+
+    // Also search with the number included (catches "Shrek 2", "Toy Story 3", etc.)
+    const params2 = new URLSearchParams({
+      api_key: TMDB_KEY,
+      query: `${baseName} ${sequelNum}`,
+      include_adult: "false",
+    });
+    const res2 = await fetch(`${TMDB_BASE}/search/movie?${params2}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    let results2: { id: number; title: string; release_date: string }[] = [];
+    if (res2.ok) {
+      const data2 = await res2.json();
+      results2 = data2.results || [];
+    }
+
+    // Combine and deduplicate
+    const allResults = [...results2, ...results];
+    const seen = new Set<number>();
+    const unique = allResults.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
+    // Look for a title that contains the sequel number or common sequel patterns
+    const romanNumerals: Record<number, string> = {
+      2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII", 9: "IX",
+    };
+    const roman = romanNumerals[sequelNum] || "";
+
+    // Score each result for how well it matches the sequel
+    const scored = unique
+      .filter((r) => {
+        const t = r.title.toLowerCase();
+        const b = baseName.toLowerCase();
+        // Must contain the base name (or close variant)
+        return t.includes(b) || titlesSimilar(r.title, baseName);
+      })
+      .map((r) => {
+        const t = r.title;
+        let score = 0;
+        // Direct number match: "Shrek 2", "Iron Man 3"
+        if (new RegExp(`\\b${sequelNum}\\b`).test(t)) score += 10;
+        // Roman numeral match: "Rocky III", "Star Wars: Episode IV"
+        if (roman && t.includes(roman)) score += 10;
+        // Word-form match: "the Third", "the Second"
+        const ordinals: Record<number, string> = {
+          2: "second", 3: "third", 4: "fourth", 5: "fifth",
+          6: "sixth", 7: "seventh", 8: "eighth", 9: "ninth",
+        };
+        if (ordinals[sequelNum] && t.toLowerCase().includes(ordinals[sequelNum])) score += 10;
+        // Part/Chapter match: "Part 2", "Chapter 3"
+        if (new RegExp(`(part|chapter)\\s*${sequelNum}`, "i").test(t)) score += 10;
+        return { ...r, matchScore: score };
+      })
+      .filter((r) => r.matchScore > 0)
+      .sort((a, b) => b.matchScore - a.matchScore);
+
+    if (scored.length > 0) {
+      const best = scored[0];
+      const year = best.release_date
+        ? parseInt(best.release_date.substring(0, 4))
+        : 0;
+      return { title: best.title, year };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -268,7 +378,7 @@ async function fetchRapidAPIRatings(imdbId: string | null, tmdbId: number | null
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// URL Construction — Criticker removed
+// URL Construction — Criticker + MUBI removed
 // ═══════════════════════════════════════════════════════════════════════
 
 function buildUrls(
@@ -303,16 +413,15 @@ function buildUrls(
   }
 
   urls.set("letterboxd", rapidUrls?.letterboxd?.url || `https://letterboxd.com/search/${encoded}/`);
-  urls.set("mubi", `https://mubi.com/en/search?query=${encoded}`);
 
   return urls;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Source Name Matching — Criticker removed
+// Source Name Matching — Criticker + MUBI removed
 // ═══════════════════════════════════════════════════════════════════════
 
-type SourceKey = "rt_critics" | "rt_audience" | "metacritic" | "metacritic_user" | "imdb" | "letterboxd" | "tmdb" | "trakt" | "simkl" | "mubi";
+type SourceKey = "rt_critics" | "rt_audience" | "metacritic" | "metacritic_user" | "imdb" | "letterboxd" | "tmdb" | "trakt" | "simkl";
 
 function identifySource(name: string): SourceKey | null {
   const n = name.toLowerCase();
@@ -325,7 +434,6 @@ function identifySource(name: string): SourceKey | null {
   if (/tmdb|themoviedb/i.test(n)) return "tmdb";
   if (/trakt/i.test(n)) return "trakt";
   if (/simkl/i.test(n)) return "simkl";
-  if (/mubi/i.test(n)) return "mubi";
   return null;
 }
 
@@ -425,14 +533,15 @@ export async function fetchVerifiedRatings(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Apply Verified Data to Claude's Sources — removes Criticker
+// Apply Verified Data to Claude's Sources — removes Criticker + MUBI
 // ═══════════════════════════════════════════════════════════════════════
 
 export function applyVerifiedRatings(claudeSources: any[], verified: VerifiedData): any[] {
-  // Filter out Criticker (broken) and any unrecognized sources
+  // Filter out Criticker (broken) and MUBI (no API, unreliable)
   const filtered = claudeSources.filter((s) => {
     const n = s.name?.toLowerCase() || "";
-    if (/criticker/i.test(n)) return false; // remove Criticker
+    if (/criticker/i.test(n)) return false;
+    if (/mubi/i.test(n)) return false;
     return true;
   });
 
