@@ -327,13 +327,21 @@ async function fetchSimkl(imdbId: string | null, title: string): Promise<{ simkl
   if (!SIMKL_CLIENT_ID) return null;
   try {
     let movieData: any = null;
+    let simklId: number = 0;
+
+    // Step 1: Find the Simkl movie (prefer IMDb ID lookup)
     if (imdbId) {
       const res = await fetch(`${SIMKL_BASE}/search/id?imdb=${imdbId}&client_id=${SIMKL_CLIENT_ID}`, { signal: AbortSignal.timeout(5000) });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) movieData = data[0];
+        if (data && data.length > 0) {
+          movieData = data[0];
+          simklId = movieData.ids?.simkl || movieData.ids?.simkl_id || 0;
+        }
       }
     }
+
+    // Fallback: title search with extended=full (more likely to include accurate ratings)
     if (!movieData) {
       const q = encodeURIComponent(title);
       const res = await fetch(`${SIMKL_BASE}/search/movie?q=${q}&client_id=${SIMKL_CLIENT_ID}&extended=full`, { signal: AbortSignal.timeout(5000) });
@@ -341,11 +349,33 @@ async function fetchSimkl(imdbId: string | null, title: string): Promise<{ simkl
       const data = await res.json();
       if (!data || data.length === 0) return null;
       movieData = data[0];
+      simklId = movieData.ids?.simkl || movieData.ids?.simkl_id || 0;
     }
+
     if (!movieData) return null;
-    const simklId = movieData.ids?.simkl || movieData.ids?.simkl_id || 0;
     const slug = movieData.ids?.slug || "";
-    const rating = movieData.ratings?.simkl?.rating || 0;
+
+    // Step 2: Get rating — try from initial data first
+    let rating = movieData.ratings?.simkl?.rating || 0;
+
+    // Step 3: If rating is 0 or we used the ID search (which may have stale data),
+    // re-fetch with title search + extended=full for fresh ratings
+    if ((rating === 0 || (imdbId && movieData)) && simklId > 0) {
+      try {
+        const q = encodeURIComponent(title);
+        const res = await fetch(`${SIMKL_BASE}/search/movie?q=${q}&client_id=${SIMKL_CLIENT_ID}&extended=full`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            // Find the matching movie by Simkl ID
+            const match = data.find((d: any) => (d.ids?.simkl || d.ids?.simkl_id) === simklId) || data[0];
+            const freshRating = match?.ratings?.simkl?.rating || 0;
+            if (freshRating > 0) rating = freshRating;
+          }
+        }
+      } catch { /* use whatever rating we already have */ }
+    }
+
     return { simklId, rating: Math.round(rating * 10) / 10, slug };
   } catch { return null; }
 }
