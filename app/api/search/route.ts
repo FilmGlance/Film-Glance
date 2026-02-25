@@ -1,23 +1,26 @@
-// app/api/search/route.ts — v5.1
+// app/api/search/route.ts — v5.2
 // Protected search endpoint with 5-API verified ratings pipeline.
 //
-// v5.1 FIXES:
-//   - Ratings pipeline ALWAYS receives title + year (no more speculative calls without year)
-//   - Criticker removed from Claude prompt (site is broken)
-//   - 10 sources: 9 verified + 1 estimated (MUBI only)
+// v5.2 FIXES:
+//   - MUBI removed from Claude prompt (9 sources, all verified)
+//   - Criticker removed (site broken)
+//   - Sequel resolution: "shrek 3" → resolves via TMDB → "Shrek the Third"
+//     before Claude and ratings pipeline run
+//   - Updated disclaimer text
 //
 // EXECUTION ORDER:
-//   1. Claude + speculative TMDB images start in parallel
-//   2. Claude returns → we now have exact title + year
-//   3. Verified ratings run with correct title + year (ensures right movie)
-//   4. TMDB images retry if speculative missed
+//   1. Sequel resolution via TMDB (fast, ~200ms)
+//   2. Claude + speculative TMDB images start in parallel
+//   3. Claude returns → we now have exact title + year
+//   4. Verified ratings run with correct title + year (ensures right movie)
+//   5. TMDB images retry if speculative missed
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
 import { enrichWithTMDB } from "@/lib/tmdb";
-import { fetchVerifiedRatings, applyVerifiedRatings, RATINGS_DISCLAIMER } from "@/lib/ratings";
+import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -151,6 +154,45 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 5.5. Sequel resolution — resolve shorthand like "shrek 3" to official title
+    // This runs BEFORE Claude so we can send the correct title to all APIs
+    let resolvedTitle: string = query;
+    let resolvedYear: number | undefined;
+
+    const sequelResolution = await resolveSequelTitle(query).catch(() => null);
+    if (sequelResolution) {
+      resolvedTitle = sequelResolution.title;
+      resolvedYear = sequelResolution.year;
+      console.log(`[sequel] "${query}" → "${resolvedTitle}" (${resolvedYear})`);
+
+      // Check cache again with the resolved title
+      try {
+        const resolvedKey = sanitizeQuery(resolvedTitle);
+        const { data, error } = await supabaseAdmin
+          .from("movie_cache")
+          .select("data, hit_count, expires_at")
+          .eq("search_key", resolvedKey)
+          .gt("expires_at", new Date().toISOString())
+          .single();
+        if (!error && data) {
+          fireAndForget(async () => {
+            await Promise.all([
+              supabaseAdmin.from("movie_cache").update({ hit_count: (data.hit_count || 0) + 1 }).eq("search_key", resolvedKey),
+              supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: "cache", ip_address: ip }),
+            ]);
+          }, "sequel-cache-hit-log");
+
+          const movieData = data.data as Record<string, unknown>;
+          return NextResponse.json({
+            ...movieData,
+            score: calcScore((movieData.sources as any[]) || []),
+            disclaimer: RATINGS_DISCLAIMER,
+            _source: "cache",
+          });
+        }
+      } catch { /* continue to API */ }
+    }
+
     // 6. Claude + speculative TMDB images (parallel), then verified ratings
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: "Movie API not configured" }, { status: 503 });
@@ -158,6 +200,9 @@ export async function POST(req: NextRequest) {
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 18000);
+
+    // Use resolved title for Claude if sequel was detected
+    const claudeQuery = sequelResolution ? resolvedTitle : query;
 
     try {
       // Start Claude + speculative TMDB images in parallel
@@ -181,13 +226,13 @@ export async function POST(req: NextRequest) {
           ].join("\n"),
           messages: [{
             role: "user",
-            content: `Movie: "${query}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 10: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl, MUBI — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, openingWeekend, domestic, international, worldwide — dollar amounts as strings), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
+            content: `Movie: "${claudeQuery}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, openingWeekend, domestic, international, worldwide — dollar amounts as strings), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
           }],
         }),
       });
 
       // Speculative TMDB image search (may find the right movie without year)
-      const tmdbPromise = enrichWithTMDB(query, undefined, undefined).catch(() => null);
+      const tmdbPromise = enrichWithTMDB(claudeQuery, resolvedYear, undefined).catch(() => null);
 
       // Wait for Claude (the bottleneck)
       const apiRes = await claudePromise;
