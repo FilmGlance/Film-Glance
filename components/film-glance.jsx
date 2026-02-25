@@ -250,22 +250,57 @@ async function enrichCachedMovie(title, year, castNames) {
 function formatBoxOfficeVal(val, label) {
   if (!val || val === "N/A" || val === "$N/A") return "N/A";
   const s = String(val).trim();
-  // Already formatted (has $ or % or #)
-  if (s.startsWith("$") || s.endsWith("%") || s.endsWith("days") || s.endsWith("days+")) return s;
-  // Raw number — format it
-  const num = parseFloat(s.replace(/[^0-9.-]/g, ""));
-  if (isNaN(num)) return s;
   const lbl = label.toLowerCase();
-  const isDollar = lbl.includes("budget") || lbl.includes("gross") || lbl.includes("opening") || lbl.includes("domestic") || lbl.includes("international") || lbl.includes("worldwide") || lbl.includes("pta");
   const isROI = lbl.includes("roi");
-  if (isROI) return num >= 1 ? `${Math.round(num)}%` : `${Math.round(num * 100)}%`;
-  if (isDollar) {
-    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-    if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
-    if (num >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
-    return `$${Math.round(num).toLocaleString()}`;
+  const isDays = lbl.includes("days");
+  const isTheater = lbl.includes("theater count");
+  const isDollar = lbl.includes("budget") || lbl.includes("gross") || lbl.includes("opening") || lbl.includes("domestic") || lbl.includes("international") || lbl.includes("worldwide") || lbl.includes("pta");
+
+  // Extract number from any format ($150,000,000 or 150000000 or $150M etc.)
+  const raw = s.replace(/[$,]/g, "");
+  // Handle pre-formatted shorthand like "150M" or "2.5B"
+  let num = NaN;
+  const shortMatch = raw.match(/^([\d.]+)\s*([BMK])/i);
+  if (shortMatch) {
+    const base = parseFloat(shortMatch[1]);
+    const suffix = shortMatch[2].toUpperCase();
+    if (suffix === "B") num = base * 1e9;
+    else if (suffix === "M") num = base * 1e6;
+    else if (suffix === "K") num = base * 1e3;
+  } else {
+    num = parseFloat(raw.replace(/[^0-9.-]/g, ""));
   }
-  return Number.isInteger(num) ? num.toLocaleString() : s;
+
+  // ROI — keep as percentage
+  if (isROI) {
+    if (!isNaN(num)) return num >= 1 ? `${Math.round(num)}%` : `${Math.round(num * 100)}%`;
+    if (s.endsWith("%")) return s;
+    return s;
+  }
+  // Days — add weeks
+  if (isDays) {
+    const dayNum = parseInt(s.replace(/[^0-9]/g, ""));
+    if (!isNaN(dayNum) && dayNum > 0) {
+      const weeks = Math.floor(dayNum / 7);
+      return `${dayNum} days / ${weeks} weeks`;
+    }
+    return s;
+  }
+  // Theater count — just format with commas
+  if (isTheater) {
+    if (!isNaN(num)) return Math.round(num).toLocaleString();
+    return s;
+  }
+  // Dollar values — format with M/K and 2 decimals
+  if (isDollar) {
+    if (isNaN(num)) return s;
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
+  }
+  if (!isNaN(num)) return Number.isInteger(num) ? num.toLocaleString() : s;
+  return s;
 }
 
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
@@ -1263,6 +1298,14 @@ export default function FilmGlance() {
                     <BoxOfficeRow label="Estimated ROI" val={result.boxOffice.roi} rank={null} idx={6} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Theater Count (Widest)" val={result.boxOffice.theaterCount} rank={null} idx={7} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Days in Theater" val={result.boxOffice.daysInTheater || result.boxOffice.daysInRelease} rank={null} idx={8} visible={boxOfficeOpen} />
+                    {!result.boxOffice.openingRank && !result.boxOffice.domesticRank && !result.boxOffice.worldwideRank && !result.boxOffice.budgetRank && (
+                      <p style={{
+                        fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 12,
+                        lineHeight: 1.45, textAlign: "center", padding: "0 4px",
+                      }}>
+                        All-time ranking data not available for this title.
+                      </p>
+                    )}
                   </div>
                 </Accordion>
               )}
