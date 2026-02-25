@@ -382,6 +382,8 @@ function normalizeResult(mv) {
   if (typeof r.year !== 'number' && typeof r.year !== 'string') r.year = 0;
   if (typeof r.year === 'string') r.year = parseInt(r.year) || 0;
   if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
+  // Preserve disclaimer from API
+  if (mv.disclaimer) r.disclaimer = mv.disclaimer;
   return r;
 }
 
@@ -819,12 +821,6 @@ export default function FilmGlance() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* [ARCHIVED — PRICING DORMANT] Pricing nav button:
-          <button onClick={() => { setShowPrice(!showPrice); setShowFavs(false); setResult(null); setLoading(false); }}
-            style={{ background: "none", border: "none", color: showPrice ? "#FFD700" : "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 600 }}>
-            Pricing
-          </button>
-          */}
           {user && (
             <button onClick={() => { setShowFavs(!showFavs); setShowPrice(false); setResult(null); setLoading(false); }}
               style={{ background: "none", border: "none", color: showFavs ? "#FFD700" : "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
@@ -944,15 +940,6 @@ export default function FilmGlance() {
           </div>
         </div>
       )}
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          [ARCHIVED — PRICING PAGE — DORMANT]
-          The full pricing page component was here. To restore:
-          1. Uncomment the Pricing nav button in the header above
-          2. Restore the pricing ternary: showPrice ? (PricingPage) : showFavs ? ...
-          3. Re-enable atLimit gating in doSearch
-          Full pricing code preserved in: film-glance-checkpoint-v2.jsx (lines 856-878)
-          ═══════════════════════════════════════════════════════════════════ */}
 
       {showFavs ? (
         <div style={{ padding: "48px 18px 56px", maxWidth: 680, margin: "0 auto", animation: "fadeIn 0.5s" }}>
@@ -1156,6 +1143,15 @@ export default function FilmGlance() {
                     const nb = bm === 100 ? bs : bm === 10 ? bs * 10 : bm === 5 ? bs * 20 : bm > 0 ? (bs / bm) * 100 : 0;
                     return nb - na;
                   }).map((s, i) => <SourceRow key={`${s.name}-${s.type}-${i}`} source={s} idx={i} visible={srcOpen} />)}
+                  {/* Disclaimer */}
+                  {result.disclaimer && (
+                    <p style={{
+                      fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 10,
+                      lineHeight: 1.45, textAlign: "center", padding: "0 4px",
+                    }}>
+                      {result.disclaimer}
+                    </p>
+                  )}
                 </div>
               </Accordion>
               )}
@@ -1345,13 +1341,11 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.3</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v{FG_VERSION}</span>
             </div>
           </footer>
         </main>
       )}
-
-      {/* Test Mode Panel */}
     </div>
   );
 }
