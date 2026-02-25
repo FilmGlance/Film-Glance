@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "3.1";
+const FG_VERSION = "3.2";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -143,6 +143,7 @@ function CastMember({ name, character, img, idx, visible }) {
         {hasImg && !imgFail && (
           <img
             src={img} alt={name} referrerPolicy="no-referrer"
+            loading="lazy"
             onLoad={() => setImgOk(true)}
             onError={() => setImgFail(true)}
             style={{
@@ -460,7 +461,7 @@ function SourceRow({ source, idx, visible }) {
     >
       <div style={{ minWidth: 0 }}>
         <span style={{ fontWeight: 600, fontSize: 12.5 }}>{source.name}</span>
-        <span style={{ fontSize: 10.5, color: "#555", marginLeft: 7 }}>{source.type}</span>
+        <span style={{ fontSize: 10.5, color: "#888", marginLeft: 7 }}>{source.type}</span>
       </div>
       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 13, color: clr, textAlign: "right" }}>
         {source.score}/{source.max}
@@ -497,7 +498,7 @@ function Accordion({ icon, label, count, open, toggle, children }) {
               fontSize: 9.5, padding: "2px 7px", borderRadius: 8, fontWeight: 700,
               fontFamily: "'JetBrains Mono',monospace",
               background: open ? "rgba(255,215,0,0.08)" : "rgba(255,255,255,0.04)",
-              color: open ? "#FFD700" : "#555",
+              color: open ? "#FFD700" : "#888",
             }}>{count}</span>
           )}
         </span>
@@ -833,7 +834,7 @@ export default function FilmGlance() {
                 <div style={{ position: "absolute", top: 38, right: 0, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.1)", borderRadius: 12, padding: "12px 0", minWidth: 220, zIndex: 100, animation: "fadeIn 0.2s" }}
                   onClick={e => e.stopPropagation()}>
                   <div style={{ padding: "6px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <p style={{ fontSize: 10.5, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
+                    <p style={{ fontSize: 10.5, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
                   </div>
                   <button onClick={() => { setShowAccountMenu(false); logout(); }}
                     style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
@@ -852,7 +853,7 @@ export default function FilmGlance() {
       {videoModal && (
         <div onClick={() => setVideoModal(null)} style={{
           position: "fixed", inset: 0, zIndex: 1200,
-          background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)",
+          background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: 20, animation: "fadeIn 0.2s",
         }}>
@@ -889,7 +890,7 @@ export default function FilmGlance() {
 
       {/* Auth Modal */}
       {showAuth && (
-        <div onClick={() => setShowAuth(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.88)", backdropFilter: "blur(22px)", animation: "fadeIn 0.25s" }}>
+        <div onClick={() => setShowAuth(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.88)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)", animation: "fadeIn 0.25s" }}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 390, background: "#070707", borderRadius: 20, border: "1px solid rgba(255,215,0,0.07)", padding: "36px 30px", position: "relative", animation: "slideUp 0.4s cubic-bezier(0.16,1,0.3,1)" }}>
             <button onClick={() => setShowAuth(false)} style={{ position: "absolute", top: 14, right: 14, background: "none", border: "none", color: "#444", cursor: "pointer" }}><X size={17} /></button>
             <div style={{ textAlign: "center", marginBottom: 26 }}>
@@ -955,7 +956,7 @@ export default function FilmGlance() {
           {favorites.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 20px", animation: "fadeIn 0.5s" }}>
               <Film size={36} stroke="#333" strokeWidth={1} style={{ marginBottom: 16 }} />
-              <p style={{ color: "#555", fontSize: 14, marginBottom: 6 }}>No favourites yet</p>
+              <p style={{ color: "#888", fontSize: 14, marginBottom: 6 }}>No favourites yet</p>
               <p style={{ color: "#333", fontSize: 12 }}>Search for a movie and tap the heart to save it here.</p>
             </div>
           ) : (
@@ -974,7 +975,7 @@ export default function FilmGlance() {
                 >
                   <div style={{ width: 44, height: 66, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#111" }}>
                     {fav.poster ? (
-                      <img src={fav.poster} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
+                      <img src={fav.poster} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
                     ) : (
                       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Film size={16} style={{ color: "#333" }} />
@@ -983,10 +984,10 @@ export default function FilmGlance() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, fontWeight: 700, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fav.title}</p>
-                    <p style={{ color: "#555", fontSize: 11 }}>{fav.year}{fav.genre ? ` · ${fav.genre}` : ""}</p>
+                    <p style={{ color: "#888", fontSize: 11 }}>{fav.year}{fav.genre ? ` · ${fav.genre}` : ""}</p>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{fav.score.ten}</span>
+                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>{fav.score.ten}</span>
                     <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>/10</span>
                   </div>
                   <button
@@ -1017,7 +1018,7 @@ export default function FilmGlance() {
               <div style={{ animation: "fadeIn 0.7s", marginBottom: 32 }}>
                 <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,5.5vw,48px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 12 }}>
                   Every Film.<br />
-                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 3s linear infinite" }}>One Rating at a Glance.</span>
+                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>One Rating at a Glance.</span>
                 </h1>
                 <p style={{ color: "#4a4a4a", fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
@@ -1036,7 +1037,7 @@ export default function FilmGlance() {
                   style={{ width: "100%", padding: "15px 110px 15px 44px", background: "transparent", border: "none", color: "#fff", fontSize: 14.5, fontFamily: "'Syne',sans-serif" }}
                 />
                 <button onClick={() => doSearch()} disabled={loading}
-                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "8px 20px", borderRadius: 10, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#555" : "#050505", fontSize: 12.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "8px 20px", borderRadius: 10, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#777" : "#050505", fontSize: 12.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                   {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : "Glance"}
                 </button>
               </div>
@@ -1065,7 +1066,7 @@ export default function FilmGlance() {
               </div>
               <div style={{ textAlign: "center", marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <Loader2 size={13} style={{ color: "#FFD700", animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 11.5, color: "#555" }}>{loadMsg}</span>
+                <span style={{ fontSize: 11.5, color: "#888" }}>{loadMsg}</span>
               </div>
             </div>
           )}
@@ -1098,14 +1099,14 @@ export default function FilmGlance() {
                         </button>
                       )}
                     </div>
-                    <p style={{ color: "#555", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
+                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
                       {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
                     </p>
                     {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
                     {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
                     <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both", opacity: 0.85 }}>Averaged Movie Score Across Major Review Sites</p>
                     <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
-                      <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
+                      <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
                       <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both" }}>
@@ -1169,7 +1170,7 @@ export default function FilmGlance() {
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
                         <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
-                          <img src={`https://img.youtube.com/vi/${vr.video_id}/hqdefault.jpg`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={`https://img.youtube.com/vi/${vr.video_id}/hqdefault.jpg`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}>
                             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,215,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <Play size={14} fill="#050505" stroke="#050505" style={{ marginLeft: 2 }} />
@@ -1264,6 +1265,7 @@ export default function FilmGlance() {
                         <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
                           {rec.poster_path ? (
                             <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title}
+                              loading="lazy"
                               style={{ width: "100%", height: "100%", objectFit: "cover" }}
                               onError={e => { e.target.style.display = "none"; }} />
                           ) : (
@@ -1308,10 +1310,10 @@ export default function FilmGlance() {
                         onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,215,0,0.03)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.12)"; }}
                       >
                         {s.poster_path ? (
-                          <img src={IMG + "w92" + s.poster_path} alt="" style={{ width: 32, height: 48, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
+                          <img src={IMG + "w92" + s.poster_path} alt="" loading="lazy" style={{ width: 32, height: 48, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
                         ) : (
                           <div style={{ width: 32, height: 48, borderRadius: 5, background: "rgba(255,255,255,0.04)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Film size={14} style={{ color: "#555" }} />
+                            <Film size={14} style={{ color: "#888" }} />
                           </div>
                         )}
                         <div style={{ textAlign: "left" }}>
@@ -1335,7 +1337,7 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.1</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.2</span>
             </div>
           </footer>
         </main>
