@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "3.3";
+const FG_VERSION = "5.2";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -282,7 +282,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
     }}>
       <span style={{ fontSize: 11.5, color: "#888", fontWeight: 500 }}>{label}</span>
       <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.3 }}>
-        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank} all-time</span>}
+        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank}</span>}
       </span>
     </div>
   );
@@ -382,6 +382,15 @@ function normalizeResult(mv) {
   if (typeof r.year !== 'number' && typeof r.year !== 'string') r.year = 0;
   if (typeof r.year === 'string') r.year = parseInt(r.year) || 0;
   if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
+  // Preserve disclaimer from API
+  if (mv.disclaimer) r.disclaimer = mv.disclaimer;
+  // Preserve hot_take from API
+  if (mv.hot_take && typeof mv.hot_take === 'object') {
+    r.hot_take = {
+      good: Array.isArray(mv.hot_take.good) ? mv.hot_take.good.filter(s => typeof s === 'string') : [],
+      bad: Array.isArray(mv.hot_take.bad) ? mv.hot_take.bad.filter(s => typeof s === 'string') : [],
+    };
+  }
   return r;
 }
 
@@ -501,14 +510,6 @@ function Accordion({ icon, label, count, open, toggle, children }) {
       >
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
           {icon} {label}
-          {count != null && (
-            <span style={{
-              fontSize: 9.5, padding: "2px 7px", borderRadius: 8, fontWeight: 700,
-              fontFamily: "'JetBrains Mono',monospace",
-              background: open ? "rgba(255,215,0,0.08)" : "rgba(255,255,255,0.04)",
-              color: open ? "#FFD700" : "#888",
-            }}>{count}</span>
-          )}
         </span>
         <ChevronDown size={14} style={{ transition: "transform 0.35s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
       </button>
@@ -533,6 +534,7 @@ export default function FilmGlance() {
   const [boxOfficeOpen, setBoxOfficeOpen] = useState(false);
   const [awardsOpen, setAwardsOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [hotTakeOpen, setHotTakeOpen] = useState(false);
   const [videoModal, setVideoModal] = useState(null); // { id, title } or null
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -653,7 +655,7 @@ export default function FilmGlance() {
     }
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setHotTakeOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -819,12 +821,6 @@ export default function FilmGlance() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* [ARCHIVED — PRICING DORMANT] Pricing nav button:
-          <button onClick={() => { setShowPrice(!showPrice); setShowFavs(false); setResult(null); setLoading(false); }}
-            style={{ background: "none", border: "none", color: showPrice ? "#FFD700" : "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 600 }}>
-            Pricing
-          </button>
-          */}
           {user && (
             <button onClick={() => { setShowFavs(!showFavs); setShowPrice(false); setResult(null); setLoading(false); }}
               style={{ background: "none", border: "none", color: showFavs ? "#FFD700" : "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
@@ -944,15 +940,6 @@ export default function FilmGlance() {
           </div>
         </div>
       )}
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          [ARCHIVED — PRICING PAGE — DORMANT]
-          The full pricing page component was here. To restore:
-          1. Uncomment the Pricing nav button in the header above
-          2. Restore the pricing ternary: showPrice ? (PricingPage) : showFavs ? ...
-          3. Re-enable atLimit gating in doSearch
-          Full pricing code preserved in: film-glance-checkpoint-v2.jsx (lines 856-878)
-          ═══════════════════════════════════════════════════════════════════ */}
 
       {showFavs ? (
         <div style={{ padding: "48px 18px 56px", maxWidth: 680, margin: "0 auto", animation: "fadeIn 0.5s" }}>
@@ -1145,7 +1132,7 @@ export default function FilmGlance() {
 
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
-              <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" count={result.sources.length} open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
+              <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
                 <div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
                   {[...result.sources].sort((a, b) => {
                     const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
@@ -1156,13 +1143,75 @@ export default function FilmGlance() {
                     const nb = bm === 100 ? bs : bm === 10 ? bs * 10 : bm === 5 ? bs * 20 : bm > 0 ? (bs / bm) * 100 : 0;
                     return nb - na;
                   }).map((s, i) => <SourceRow key={`${s.name}-${s.type}-${i}`} source={s} idx={i} visible={srcOpen} />)}
+                  {/* Disclaimer */}
+                  {result.disclaimer && (
+                    <p style={{
+                      fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 10,
+                      lineHeight: 1.45, textAlign: "center", padding: "0 4px",
+                    }}>
+                      {result.disclaimer}
+                    </p>
+                  )}
                 </div>
               </Accordion>
               )}
 
+              {/* Movie Hot Take */}
+              {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
+                <Accordion icon={<TrendingUp size={13} />} label="Movie Hot Take — The Good and The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
+                  <div style={{ padding: "4px 18px 22px" }}>
+                    {result.hot_take.good?.length > 0 && (
+                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 16 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>👍</div>
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#22c55e" }}>The Good</span>
+                        </div>
+                        {result.hot_take.good.map((point, i) => (
+                          <div key={`good-${i}`} style={{
+                            display: "flex", alignItems: "baseline", gap: 10,
+                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
+                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
+                            background: "rgba(34,197,94,0.025)", border: "1px solid rgba(34,197,94,0.06)",
+                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
+                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s`,
+                          }}>
+                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#22c55e", marginTop: 5 }} />
+                            {point}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {result.hot_take.good?.length > 0 && result.hot_take.bad?.length > 0 && (
+                      <div style={{ height: 1, background: "rgba(255,255,255,0.03)", margin: "14px 4px" }} />
+                    )}
+                    {result.hot_take.bad?.length > 0 && (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>👎</div>
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#ef4444" }}>The Bad</span>
+                        </div>
+                        {result.hot_take.bad.map((point, i) => (
+                          <div key={`bad-${i}`} style={{
+                            display: "flex", alignItems: "baseline", gap: 10,
+                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
+                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
+                            background: "rgba(239,68,68,0.025)", border: "1px solid rgba(239,68,68,0.06)",
+                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
+                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${(result.hot_take.good?.length || 0) * 0.05 + i * 0.05}s`,
+                          }}>
+                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#ef4444", marginTop: 5 }} />
+                            {point}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Accordion>
+              )}
+
               {/* Video Reviews */}
               {result.video_reviews && result.video_reviews.length > 0 && (
-                <Accordion icon={<Play size={13} />} label="Video Reviews" count={result.video_reviews.length} open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                <Accordion icon={<Play size={13} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
                   <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
@@ -1195,7 +1244,7 @@ export default function FilmGlance() {
               )}
 
               {result.cast && result.cast.length > 0 && (
-                <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
+                <Accordion icon={<Users size={13} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
                   <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
                     {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                   </div>
@@ -1203,7 +1252,7 @@ export default function FilmGlance() {
               )}
 
               {result.boxOffice && (
-                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" count={null} open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
+                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
                   <div style={{ padding: "4px 18px 18px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
@@ -1219,7 +1268,7 @@ export default function FilmGlance() {
               )}
 
               {result.awards && result.awards.length > 0 && (
-                <Accordion icon={<Award size={13} />} label="Awards & Accolades" count={result.awards.length} open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
+                <Accordion icon={<Award size={13} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
                   <div style={{ padding: "4px 18px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
                     {result.awards.map((a, idx) => (
                       <div key={`${a.award}-${a.result}-${idx}`} style={{
@@ -1248,7 +1297,7 @@ export default function FilmGlance() {
               )}
 
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={13} />} label="Where to Watch" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                <Accordion icon={<Tv size={13} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
@@ -1257,7 +1306,7 @@ export default function FilmGlance() {
 
               {/* Similar Movies */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <Accordion icon={<Film size={13} />} label="You Might Also Like" count={result.recommendations.length} open={true} toggle={() => {}}>
+                <Accordion icon={<Film size={13} />} label="You Might Also Like" open={true} toggle={() => {}}>
                   <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
@@ -1345,13 +1394,11 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.3</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v{FG_VERSION}</span>
             </div>
           </footer>
         </main>
       )}
-
-      {/* Test Mode Panel */}
     </div>
   );
 }
