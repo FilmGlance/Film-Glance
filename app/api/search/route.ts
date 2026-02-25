@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
         signal: ctrl.signal,
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 2000,
+          max_tokens: 2500,
           system: [
             "You are a movie database that returns structured JSON data about films.",
             "Return ONLY valid JSON. No markdown fences. No explanation. No commentary.",
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
           ].join("\n"),
           messages: [{
             role: "user",
-            content: `Movie: "${claudeQuery}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, openingWeekend, domestic, international, worldwide — dollar amounts as strings), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
+            content: `Movie: "${claudeQuery}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget as "$200,000,000", openingWeekend as "$128,122,480", openingRank as "#X all-time" or null, pta as "$XX,XXX" per-theater average, domestic as dollar string, domesticRank as "#X all-time" or null, international as dollar string, worldwide as dollar string, worldwideRank as "#X all-time" or null, roi as "XXX%" estimated return on investment, theaterCount as number string like "4,662", daysInTheater as "XX days"), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
           }],
         }),
       });
