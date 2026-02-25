@@ -22,6 +22,10 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // Cache TTL: 14 days — balances freshness of ratings with API cost
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
+// Model selection — Haiku 4.5 is 3x cheaper than Sonnet and equally capable
+// for structured JSON extraction tasks like movie data lookup.
+const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
+
 function sanitizeQuery(q: string): string {
   // Strip control characters, non-printable chars, and limit to safe characters
   const cleaned = q
@@ -32,6 +36,18 @@ function sanitizeQuery(q: string): string {
     .replace(/\s+/g, " ")                        // Collapse multiple spaces
     .slice(0, 200);                              // Hard length limit
   return cleaned;
+}
+
+// Normalize query into a cache key for better hit rates.
+// "The Dark Knight" and "dark knight" should hit the same cache entry.
+// BUT: preserve numbers for sequels — "shrek 3" must NOT become "shrek".
+function normalizeCacheKey(q: string): string {
+  let key = q.toLowerCase().trim();
+  // Strip leading articles only (the, a, an)
+  key = key.replace(/^(the|a|an)\s+/i, "");
+  // Collapse punctuation and extra spaces
+  key = key.replace(/[''`:;!?.,"()]/g, "").replace(/\s+/g, " ").trim();
+  return key;
 }
 
 // Detect obvious prompt injection attempts
@@ -123,13 +139,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Check server cache (graceful fallthrough if Supabase is unavailable)
+    // Use normalized key for better hit rates (e.g., "The Dark Knight" = "dark knight")
+    const cacheKey = normalizeCacheKey(query);
     let cached: any = null;
     let supabaseAvailable = true;
     try {
       const { data, error } = await supabaseAdmin
         .from("movie_cache")
         .select("data, hit_count, expires_at")
-        .eq("search_key", query)
+        .eq("search_key", cacheKey)
         .gt("expires_at", new Date().toISOString())
         .single();
 
@@ -137,13 +155,11 @@ export async function POST(req: NextRequest) {
     } catch (cacheErr) {
       console.error("Cache lookup failed (Supabase may be down):", cacheErr);
       supabaseAvailable = false;
-      // Continue without cache — fall through to Anthropic API
     }
 
     if (cached) {
-      // Update hit count and log (non-blocking, don't fail if these error)
       try {
-        await supabaseAdmin.from("movie_cache").update({ hit_count: (cached.hit_count || 0) + 1 }).eq("search_key", query);
+        await supabaseAdmin.from("movie_cache").update({ hit_count: (cached.hit_count || 0) + 1 }).eq("search_key", cacheKey);
         await supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: "cache", ip_address: ip });
       } catch (logErr) {
         console.error("Cache hit logging failed:", logErr);
@@ -166,7 +182,7 @@ export async function POST(req: NextRequest) {
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
         signal: ctrl.signal,
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: CLAUDE_MODEL,
           max_tokens: 2000,
           system: [
             "You are a movie database that returns structured JSON data about films.",
@@ -238,7 +254,7 @@ export async function POST(req: NextRequest) {
       if (supabaseAvailable) {
         try {
           await supabaseAdmin.from("movie_cache").upsert({
-            search_key: query,
+            search_key: cacheKey,
             data: mv,
             source: "api",
             hit_count: 0,
