@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "3.3";
+const FG_VERSION = "5.2";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -503,14 +503,6 @@ function Accordion({ icon, label, count, open, toggle, children }) {
       >
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
           {icon} {label}
-          {count != null && (
-            <span style={{
-              fontSize: 9.5, padding: "2px 7px", borderRadius: 8, fontWeight: 700,
-              fontFamily: "'JetBrains Mono',monospace",
-              background: open ? "rgba(255,215,0,0.08)" : "rgba(255,255,255,0.04)",
-              color: open ? "#FFD700" : "#888",
-            }}>{count}</span>
-          )}
         </span>
         <ChevronDown size={14} style={{ transition: "transform 0.35s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
       </button>
@@ -1132,7 +1124,7 @@ export default function FilmGlance() {
 
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
-              <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" count={result.sources.length} open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
+              <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
                 <div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
                   {[...result.sources].sort((a, b) => {
                     const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
@@ -1158,7 +1150,7 @@ export default function FilmGlance() {
 
               {/* Video Reviews */}
               {result.video_reviews && result.video_reviews.length > 0 && (
-                <Accordion icon={<Play size={13} />} label="Video Reviews" count={result.video_reviews.length} open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                <Accordion icon={<Play size={13} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
                   <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
@@ -1191,7 +1183,7 @@ export default function FilmGlance() {
               )}
 
               {result.cast && result.cast.length > 0 && (
-                <Accordion icon={<Users size={13} />} label="Cast" count={result.cast.length} open={castOpen} toggle={() => setCastOpen(!castOpen)}>
+                <Accordion icon={<Users size={13} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
                   <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
                     {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                   </div>
@@ -1199,7 +1191,7 @@ export default function FilmGlance() {
               )}
 
               {result.boxOffice && (
-                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" count={null} open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
+                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
                   <div style={{ padding: "4px 18px 18px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
@@ -1215,7 +1207,7 @@ export default function FilmGlance() {
               )}
 
               {result.awards && result.awards.length > 0 && (
-                <Accordion icon={<Award size={13} />} label="Awards & Accolades" count={result.awards.length} open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
+                <Accordion icon={<Award size={13} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
                   <div style={{ padding: "4px 18px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
                     {result.awards.map((a, idx) => (
                       <div key={`${a.award}-${a.result}-${idx}`} style={{
@@ -1244,7 +1236,7 @@ export default function FilmGlance() {
               )}
 
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={13} />} label="Where to Watch" count={result.streaming.length} open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                <Accordion icon={<Tv size={13} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
@@ -1253,7 +1245,7 @@ export default function FilmGlance() {
 
               {/* Similar Movies */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <Accordion icon={<Film size={13} />} label="You Might Also Like" count={result.recommendations.length} open={true} toggle={() => {}}>
+                <Accordion icon={<Film size={13} />} label="You Might Also Like" open={true} toggle={() => {}}>
                   <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
