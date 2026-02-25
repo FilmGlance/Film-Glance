@@ -22,17 +22,31 @@ export function calcScore(sources: SourceScore[]): AggregatedScore {
   }
 
   const normalized = sources.map((s) => {
-    if (s.max === 100) return s.score;
-    if (s.max === 10) return s.score * 10;
-    if (s.max === 5) return s.score * 20;
-    return (s.score / s.max) * 100;
+    let score = s.score;
+    let max = s.max;
+
+    // Auto-correct mismatched scale: if score > max, infer the correct max
+    // e.g., Haiku returns score: 92, max: 10 for Rotten Tomatoes → should be max: 100
+    if (score > max) {
+      if (score <= 100 && (max === 5 || max === 10)) max = 100;
+      else score = max; // cap at max as fallback
+    }
+
+    const pct =
+      max === 100 ? score :
+      max === 10 ? score * 10 :
+      max === 5 ? score * 20 :
+      (score / max) * 100;
+
+    // Clamp to 0-100
+    return Math.min(100, Math.max(0, pct));
   });
 
   const mean = normalized.reduce((a, b) => a + b, 0) / normalized.length;
 
   return {
-    ten: Math.round((mean / 10) * 10) / 10,
-    stars: Math.round((mean / 20) * 2) / 2,
+    ten: Math.min(10, Math.round((mean / 10) * 10) / 10),
+    stars: Math.min(5, Math.round((mean / 20) * 2) / 2),
     count: sources.length,
   };
 }
@@ -46,7 +60,8 @@ export function validateSource(s: unknown): s is SourceScore {
     typeof obj.score === "number" &&
     typeof obj.max === "number" &&
     obj.max > 0 &&
-    obj.score >= 0 &&
-    obj.score <= obj.max
+    obj.score >= 0
+    // Note: removed obj.score <= obj.max check — Haiku sometimes returns
+    // scores on wrong scale (e.g., 92/10), which calcScore now auto-corrects
   );
 }
