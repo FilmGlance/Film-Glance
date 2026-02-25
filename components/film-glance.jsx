@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "3.2";
+const FG_VERSION = "3.3";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -390,16 +390,24 @@ function calcScore(sources) {
   const valid = sources.filter(s => s && typeof s.score !== 'undefined' && s.score !== null && s.max > 0);
   if (valid.length === 0) return { ten: 0, stars: 0, count: 0 };
   const n = valid.map(s => {
-    const score = typeof s.score === 'string' ? parseFloat(s.score) : s.score;
-    const max = typeof s.max === 'string' ? parseFloat(s.max) : s.max;
+    let score = typeof s.score === 'string' ? parseFloat(s.score) : s.score;
+    let max = typeof s.max === 'string' ? parseFloat(s.max) : s.max;
     if (isNaN(score) || isNaN(max) || max === 0) return null;
-    return max === 100 ? score : max === 10 ? score * 10 : max === 5 ? score * 20 : (score / max) * 100;
+    // Auto-correct mismatched scale: if score > max, infer the correct max
+    // e.g., score: 92, max: 10 → likely meant max: 100
+    if (score > max) {
+      if (score <= 100 && (max === 5 || max === 10)) max = 100;
+      else score = max; // cap at max as fallback
+    }
+    const pct = max === 100 ? score : max === 10 ? score * 10 : max === 5 ? score * 20 : (score / max) * 100;
+    // Clamp to 0-100
+    return Math.min(100, Math.max(0, pct));
   }).filter(v => v !== null && !isNaN(v));
   if (n.length === 0) return { ten: 0, stars: 0, count: sources.length };
   const m = n.reduce((a, b) => a + b, 0) / n.length;
   return {
-    ten: Math.round((m / 10) * 10) / 10,
-    stars: Math.round((m / 20) * 2) / 2,
+    ten: Math.min(10, Math.round((m / 10) * 10) / 10),
+    stars: Math.min(5, Math.round((m / 20) * 2) / 2),
     count: sources.length
   };
 }
@@ -1337,7 +1345,7 @@ export default function FilmGlance() {
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Film size={11} style={{ color: "#1e1e1e" }} />
-              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.2</span>
+              <span style={{ letterSpacing: 2.5, fontWeight: 600 }}>FILM GLANCE 2026 v3.3</span>
             </div>
           </footer>
         </main>
