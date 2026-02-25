@@ -1,13 +1,16 @@
-// app/api/search/route.ts — v5.0
+// app/api/search/route.ts — v5.1
 // Protected search endpoint with 5-API verified ratings pipeline.
 //
-// VERIFIED (9): IMDb, RT Critics, RT Audience, Metacritic, Metacritic User,
-//               Letterboxd, TMDB, Trakt, Simkl
-// ESTIMATED (2): Criticker, MUBI (no APIs exist)
+// v5.1 FIXES:
+//   - Ratings pipeline ALWAYS receives title + year (no more speculative calls without year)
+//   - Criticker removed from Claude prompt (site is broken)
+//   - 10 sources: 9 verified + 1 estimated (MUBI only)
 //
-// PARALLEL EXECUTION:
-//   Claude + TMDB images + ratings pipeline all start simultaneously.
-//   Ratings pipeline internally runs Phase 1 (OMDb+TMDB) → Phase 2 (Trakt+Simkl+RapidAPI).
+// EXECUTION ORDER:
+//   1. Claude + speculative TMDB images start in parallel
+//   2. Claude returns → we now have exact title + year
+//   3. Verified ratings run with correct title + year (ensures right movie)
+//   4. TMDB images retry if speculative missed
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
@@ -148,7 +151,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 6. PARALLEL: Claude + TMDB images + verified ratings pipeline
+    // 6. Claude + speculative TMDB images (parallel), then verified ratings
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: "Movie API not configured" }, { status: 503 });
     }
@@ -157,6 +160,7 @@ export async function POST(req: NextRequest) {
     const timer = setTimeout(() => ctrl.abort(), 18000);
 
     try {
+      // Start Claude + speculative TMDB images in parallel
       const claudePromise = fetch(ANTHROPIC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
@@ -177,16 +181,13 @@ export async function POST(req: NextRequest) {
           ].join("\n"),
           messages: [{
             role: "user",
-            content: `Movie: "${query}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 11: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl, Criticker, MUBI — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, openingWeekend, domestic, international, worldwide — dollar amounts as strings), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
+            content: `Movie: "${query}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 10: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl, MUBI — each with name, score as NUMBER, max as NUMBER, type, url), boxOffice (budget, openingWeekend, domestic, international, worldwide — dollar amounts as strings), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`
           }],
         }),
       });
 
+      // Speculative TMDB image search (may find the right movie without year)
       const tmdbPromise = enrichWithTMDB(query, undefined, undefined).catch(() => null);
-      const ratingsPromise = fetchVerifiedRatings(query).catch((err) => {
-        console.error("Verified ratings failed (non-fatal):", err);
-        return null;
-      });
 
       // Wait for Claude (the bottleneck)
       const apiRes = await claudePromise;
@@ -211,19 +212,22 @@ export async function POST(req: NextRequest) {
       delete mv.poster;
       delete mv.poster_path;
 
-      // ── Collect speculative results ──
-      let tmdb = await tmdbPromise;
-      let verified = await ratingsPromise;
+      // ── NOW we have Claude's title + year — run verified ratings ──
+      // Critical fix: ratings ALWAYS get the year for disambiguation
+      const verified = await fetchVerifiedRatings(mv.title, mv.year).catch((err) => {
+        console.error("Verified ratings failed (non-fatal):", err);
+        return null;
+      });
 
-      // Retry with Claude's exact title + year if speculative missed
+      // ── Collect speculative TMDB result ──
+      let tmdb = await tmdbPromise;
+
+      // Retry TMDB with Claude's exact title + year if speculative missed
       if (!tmdb || !tmdb.poster_path) {
         tmdb = await enrichWithTMDB(
           mv.title, mv.year,
           mv.cast?.map((c: any) => ({ name: c.name, character: c.character }))
         );
-      }
-      if (!verified || verified.sources.size === 0) {
-        verified = await fetchVerifiedRatings(mv.title, mv.year);
       }
 
       // ── Apply TMDB images + streaming ──
