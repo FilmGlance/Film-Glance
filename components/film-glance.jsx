@@ -282,7 +282,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
     }}>
       <span style={{ fontSize: 11.5, color: "#888", fontWeight: 500 }}>{label}</span>
       <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.3 }}>
-        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank} all-time</span>}
+        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank}</span>}
       </span>
     </div>
   );
@@ -384,6 +384,13 @@ function normalizeResult(mv) {
   if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
   // Preserve disclaimer from API
   if (mv.disclaimer) r.disclaimer = mv.disclaimer;
+  // Preserve hot_take from API
+  if (mv.hot_take && typeof mv.hot_take === 'object') {
+    r.hot_take = {
+      good: Array.isArray(mv.hot_take.good) ? mv.hot_take.good.filter(s => typeof s === 'string') : [],
+      bad: Array.isArray(mv.hot_take.bad) ? mv.hot_take.bad.filter(s => typeof s === 'string') : [],
+    };
+  }
   return r;
 }
 
@@ -527,6 +534,7 @@ export default function FilmGlance() {
   const [boxOfficeOpen, setBoxOfficeOpen] = useState(false);
   const [awardsOpen, setAwardsOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [hotTakeOpen, setHotTakeOpen] = useState(false);
   const [videoModal, setVideoModal] = useState(null); // { id, title } or null
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -647,7 +655,7 @@ export default function FilmGlance() {
     }
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setHotTakeOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -1146,6 +1154,59 @@ export default function FilmGlance() {
                   )}
                 </div>
               </Accordion>
+              )}
+
+              {/* Movie Hot Take */}
+              {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
+                <Accordion icon={<TrendingUp size={13} />} label="Movie Hot Take — The Good and The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
+                  <div style={{ padding: "4px 18px 22px" }}>
+                    {result.hot_take.good?.length > 0 && (
+                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 16 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>👍</div>
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#22c55e" }}>The Good</span>
+                        </div>
+                        {result.hot_take.good.map((point, i) => (
+                          <div key={`good-${i}`} style={{
+                            display: "flex", alignItems: "baseline", gap: 10,
+                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
+                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
+                            background: "rgba(34,197,94,0.025)", border: "1px solid rgba(34,197,94,0.06)",
+                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
+                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s`,
+                          }}>
+                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#22c55e", marginTop: 5 }} />
+                            {point}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {result.hot_take.good?.length > 0 && result.hot_take.bad?.length > 0 && (
+                      <div style={{ height: 1, background: "rgba(255,255,255,0.03)", margin: "14px 4px" }} />
+                    )}
+                    {result.hot_take.bad?.length > 0 && (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>👎</div>
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#ef4444" }}>The Bad</span>
+                        </div>
+                        {result.hot_take.bad.map((point, i) => (
+                          <div key={`bad-${i}`} style={{
+                            display: "flex", alignItems: "baseline", gap: 10,
+                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
+                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
+                            background: "rgba(239,68,68,0.025)", border: "1px solid rgba(239,68,68,0.06)",
+                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
+                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${(result.hot_take.good?.length || 0) * 0.05 + i * 0.05}s`,
+                          }}>
+                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#ef4444", marginTop: 5 }} />
+                            {point}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Accordion>
               )}
 
               {/* Video Reviews */}
