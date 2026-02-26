@@ -327,22 +327,22 @@ export async function POST(req: NextRequest) {
 
         fireAndForget(async () => {
           const writes: Promise<any>[] = [
-            supabaseAdmin.from("movie_cache").upsert({ search_key: query, ...cacheData }),
-            supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: "api", ip_address: ip }),
+            supabaseAdmin.from("movie_cache").upsert({ search_key: query, ...cacheData }).select(),
+            supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: "api", ip_address: ip }).select(),
           ];
 
           // Also cache under resolved title key (e.g., "shrek the third")
           if (sequelResolution) {
             const resolvedKey = sanitizeQuery(resolvedTitle);
             if (resolvedKey !== query) {
-              writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: resolvedKey, ...cacheData }));
+              writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: resolvedKey, ...cacheData }).select());
             }
           }
 
           // Also cache under Claude's official title (handles typos/variations)
           const claudeKey = sanitizeQuery(mv.title);
           if (claudeKey !== query && claudeKey !== sanitizeQuery(resolvedTitle)) {
-            writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: claudeKey, ...cacheData }));
+            writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: claudeKey, ...cacheData }).select());
           }
 
           await Promise.all(writes);
