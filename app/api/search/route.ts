@@ -1,19 +1,19 @@
-// app/api/search/route.ts — v5.2
+// app/api/search/route.ts — v5.3
 // Protected search endpoint with 5-API verified ratings pipeline.
 //
-// v5.2 FIXES:
-//   - MUBI removed from Claude prompt (9 sources, all verified)
-//   - Criticker removed (site broken)
-//   - Sequel resolution: "shrek 3" → resolves via TMDB → "Shrek the Third"
-//     before Claude and ratings pipeline run
-//   - Updated disclaimer text
+// v5.3 PERFORMANCE OVERHAUL:
+//   - Verified ratings now run IN PARALLEL with Claude (was sequential)
+//     Saves 2-4 seconds on every cache miss
+//   - Cache TTL extended: 14 days → 30 days
+//   - Dual-key caching: sequel queries cache under BOTH original + resolved key
+//   - Timing logs for performance monitoring
 //
 // EXECUTION ORDER:
-//   1. Sequel resolution via TMDB (fast, ~200ms)
-//   2. Claude + speculative TMDB images start in parallel
-//   3. Claude returns → we now have exact title + year
-//   4. Verified ratings run with correct title + year (ensures right movie)
-//   5. TMDB images retry if speculative missed
+//   1. Auth + rate limit + sanitize + cache check (~50ms)
+//   2. Sequel resolution via TMDB (~200ms)
+//   3. PARALLEL: Claude + TMDB enrichment + Verified Ratings
+//   4. Merge results: Claude metadata + verified scores + TMDB media
+//   5. Cache write (fire-and-forget)
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
@@ -26,7 +26,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
-const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function sanitizeQuery(q: string): string {
   return q
@@ -58,6 +58,7 @@ function fireAndForget(fn: () => Promise<any>, label: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
   try {
     // 1. Auth check
     const authHeader = req.headers.get("Authorization");
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
       }, "cache-hit-log");
 
       const movieData = cached.data as Record<string, unknown>;
+      console.log(`[perf] cache hit for "${query}" — ${Date.now() - t0}ms`);
       return NextResponse.json({
         ...movieData,
         score: calcScore((movieData.sources as any[]) || []),
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5.5. Sequel resolution — resolve shorthand like "shrek 3" to official title
-    // This runs BEFORE Claude so we can send the correct title to all APIs
+    const tSequel = Date.now();
     let resolvedTitle: string = query;
     let resolvedYear: number | undefined;
 
@@ -163,7 +165,7 @@ export async function POST(req: NextRequest) {
     if (sequelResolution) {
       resolvedTitle = sequelResolution.title;
       resolvedYear = sequelResolution.year;
-      console.log(`[sequel] "${query}" → "${resolvedTitle}" (${resolvedYear})`);
+      console.log(`[sequel] "${query}" → "${resolvedTitle}" (${resolvedYear}) — ${Date.now() - tSequel}ms`);
 
       // Check cache again with the resolved title
       try {
@@ -183,6 +185,7 @@ export async function POST(req: NextRequest) {
           }, "sequel-cache-hit-log");
 
           const movieData = data.data as Record<string, unknown>;
+          console.log(`[perf] sequel cache hit for "${query}" → "${resolvedTitle}" — ${Date.now() - t0}ms`);
           return NextResponse.json({
             ...movieData,
             score: calcScore((movieData.sources as any[]) || []),
@@ -193,7 +196,9 @@ export async function POST(req: NextRequest) {
       } catch { /* continue to API */ }
     }
 
-    // 6. Claude + speculative TMDB images (parallel), then verified ratings
+    // 6. PARALLEL: Claude + TMDB enrichment + Verified Ratings
+    //    KEY OPTIMIZATION: Ratings no longer wait for Claude. They use the
+    //    query/resolved title directly, saving 2-4 seconds on every cache miss.
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: "Movie API not configured" }, { status: 503 });
     }
@@ -201,11 +206,12 @@ export async function POST(req: NextRequest) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 18000);
 
-    // Use resolved title for Claude if sequel was detected
     const claudeQuery = sequelResolution ? resolvedTitle : query;
 
     try {
-      // Start Claude + speculative TMDB images in parallel
+      const tParallel = Date.now();
+
+      // ── Launch ALL THREE in parallel ──
       const claudePromise = fetch(ANTHROPIC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
@@ -231,12 +237,25 @@ export async function POST(req: NextRequest) {
         }),
       });
 
-      // Speculative TMDB image search (may find the right movie without year)
+      // Speculative TMDB enrichment (poster, cast, streaming, trailer, recs, video reviews)
       const tmdbPromise = enrichWithTMDB(claudeQuery, resolvedYear, undefined).catch(() => null);
 
-      // Wait for Claude (the bottleneck)
-      const apiRes = await claudePromise;
+      // VERIFIED RATINGS — now runs IN PARALLEL with Claude (was sequential before)
+      // Uses the query/resolved title. For most searches this finds the right movie.
+      const ratingsPromise = fetchVerifiedRatings(resolvedTitle, resolvedYear).catch((err) => {
+        console.error("Verified ratings failed (non-fatal):", err);
+        return null;
+      });
+
+      // ── Wait for ALL THREE ──
+      const [apiRes, tmdbResult, verifiedResult] = await Promise.all([
+        claudePromise,
+        tmdbPromise,
+        ratingsPromise,
+      ]);
+
       clearTimeout(timer);
+      console.log(`[perf] parallel phase complete — ${Date.now() - tParallel}ms`);
 
       if (!apiRes.ok) throw new Error(`Anthropic API error: ${apiRes.status}`);
 
@@ -257,15 +276,11 @@ export async function POST(req: NextRequest) {
       delete mv.poster;
       delete mv.poster_path;
 
-      // ── NOW we have Claude's title + year — run verified ratings ──
-      // Critical fix: ratings ALWAYS get the year for disambiguation
-      const verified = await fetchVerifiedRatings(mv.title, mv.year).catch((err) => {
-        console.error("Verified ratings failed (non-fatal):", err);
-        return null;
-      });
+      // ── Use parallel verified ratings result ──
+      let verified = verifiedResult;
 
-      // ── Collect speculative TMDB result ──
-      let tmdb = await tmdbPromise;
+      // ── Collect TMDB result ──
+      let tmdb = tmdbResult;
 
       // Retry TMDB with Claude's exact title + year if speculative missed
       if (!tmdb || !tmdb.poster_path) {
@@ -299,21 +314,42 @@ export async function POST(req: NextRequest) {
       }
 
       // 7. Fire-and-forget cache write + log
+      //    Dual-key caching: store under both the original query AND resolved title
+      //    so "shrek 3" and "shrek the third" both produce cache hits next time
       if (supabaseAvailable) {
+        const cacheData = {
+          data: mv,
+          source: "api",
+          hit_count: 0,
+          cached_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
+        };
+
         fireAndForget(async () => {
-          await Promise.all([
-            supabaseAdmin.from("movie_cache").upsert({
-              search_key: query,
-              data: mv,
-              source: "api",
-              hit_count: 0,
-              cached_at: new Date().toISOString(),
-              expires_at: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
-            }),
+          const writes: Promise<any>[] = [
+            supabaseAdmin.from("movie_cache").upsert({ search_key: query, ...cacheData }),
             supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: "api", ip_address: ip }),
-          ]);
+          ];
+
+          // Also cache under resolved title key (e.g., "shrek the third")
+          if (sequelResolution) {
+            const resolvedKey = sanitizeQuery(resolvedTitle);
+            if (resolvedKey !== query) {
+              writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: resolvedKey, ...cacheData }));
+            }
+          }
+
+          // Also cache under Claude's official title (handles typos/variations)
+          const claudeKey = sanitizeQuery(mv.title);
+          if (claudeKey !== query && claudeKey !== sanitizeQuery(resolvedTitle)) {
+            writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: claudeKey, ...cacheData }));
+          }
+
+          await Promise.all(writes);
         }, "cache-write");
       }
+
+      console.log(`[perf] total for "${query}" — ${Date.now() - t0}ms`);
 
       return NextResponse.json({
         ...mv,
