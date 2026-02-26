@@ -136,14 +136,14 @@ export async function GET(req: NextRequest) {
       }
 
       // Update cache (preserve hit_count)
-      await supabaseAdmin.from("movie_cache").upsert({
+      await Promise.resolve(supabaseAdmin.from("movie_cache").upsert({
         search_key: entry.search_key,
         data: mv,
         source: "refresh",
         hit_count: entry.hit_count || 0,
         cached_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
-      }).then(() => {});
+      })).then(() => {});
 
       refreshed++;
       console.log(`[cron-refresh] ✓ "${title}" refreshed`);
