@@ -6,19 +6,3 @@
     }
   ]
 }
-```
-
-3. Commit message: `fix cron to daily for hobby plan`
-
-**Step 2: Update the batch size in `app/api/seed/refresh/route.ts`**
-
-1. Navigate to `app/api/seed/refresh/route.ts` on staging
-2. Pencil icon
-3. Find this line near the top:
-```
-const BATCH_SIZE = 25;
-```
-
-4. Change it to:
-```
-const BATCH_SIZE = 40;
