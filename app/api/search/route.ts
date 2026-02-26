@@ -195,11 +195,11 @@ async function writeCacheEntries(
   const writes: Promise<any>[] = [];
   for (const key of keys) {
     writes.push(
-      supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData }).then(() => {})
+      Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData })).then(() => {})
     );
   }
   writes.push(
-    supabaseAdmin.from("search_log").insert({ user_id: userId, query, source, ip_address: ip }).then(() => {})
+    Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: userId, query, source, ip_address: ip })).then(() => {})
   );
 
   await Promise.all(writes);
@@ -294,8 +294,8 @@ export async function POST(req: NextRequest) {
       // Fire-and-forget: update hit count + log
       fireAndForget(async () => {
         await Promise.all([
-          supabaseAdmin.from("movie_cache").update({ hit_count: (cached.hit_count || 0) + 1 }).eq("search_key", query).then(() => {}),
-          supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip }).then(() => {}),
+          Promise.resolve(supabaseAdmin.from("movie_cache").update({ hit_count: (cached.hit_count || 0) + 1 }).eq("search_key", query)).then(() => {}),
+          Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
         ]);
       }, "cache-hit-log");
 
@@ -345,8 +345,8 @@ export async function POST(req: NextRequest) {
 
           fireAndForget(async () => {
             await Promise.all([
-              supabaseAdmin.from("movie_cache").update({ hit_count: (data.hit_count || 0) + 1 }).eq("search_key", resolvedKey).then(() => {}),
-              supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip }).then(() => {}),
+              Promise.resolve(supabaseAdmin.from("movie_cache").update({ hit_count: (data.hit_count || 0) + 1 }).eq("search_key", resolvedKey)).then(() => {}),
+              Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
             ]);
           }, "sequel-cache-hit-log");
 
