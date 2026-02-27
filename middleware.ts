@@ -62,7 +62,7 @@ function getIP(req: NextRequest): string {
 // ─── Route Configuration ────────────────────────────────────────────────────
 
 // Routes that require auth (Bearer token checked here, JWT verified in handler)
-const PROTECTED_ROUTES = ["/api/search", "/api/favorites"];
+const PROTECTED_ROUTES = ["/api/favorites"];
 
 // Routes that skip auth (webhooks, auth callbacks, lightweight lookups)
 const PUBLIC_ROUTES = ["/api/webhooks", "/api/auth", "/api/enrich", "/api/suggest", "/api/health"];

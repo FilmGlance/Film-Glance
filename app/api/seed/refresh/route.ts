@@ -158,6 +158,15 @@ export async function GET(req: NextRequest) {
 
   console.log(`[cron-refresh] Complete: refreshed=${refreshed}, errors=${errors}`);
 
+  // Cleanup old anonymous search records (older than 7 days)
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    await Promise.resolve(supabaseAdmin.from("anonymous_searches").delete().lt("search_date", cutoff)).then(() => {});
+    console.log("[cron-refresh] Cleaned up anonymous_searches older than 7 days");
+  } catch (cleanupErr) {
+    console.error("[cron-refresh] Anonymous searches cleanup failed:", cleanupErr);
+  }
+
   return NextResponse.json({
     refreshed,
     errors,

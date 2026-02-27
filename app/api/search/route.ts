@@ -1,5 +1,11 @@
-// app/api/search/route.ts — v5.3
-// Protected search endpoint with 5-API verified ratings pipeline.
+// app/api/search/route.ts — v5.4
+// Semi-public search endpoint with 5-API verified ratings pipeline.
+//
+// v5.4 CHANGES:
+//   - Anonymous search: auth no longer required (daily limit instead)
+//   - 15 searches/day for unauthenticated users (tracked by IP in Supabase)
+//   - Signed-in users get unlimited searches
+//   - check_anonymous_limit() RPC for atomic daily count
 //
 // v5.3 CHANGES:
 //   - Stale-while-revalidate: expired cache returns instantly, background refresh
@@ -10,14 +16,18 @@
 //   - [perf] timing logs
 //
 // EXECUTION ORDER:
-//   1. Auth + rate limit + sanitize
-//   2. Cache lookup (ANY entry, no expiry filter)
+//   1. Auth (optional — sets user or proceeds as anonymous)
+//   2. Rate limit (by user ID or IP)
+//   3. Sanitize + injection detection
+//   4a. Anonymous daily limit check (15/day per IP)
+//   4b. [DORMANT] Pricing check
+//   5. Cache lookup (ANY entry, no expiry filter)
 //      → Valid cache: return instantly
 //      → Stale cache: return instantly + background refresh
 //      → No cache: continue to pipeline
-//   3. Sequel resolution via TMDB (fast, ~200ms)
-//   4. Parallel: Claude + TMDB + Verified Ratings (Promise.all)
-//   5. Assembly + cache write (fire-and-forget)
+//   5.5. Sequel resolution via TMDB (fast, ~200ms)
+//   6. Parallel: Claude + TMDB + Verified Ratings (Promise.all)
+//   7. Assembly + cache write (fire-and-forget)
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
@@ -31,6 +41,7 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const ANONYMOUS_DAILY_LIMIT = 15;
 
 // ── Shared prompt constants ──────────────────────────────────────────────────
 
@@ -171,7 +182,7 @@ async function writeCacheEntries(
   resolvedTitle: string | null,
   officialTitle: string | null,
   mv: any,
-  userId: string,
+  userId: string | null,
   ip: string,
   source: string
 ) {
@@ -209,28 +220,26 @@ async function writeCacheEntries(
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Auth check
+    // 1. Auth check — OPTIONAL (anonymous users get daily limit)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.split(" ")[1];
-
     let user: any = null;
-    try {
-      const { data, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !data?.user) {
-        return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        const { data, error: authError } = await supabaseAdmin.auth.getUser(token);
+        if (!authError && data?.user) {
+          user = data.user;
+        }
+      } catch (authErr) {
+        console.error("Auth check failed:", authErr);
+        // Continue as anonymous rather than failing
       }
-      user = data.user;
-    } catch (authErr) {
-      console.error("Auth check failed:", authErr);
-      return NextResponse.json({ error: "Authentication service unavailable" }, { status: 503 });
     }
 
-    // 2. Rate limit
+    // 2. Rate limit — user ID if authenticated, IP if anonymous
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-    const rl = rateLimit(`search:${user.id}`, SEARCH_LIMIT);
+    const rl = rateLimit(`search:${user?.id || `anon:${ip}`}`, SEARCH_LIMIT);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please slow down." },
@@ -255,7 +264,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid search query" }, { status: 400 });
     }
 
-    // 4. [DORMANT — PRICING DISABLED]
+    // 4a. Anonymous daily limit check (15 searches/day per IP)
+    if (!user) {
+      try {
+        const { data: limitCheck, error: limitErr } = await supabaseAdmin.rpc(
+          "check_anonymous_limit",
+          { p_ip: ip, p_limit: ANONYMOUS_DAILY_LIMIT }
+        );
+
+        if (limitErr) {
+          console.error("Anonymous limit check failed:", limitErr);
+          return NextResponse.json(
+            { error: "Unable to verify search quota. Please sign in for unlimited access.", code: "LIMIT_CHECK_FAILED" },
+            { status: 500 }
+          );
+        }
+
+        if (limitCheck && !limitCheck.allowed) {
+          return NextResponse.json({
+            error: "You've used all 15 free searches for today. Sign up for free to unlock unlimited searches!",
+            code: "DAILY_LIMIT_REACHED",
+            searches_used: limitCheck.searches_used,
+            daily_limit: limitCheck.daily_limit,
+          }, { status: 429 });
+        }
+      } catch (limitErr) {
+        console.error("Anonymous limit check exception:", limitErr);
+      }
+    }
+
+    // 4b. [DORMANT — PRICING DISABLED]
     const PRICING_ENABLED = false;
     if (PRICING_ENABLED) {
       const { data: quotaData, error: quotaError } = await supabaseAdmin.rpc("increment_search", { p_user_id: user.id });
@@ -295,7 +333,7 @@ export async function POST(req: NextRequest) {
       fireAndForget(async () => {
         await Promise.all([
           Promise.resolve(supabaseAdmin.from("movie_cache").update({ hit_count: (cached.hit_count || 0) + 1 }).eq("search_key", query)).then(() => {}),
-          Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
+          Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
         ]);
       }, "cache-hit-log");
 
@@ -306,7 +344,7 @@ export async function POST(req: NextRequest) {
           const start = Date.now();
           const mv = await runFullPipeline(query, query, undefined);
           if (mv) {
-            await writeCacheEntries(query, null, mv.title, mv, user.id, ip, "swr-refresh");
+            await writeCacheEntries(query, null, mv.title, mv, user?.id || null, ip, "swr-refresh");
             console.log(`[bg-refresh] ✓ "${query}" refreshed in ${Date.now() - start}ms`);
           }
         }, "bg-refresh");
@@ -346,14 +384,14 @@ export async function POST(req: NextRequest) {
           fireAndForget(async () => {
             await Promise.all([
               Promise.resolve(supabaseAdmin.from("movie_cache").update({ hit_count: (data.hit_count || 0) + 1 }).eq("search_key", resolvedKey)).then(() => {}),
-              Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user.id, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
+              Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: isStale ? "swr" : "cache", ip_address: ip })).then(() => {}),
             ]);
           }, "sequel-cache-hit-log");
 
           if (isStale && ANTHROPIC_API_KEY) {
             fireAndForget(async () => {
               const mv = await runFullPipeline(resolvedTitle, resolvedTitle, resolvedYear);
-              if (mv) await writeCacheEntries(resolvedKey, resolvedTitle, mv.title, mv, user.id, ip, "swr-refresh");
+              if (mv) await writeCacheEntries(resolvedKey, resolvedTitle, mv.title, mv, user?.id || null, ip, "swr-refresh");
             }, "sequel-bg-refresh");
           }
 
@@ -391,7 +429,7 @@ export async function POST(req: NextRequest) {
       // 7. Fire-and-forget cache write + log
       if (supabaseAvailable) {
         fireAndForget(async () => {
-          await writeCacheEntries(query, resolvedTitle !== query ? resolvedTitle : null, mv.title, mv, user.id, ip, "api");
+          await writeCacheEntries(query, resolvedTitle !== query ? resolvedTitle : null, mv.title, mv, user?.id || null, ip, "api");
         }, "cache-write");
       }
 

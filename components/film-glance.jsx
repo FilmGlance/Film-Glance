@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "5.2";
+const FG_VERSION = "5.4";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -360,6 +360,12 @@ async function fetchMovieAPI(title, authToken) {
       const err = await r.json();
       if (err.code === "SEARCH_LIMIT_REACHED") return { limitReached: true };
     }
+    if (r.status === 429) {
+      const err = await r.json().catch(() => ({}));
+      if (err.code === "DAILY_LIMIT_REACHED") {
+        return { dailyLimitReached: true, searches_used: err.searches_used, daily_limit: err.daily_limit };
+      }
+    }
     if (!r.ok) return null;
 
     const mv = await r.json();
@@ -587,6 +593,7 @@ export default function FilmGlance() {
   const [searches, setSearches] = useState(0);
   const [showSug, setShowSug] = useState(false);
   const [errMsg, setErrMsg] = useState(null);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
   const remain = FREE_LIMIT - searches;
@@ -638,6 +645,7 @@ export default function FilmGlance() {
         setUser({ email: session.user.email, id: session.user.id, _session: session });
         await loadUserData(session);
         setShowAuth(false);
+        setDailyLimitReached(false);
         setAuthEmail(""); setAuthPw(""); setErrMsg(null);
         // Show sign-in notification (only for explicit sign-in, not page reload)
         if (event === "SIGNED_IN") {
@@ -682,15 +690,12 @@ export default function FilmGlance() {
     const q = (sq || query).trim().toLowerCase();
     if (!q) return;
 
-    // Auth gate — require sign-in for ALL searches
-    if (!user) {
-      setPendingSearch(q);
-      setShowAuth(true);
-      return;
-    }
+    // [ARCHIVED — AUTH GATE REMOVED IN v5.4]
+    // Anonymous users can now search with a 15/day limit.
+    // Auth is prompted only when daily limit is reached or for favorites.
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setHotTakeOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]);
+    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setHotTakeOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -700,6 +705,15 @@ export default function FilmGlance() {
 
       // [ARCHIVED — PRICING DORMANT] Uncomment to re-enable limit enforcement:
       // if (mv && mv.limitReached) { setShowPrice(true); setLoading(false); return; }
+
+      // Daily limit reached — show notification + auth modal
+      if (mv && mv.dailyLimitReached) {
+        setDailyLimitReached(true);
+        setPendingSearch(q);
+        setShowAuth(true);
+        setLoading(false);
+        return;
+      }
 
       if (mv && mv.sources && mv.sources.length > 0) {
         try {
@@ -767,7 +781,7 @@ export default function FilmGlance() {
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
     : SUGGESTIONS.slice(0, 8);
 
-  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); setSuggestions([]); };
+  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false); };
 
   const toggleFav = async (movieResult) => {
     if (!user) { setShowAuth(true); return; }
@@ -924,6 +938,40 @@ export default function FilmGlance() {
           <Mail size={16} style={{ color: "#FFD700", flexShrink: 0 }} />
           <p style={{ fontSize: 12.5, color: "#ccc", lineHeight: 1.4 }}>{authNotice}</p>
           <button onClick={() => setAuthNotice(null)} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Daily Limit Reached Banner */}
+      {dailyLimitReached && (
+        <div style={{
+          position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 1100,
+          background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.25)", borderRadius: 14,
+          padding: "18px 24px", maxWidth: 440, width: "calc(100% - 32px)",
+          display: "flex", alignItems: "center", gap: 14,
+          animation: "slideUp 0.4s", boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06))",
+            border: "1px solid rgba(255,215,0,0.15)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Zap size={16} style={{ color: "#FFD700" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 3, fontFamily: "'Syne',sans-serif" }}>Daily search limit reached</p>
+            <p style={{ fontSize: 11.5, color: "#888", lineHeight: 1.4 }}>Sign up for free to unlock unlimited searches!</p>
+          </div>
+          <button
+            onClick={() => { setDailyLimitReached(false); setShowAuth(true); }}
+            style={{
+              padding: "8px 16px", borderRadius: 9, border: "none", flexShrink: 0,
+              background: "linear-gradient(135deg, #FFD700, #E8A000)",
+              color: "#050505", fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >Sign Up Free</button>
+          <button onClick={() => setDailyLimitReached(false)} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", flexShrink: 0, padding: 2 }}><X size={14} /></button>
         </div>
       )}
 
