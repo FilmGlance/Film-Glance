@@ -167,6 +167,15 @@ async function runFullPipeline(
     if ((tmdbResult as any).streaming?.length > 0) {
       mv.streaming = (tmdbResult as any).streaming;
     }
+    if ((tmdbResult as any).trailer_key) {
+      mv.trailer_key = (tmdbResult as any).trailer_key;
+    }
+    if ((tmdbResult as any).recommendations?.length > 0) {
+      mv.recommendations = (tmdbResult as any).recommendations;
+    }
+    if ((tmdbResult as any).video_reviews?.length > 0) {
+      mv.video_reviews = (tmdbResult as any).video_reviews;
+    }
   }
 
   // Apply verified ratings
