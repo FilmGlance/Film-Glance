@@ -719,8 +719,10 @@ export default function FilmGlance() {
         try {
           const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
           setResult(res);
-          // Always enrich from TMDB (server cache may have old data)
-          enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
+          // Only enrich if cached data is missing TMDB fields (poster, trailer, video reviews, recommendations)
+          const needsEnrich = !res.poster || !res.trailer_key || !res.video_reviews?.length || !res.recommendations?.length;
+          if (needsEnrich) {
+            enrichCachedMovie(res.title, res.year, res.cast?.map(c => ({ name: c.name, character: c.character }))).then(tmdb => {
             if (!tmdb) return;
             setResult(prev => {
               if (!prev || prev.title !== res.title) return prev;
@@ -740,6 +742,7 @@ export default function FilmGlance() {
               return updated;
             });
           }).catch(err => console.error("[FG] Enrich error:", err));
+          }
         } catch (parseErr) {
           console.error("Result parse error:", parseErr);
           setErrMsg("Could not display this movie. Try a different title.");

@@ -85,7 +85,7 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
       }),
     });
 
-    const tmdbPromise = enrichWithTMDB(title, undefined, undefined).catch(() => null);
+    const tmdbPromise = enrichWithTMDB(title, undefined, undefined, { skipYouTube: true }).catch(() => null);
 
     const apiRes = await claudePromise;
     if (!apiRes.ok) {
@@ -117,7 +117,8 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
     if (!tmdbResult || !tmdbResult.poster_path) {
       tmdbResult = await enrichWithTMDB(
         mv.title, mv.year,
-        mv.cast?.map((c: any) => ({ name: c.name, character: c.character }))
+        mv.cast?.map((c: any) => ({ name: c.name, character: c.character })),
+        { skipYouTube: true }
       ).catch(() => null);
     }
 
@@ -135,6 +136,15 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
       }
       if ((tmdbResult as any).streaming?.length > 0) {
         mv.streaming = (tmdbResult as any).streaming;
+      }
+      if ((tmdbResult as any).trailer_key) {
+        mv.trailer_key = (tmdbResult as any).trailer_key;
+      }
+      if ((tmdbResult as any).recommendations?.length > 0) {
+        mv.recommendations = (tmdbResult as any).recommendations;
+      }
+      if ((tmdbResult as any).video_reviews?.length > 0) {
+        mv.video_reviews = (tmdbResult as any).video_reviews;
       }
     }
 

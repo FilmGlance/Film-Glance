@@ -410,7 +410,8 @@ async function searchPerson(name: string): Promise<string | null> {
 export async function enrichWithTMDB(
   title: string,
   year?: number,
-  claudeCast?: { name: string; character: string }[]
+  claudeCast?: { name: string; character: string }[],
+  options?: { skipYouTube?: boolean }
 ): Promise<TMDBEnrichment> {
   const result: TMDBEnrichment = {
     poster_path: null,
@@ -436,7 +437,7 @@ export async function enrichWithTMDB(
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
-        fetchYouTubeReviews(title, year, 3),
+        options?.skipYouTube ? Promise.resolve([]) : fetchYouTubeReviews(title, year, 3),
       ]);
 
     result.streaming = streaming;
