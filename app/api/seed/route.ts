@@ -1,10 +1,10 @@
-// app/api/seed/route.ts — v5.5
+// app/api/seed/route.ts — v5.6
 // Pre-seed the movie cache with 10,000+ unique movies from lib/seed-movies.ts.
 //
 // Usage:
-//   POST /api/seed?batch=1      → seed batch 1 only
+//   POST /api/seed?batch=1      → seed batch 1 only (batches 1-12 available)
 //   POST /api/seed?batch=0      → seed ALL batches (deduplicated)
-//   POST /api/seed?batch=2&offset=100&limit=50  → seed 50 movies starting at offset 100 in batch 2
+//   POST /api/seed?batch=7&offset=0&limit=50  → seed 50 movies starting at offset 0 in batch 7
 //
 // Each movie: Claude → TMDB (incl. video reviews via RapidAPI) → Verified Ratings → cache write (30-day TTL)
 // Rate: 1.5s delay between API calls to avoid rate limits.

@@ -1,5 +1,11 @@
-// app/api/search/route.ts — v5.4
+// app/api/search/route.ts — v5.6
 // Semi-public search endpoint with 5-API verified ratings pipeline.
+//
+// v5.6 CHANGES:
+//   - Video review backfill: cache hits with empty video_reviews trigger
+//     background fetch via RapidAPI (primary) → Piped API → Invidious API
+//   - YouTube Data API v3 removed from fallback chain
+//   - Patched reviews persist to cache so subsequent searches serve from cache
 //
 // v5.4 CHANGES:
 //   - Anonymous search: auth no longer required (daily limit instead)
@@ -33,7 +39,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
-import { enrichWithTMDB } from "@/lib/tmdb";
+import { enrichWithTMDB, fetchVideoReviews } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -90,6 +96,30 @@ function looksLikeInjection(q: string): boolean {
 
 function fireAndForget(fn: () => Promise<any>, label: string) {
   fn().catch((err) => console.error(`[${label}]`, err));
+}
+
+/**
+ * v5.6: Backfill video_reviews on cached entries that have none.
+ * Fetches reviews via RapidAPI (primary) → YouTube Data API (fallback),
+ * then patches just the video_reviews field in the cached data.
+ */
+function backfillVideoReviews(cacheKey: string, movieData: Record<string, unknown>) {
+  const title = (movieData.title as string) || "";
+  const year = (movieData.year as number) || undefined;
+  if (!title) return;
+
+  fireAndForget(async () => {
+    const reviews = await fetchVideoReviews(title, year, 3);
+    if (reviews.length === 0) return; // Both sources exhausted or no reviews found
+
+    // Patch the cached data with video reviews
+    const updatedData = { ...movieData, video_reviews: reviews };
+    await supabaseAdmin
+      .from("movie_cache")
+      .update({ data: updatedData })
+      .eq("search_key", cacheKey);
+    console.log(`[video-backfill] ✓ Patched ${reviews.length} reviews for "${title}"`);
+  }, "video-backfill");
 }
 
 // ── Shared pipeline functions ────────────────────────────────────────────────
@@ -360,6 +390,13 @@ export async function POST(req: NextRequest) {
       }
 
       const movieData = cached.data as Record<string, unknown>;
+
+      // v5.6: Backfill video reviews if cached entry has none
+      const vr = movieData.video_reviews as any[] | undefined;
+      if (!vr || vr.length === 0) {
+        backfillVideoReviews(query, movieData);
+      }
+
       return NextResponse.json({
         ...movieData,
         score: calcScore((movieData.sources as any[]) || []),
@@ -405,6 +442,13 @@ export async function POST(req: NextRequest) {
           }
 
           const movieData = data.data as Record<string, unknown>;
+
+          // v5.6: Backfill video reviews if cached entry has none
+          const vrSequel = movieData.video_reviews as any[] | undefined;
+          if (!vrSequel || vrSequel.length === 0) {
+            backfillVideoReviews(resolvedKey, movieData);
+          }
+
           return NextResponse.json({
             ...movieData,
             score: calcScore((movieData.sources as any[]) || []),
