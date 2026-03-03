@@ -1,11 +1,12 @@
-// lib/tmdb.ts — v5.5
+// lib/tmdb.ts — v5.6
 // TMDB API integration for movie data: poster, cast, streaming, trailer, recommendations.
-// Video reviews: RapidAPI "Youtube Search and Download" (primary) → YouTube Data API (fallback).
-// Called by /api/search, /api/enrich, and /api/patch-video-reviews.
+// Video reviews: RapidAPI "Youtube Search and Download" (primary) → Piped API → Invidious API.
+// YouTube Data API v3 removed — replaced by free, unlimited community APIs.
+// v5.6: Video review backfill on cache hits with empty reviews (search route).
+// Called by /api/search, /api/enrich, /api/seed, /api/seed/discover, /api/patch-video-reviews.
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
-const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY;
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const RAPIDAPI_YT_HOST = "youtube-search-and-download.p.rapidapi.com";
 
@@ -283,56 +284,50 @@ async function fetchVideoReviewsRapidAPI(
 }
 
 /**
- * Fallback source: YouTube Data API v3 (original implementation).
- * Only used when RapidAPI is unavailable. Burns 100 quota units per query.
+ * Fallback source 1: Piped API (free, no API key, no quota).
+ * Open-source YouTube frontend with public REST API.
+ * Multiple instances for automatic failover. Self-throttle ~1 req/sec.
  */
-async function fetchVideoReviewsYouTube(
+const PIPED_INSTANCES = [
+  "pipedapi.kavin.rocks",
+  "pipedapi.adminforge.de",
+  "pipedapi.leptons.xyz",
+];
+
+async function fetchVideoReviewsPiped(
   movieTitle: string,
   movieYear?: number,
   max: number = 3
 ): Promise<VideoReview[]> {
-  if (!YOUTUBE_KEY) return [];
-  
   const yearStr = movieYear ? ` ${movieYear}` : "";
-  const queries = [
-    `${movieTitle}${yearStr} movie review`,
-    `${movieTitle} film review${yearStr}`,
-  ];
+  const query = `${movieTitle}${yearStr} movie review`;
+  const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
 
-  for (const query of queries) {
+  for (const instance of PIPED_INSTANCES) {
     try {
-      const params = new URLSearchParams({
-        part: "snippet",
-        q: query,
-        type: "video",
-        maxResults: "20",
-        order: "relevance",
-        relevanceLanguage: "en",
-        videoEmbeddable: "true",
-        key: YOUTUBE_KEY,
-      });
-
+      const params = new URLSearchParams({ q: query, filter: "videos" });
       const res = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?${params}`,
-        { signal: AbortSignal.timeout(5000) }
+        `https://${instance}/search?${params}`,
+        { signal: AbortSignal.timeout(8000) }
       );
       if (!res.ok) continue;
 
       const data = await res.json();
+      const items = data.items || data.results || [];
 
-      const all = (data.items || [])
-        .map((item: any) => ({
-          video_id: item.id?.videoId || "",
-          title: item.snippet?.title || "",
-          channel: item.snippet?.channelTitle || "",
-          thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
-          published: item.snippet?.publishedAt || "",
-        }))
-        .filter((v: any) => v.video_id);
-
-      const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
-      const items = all
-        .filter((v: any) => {
+      const reviews = items
+        .map((item: any) => {
+          // Piped returns url as "/watch?v=VIDEO_ID"
+          const videoId = item.url?.replace("/watch?v=", "") || "";
+          return {
+            video_id: videoId,
+            title: item.title || "",
+            channel: item.uploaderName || item.uploader || "",
+            thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          };
+        })
+        .filter((v: VideoReview) => {
+          if (!v.video_id) return false;
           const t = v.title.toLowerCase();
           const hasReviewWord = reviewWords.some((w: string) => t.includes(w));
           if (!hasReviewWord) return false;
@@ -340,9 +335,9 @@ async function fetchVideoReviewsYouTube(
         })
         .slice(0, max);
 
-      if (items.length > 0) return items;
+      if (reviews.length > 0) return reviews;
     } catch {
-      continue;
+      continue; // Try next instance
     }
   }
 
@@ -350,21 +345,93 @@ async function fetchVideoReviewsYouTube(
 }
 
 /**
- * Unified video review fetcher: RapidAPI primary → YouTube fallback.
- * Eliminates YouTube Data API quota dependency for normal operations.
- * Exported for use by patch-video-reviews endpoint.
+ * Fallback source 2: Invidious API (free, no API key, no quota).
+ * Another open-source YouTube frontend with public REST API.
+ * Returns videoId, title, author, videoThumbnails directly.
+ */
+const INVIDIOUS_INSTANCES = [
+  "invidious.snopyta.org",
+  "vid.puffyan.us",
+  "invidious.nerdvpn.de",
+];
+
+async function fetchVideoReviewsInvidious(
+  movieTitle: string,
+  movieYear?: number,
+  max: number = 3
+): Promise<VideoReview[]> {
+  const yearStr = movieYear ? ` ${movieYear}` : "";
+  const query = `${movieTitle}${yearStr} movie review`;
+  const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
+
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const params = new URLSearchParams({ q: query, type: "video" });
+      const res = await fetch(
+        `https://${instance}/api/v1/search?${params}`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.items || [];
+
+      const reviews = items
+        .map((item: any) => {
+          const videoId = item.videoId || "";
+          // Invidious provides videoThumbnails array
+          const thumb = item.videoThumbnails?.find((t: any) => t.quality === "high")?.url
+            || item.videoThumbnails?.[0]?.url
+            || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+          return {
+            video_id: videoId,
+            title: item.title || "",
+            channel: item.author || "",
+            thumbnail: thumb,
+          };
+        })
+        .filter((v: VideoReview) => {
+          if (!v.video_id) return false;
+          const t = v.title.toLowerCase();
+          const hasReviewWord = reviewWords.some((w: string) => t.includes(w));
+          if (!hasReviewWord) return false;
+          return isRelevantReview(v.title, movieTitle);
+        })
+        .slice(0, max);
+
+      if (reviews.length > 0) return reviews;
+    } catch {
+      continue; // Try next instance
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Unified video review fetcher — 3-tier fallback chain:
+ *   1. RapidAPI "YouTube Search and Download" (paid, 1M/mo)
+ *   2. Piped API (free, no key, community instances)
+ *   3. Invidious API (free, no key, community instances)
+ *
+ * YouTube Data API v3 removed — 100 searches/day was too limited.
+ * Exported for use by search route backfill + patch-video-reviews endpoint.
  */
 export async function fetchVideoReviews(
   movieTitle: string,
   movieYear?: number,
   max: number = 3
 ): Promise<VideoReview[]> {
-  // Try RapidAPI first (no quota concerns, 1M requests/month)
+  // 1. RapidAPI (primary — paid, reliable)
   const rapidResults = await fetchVideoReviewsRapidAPI(movieTitle, movieYear, max);
   if (rapidResults.length > 0) return rapidResults;
 
-  // Fallback to YouTube Data API (100 quota units per query)
-  return fetchVideoReviewsYouTube(movieTitle, movieYear, max);
+  // 2. Piped (free, no key, multi-instance failover)
+  const pipedResults = await fetchVideoReviewsPiped(movieTitle, movieYear, max);
+  if (pipedResults.length > 0) return pipedResults;
+
+  // 3. Invidious (free, no key, multi-instance failover)
+  return fetchVideoReviewsInvidious(movieTitle, movieYear, max);
 }
 
 // ─── Platform Search URLs ─────────────────────────────────────────────────
