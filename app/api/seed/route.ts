@@ -1,14 +1,14 @@
-// app/api/seed/route.ts — v5.3
-// Pre-seed the movie cache with 2600+ unique movies from lib/seed-movies.ts.
+// app/api/seed/route.ts — v5.5
+// Pre-seed the movie cache with 10,000+ unique movies from lib/seed-movies.ts.
 //
 // Usage:
 //   POST /api/seed?batch=1      → seed batch 1 only
 //   POST /api/seed?batch=0      → seed ALL batches (deduplicated)
 //   POST /api/seed?batch=2&offset=100&limit=50  → seed 50 movies starting at offset 100 in batch 2
 //
-// Each movie: Claude → TMDB → Verified Ratings → cache write (30-day TTL)
+// Each movie: Claude → TMDB (incl. video reviews via RapidAPI) → Verified Ratings → cache write (30-day TTL)
 // Rate: 1.5s delay between API calls to avoid rate limits.
-// Cost: ~$0.009/movie on Haiku ≈ $23 for full 2600 seed.
+// Cost: ~$0.009/movie on Haiku ≈ $90 for full 10K seed.
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
@@ -85,7 +85,7 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
       }),
     });
 
-    const tmdbPromise = enrichWithTMDB(title, undefined, undefined, { skipYouTube: true }).catch(() => null);
+    const tmdbPromise = enrichWithTMDB(title, undefined, undefined).catch(() => null);
 
     const apiRes = await claudePromise;
     if (!apiRes.ok) {
@@ -117,8 +117,7 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
     if (!tmdbResult || !tmdbResult.poster_path) {
       tmdbResult = await enrichWithTMDB(
         mv.title, mv.year,
-        mv.cast?.map((c: any) => ({ name: c.name, character: c.character })),
-        { skipYouTube: true }
+        mv.cast?.map((c: any) => ({ name: c.name, character: c.character }))
       ).catch(() => null);
     }
 
