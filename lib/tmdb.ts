@@ -1,11 +1,13 @@
-// lib/tmdb.ts
+// lib/tmdb.ts — v5.5
 // TMDB API integration for movie data: poster, cast, streaming, trailer, recommendations.
-// YouTube Data API integration for video reviews.
-// Called by /api/search and /api/enrich.
+// Video reviews: RapidAPI "Youtube Search and Download" (primary) → YouTube Data API (fallback).
+// Called by /api/search, /api/enrich, and /api/patch-video-reviews.
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
 const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY;
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+const RAPIDAPI_YT_HOST = "youtube-search-and-download.p.rapidapi.com";
 
 interface TMDBMovie {
   id: number;
@@ -198,7 +200,7 @@ async function fetchRecommendations(
   }
 }
 
-// ─── YouTube Video Reviews ────────────────────────────────────────────────
+// ─── YouTube Video Reviews (Multi-Source) ────────────────────────────────
 
 /**
  * Check if a video title is relevant to the movie we're looking for.
@@ -220,14 +222,77 @@ function isRelevantReview(videoTitle: string, movieTitle: string): boolean {
   return words.every(w => vt.includes(w));
 }
 
-async function fetchYouTubeReviews(
+/**
+ * Primary source: RapidAPI "Youtube Search and Download" (h0p3rwe)
+ * 1M requests/month on Pro ($5). No YouTube Data API quota burn.
+ */
+async function fetchVideoReviewsRapidAPI(
+  movieTitle: string,
+  movieYear?: number,
+  max: number = 3
+): Promise<VideoReview[]> {
+  if (!RAPIDAPI_KEY) return [];
+
+  const yearStr = movieYear ? ` ${movieYear}` : "";
+  const query = `${movieTitle}${yearStr} movie review`;
+
+  try {
+    const params = new URLSearchParams({ query });
+    const res = await fetch(
+      `https://${RAPIDAPI_YT_HOST}/search?${params}`,
+      {
+        headers: {
+          "x-rapidapi-key": RAPIDAPI_KEY,
+          "x-rapidapi-host": RAPIDAPI_YT_HOST,
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const items = data.contents || data.items || [];
+
+    const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
+
+    const reviews = items
+      .filter((item: any) => item.video) // RapidAPI wraps in { video: {...} }
+      .map((item: any) => {
+        const v = item.video;
+        return {
+          video_id: v.videoId || "",
+          title: v.title || "",
+          channel: v.author || v.channelName || "",
+          thumbnail: v.thumbnails?.[0]?.url || v.thumbnail || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+        };
+      })
+      .filter((v: VideoReview) => {
+        if (!v.video_id) return false;
+        const t = v.title.toLowerCase();
+        const hasReviewWord = reviewWords.some((w: string) => t.includes(w));
+        if (!hasReviewWord) return false;
+        return isRelevantReview(v.title, movieTitle);
+      })
+      .slice(0, max);
+
+    return reviews;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fallback source: YouTube Data API v3 (original implementation).
+ * Only used when RapidAPI is unavailable. Burns 100 quota units per query.
+ */
+async function fetchVideoReviewsYouTube(
   movieTitle: string,
   movieYear?: number,
   max: number = 3
 ): Promise<VideoReview[]> {
   if (!YOUTUBE_KEY) return [];
   
-  // Try multiple query strategies
   const yearStr = movieYear ? ` ${movieYear}` : "";
   const queries = [
     `${movieTitle}${yearStr} movie review`,
@@ -265,7 +330,6 @@ async function fetchYouTubeReviews(
         }))
         .filter((v: any) => v.video_id);
 
-      // Strict: "review" in title + movie title words match
       const reviewWords = ["review", "reaction", "breakdown", "critique", "analysis"];
       const items = all
         .filter((v: any) => {
@@ -277,14 +341,30 @@ async function fetchYouTubeReviews(
         .slice(0, max);
 
       if (items.length > 0) return items;
-      // If no results from this query, try the next one
     } catch {
       continue;
     }
   }
 
-  // No verified results found with any query — show nothing
   return [];
+}
+
+/**
+ * Unified video review fetcher: RapidAPI primary → YouTube fallback.
+ * Eliminates YouTube Data API quota dependency for normal operations.
+ * Exported for use by patch-video-reviews endpoint.
+ */
+export async function fetchVideoReviews(
+  movieTitle: string,
+  movieYear?: number,
+  max: number = 3
+): Promise<VideoReview[]> {
+  // Try RapidAPI first (no quota concerns, 1M requests/month)
+  const rapidResults = await fetchVideoReviewsRapidAPI(movieTitle, movieYear, max);
+  if (rapidResults.length > 0) return rapidResults;
+
+  // Fallback to YouTube Data API (100 quota units per query)
+  return fetchVideoReviewsYouTube(movieTitle, movieYear, max);
 }
 
 // ─── Platform Search URLs ─────────────────────────────────────────────────
@@ -437,7 +517,7 @@ export async function enrichWithTMDB(
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
-        options?.skipYouTube ? Promise.resolve([]) : fetchYouTubeReviews(title, year, 3),
+        options?.skipYouTube ? Promise.resolve([]) : fetchVideoReviews(title, year, 3),
       ]);
 
     result.streaming = streaming;
