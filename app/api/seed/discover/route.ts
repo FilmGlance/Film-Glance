@@ -203,10 +203,12 @@ async function seedMovie(
     };
 
     const writes: Promise<any>[] = [
-      supabaseAdmin.from("movie_cache").upsert({ search_key: cacheKey, ...cacheData }),
+      Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: cacheKey, ...cacheData })).then(() => {}),
     ];
     if (officialKey !== cacheKey) {
-      writes.push(supabaseAdmin.from("movie_cache").upsert({ search_key: officialKey, ...cacheData }));
+      writes.push(
+        Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: officialKey, ...cacheData })).then(() => {})
+      );
     }
     await Promise.all(writes);
 
