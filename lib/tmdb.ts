@@ -1,7 +1,8 @@
-// lib/tmdb.ts — v5.6
+// lib/tmdb.ts — v5.7
 // TMDB API integration for movie data: poster, cast, streaming, trailer, recommendations.
 // Video reviews: RapidAPI "Youtube Search and Download" (primary) → Piped API → Invidious API.
 // YouTube Data API v3 removed — replaced by free, unlimited community APIs.
+// v5.7: Release date gate — getMovieReleaseInfo() + fetchComingSoonDetails() for unreleased films.
 // v5.6: Video review backfill on cache hits with empty reviews (search route).
 // Called by /api/search, /api/enrich, /api/seed, /api/seed/discover, /api/patch-video-reviews.
 
@@ -15,6 +16,7 @@ interface TMDBMovie {
   title: string;
   poster_path: string | null;
   release_date: string;
+  overview?: string;
 }
 
 interface TMDBCastMember {
@@ -685,5 +687,92 @@ export async function enrichWithTMDB(
     return result;
   } catch {
     return result;
+  }
+}
+
+// ─── Release Date Gate (v5.7) ────────────────────────────────────────────
+
+/**
+ * Quick TMDB lookup to check if a movie has been released yet.
+ * Used by the search route to gate unreleased movies before Claude is called.
+ * Saves an Anthropic API call and prevents hallucinated ratings.
+ */
+export async function getMovieReleaseInfo(
+  title: string,
+  year?: number
+): Promise<{
+  isReleased: boolean;
+  releaseDate: string | null;
+  tmdbId: number;
+  officialTitle: string;
+  overview: string;
+  posterPath: string | null;
+} | null> {
+  const movie = await searchMovie(title, year);
+  if (!movie) return null;
+
+  const releaseDate = movie.release_date || null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isReleased = releaseDate ? new Date(releaseDate) <= today : true; // Assume released if no date
+
+  return {
+    isReleased,
+    releaseDate,
+    tmdbId: movie.id,
+    officialTitle: movie.title,
+    overview: (movie as any).overview || "",
+    posterPath: movie.poster_path,
+  };
+}
+
+/**
+ * Fetch detailed movie info from TMDB for Coming Soon display.
+ * Gets genre, runtime, tagline, overview, and director — data that
+ * normally comes from Claude but is available from TMDB for unreleased films.
+ * Runs /movie/{id} and /movie/{id}/credits in parallel.
+ */
+export async function fetchComingSoonDetails(movieId: number): Promise<{
+  genres: string;
+  runtime: string | null;
+  tagline: string | null;
+  overview: string;
+  director: string | null;
+} | null> {
+  if (!TMDB_KEY) return null;
+
+  try {
+    const [detailRes, creditsRes] = await Promise.all([
+      fetch(`${TMDB_BASE}/movie/${movieId}?api_key=${TMDB_KEY}`, {
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(`${TMDB_BASE}/movie/${movieId}/credits?api_key=${TMDB_KEY}`, {
+        signal: AbortSignal.timeout(5000),
+      }),
+    ]);
+
+    let genres = "";
+    let runtime: string | null = null;
+    let tagline: string | null = null;
+    let overview = "";
+
+    if (detailRes.ok) {
+      const detail = await detailRes.json();
+      genres = (detail.genres || []).map((g: any) => g.name).join(" · ");
+      runtime = detail.runtime ? `${detail.runtime} min` : null;
+      tagline = detail.tagline || null;
+      overview = detail.overview || "";
+    }
+
+    let director: string | null = null;
+    if (creditsRes.ok) {
+      const credits = await creditsRes.json();
+      const dir = (credits.crew || []).find((c: any) => c.job === "Director");
+      if (dir) director = dir.name;
+    }
+
+    return { genres, runtime, tagline, overview, director };
+  } catch {
+    return null;
   }
 }
