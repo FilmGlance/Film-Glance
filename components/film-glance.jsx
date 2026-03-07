@@ -369,7 +369,7 @@ async function fetchMovieAPI(title, authToken) {
     if (!r.ok) return null;
 
     const mv = await r.json();
-    if (!mv.title || !mv.sources || mv.sources.length === 0) return null;
+    if (!mv.title || (!mv.coming_soon && (!mv.sources || mv.sources.length === 0))) return null;
 
     // Construct image URLs from TMDB paths
     // Always prefer TMDB poster_path
