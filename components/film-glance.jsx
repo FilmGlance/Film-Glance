@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "5.4";
+const FG_VERSION = "5.7";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -425,6 +425,11 @@ function normalizeResult(mv) {
   if (r.runtime && typeof r.runtime !== 'string') r.runtime = String(r.runtime) + " min";
   // Preserve disclaimer from API
   if (mv.disclaimer) r.disclaimer = mv.disclaimer;
+  // Preserve coming_soon fields from API (v5.7)
+  if (mv.coming_soon) {
+    r.coming_soon = true;
+    r.release_date = mv.release_date || null;
+  }
   // Preserve hot_take from API
   if (mv.hot_take && typeof mv.hot_take === 'object') {
     r.hot_take = {
@@ -715,7 +720,17 @@ export default function FilmGlance() {
         return;
       }
 
-      if (mv && mv.sources && mv.sources.length > 0) {
+      if (mv && mv.coming_soon) {
+        // v5.7: Unreleased movie — display Coming Soon page
+        try {
+          const res = normalizeResult(mv);
+          setResult(res);
+        } catch (parseErr) {
+          console.error("Coming soon parse error:", parseErr);
+          setResult({ notFound: true, query: q });
+        }
+        DB[q] = mv;
+      } else if (mv && mv.sources && mv.sources.length > 0) {
         try {
           const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
           setResult(res);
@@ -1153,7 +1168,166 @@ export default function FilmGlance() {
           )}
 
           {/* Result */}
-          {result && !result.notFound && (
+          {/* Coming Soon — Unreleased Movie (v5.7) */}
+          {result && !result.notFound && result.coming_soon && (
+            <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
+              <div style={{ padding: "24px 26px 22px" }}>
+                <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
+                  <div style={{ width: 130, height: 195, borderRadius: 12, overflow: "hidden", flexShrink: 0, boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)", animation: "fadeIn 0.5s both", position: "relative" }}>
+                    <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)", padding: "20px 8px 8px", display: "flex", justifyContent: "center" }}>
+                      <span style={{ fontSize: 7.5, letterSpacing: 2, fontWeight: 700, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace", background: "rgba(0,0,0,0.5)", padding: "3px 8px", borderRadius: 4 }}>Unreleased</span>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                    <div style={{ marginBottom: 8, animation: "fadeIn 0.5s 0.1s both" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06))", border: "1px solid rgba(255,215,0,0.25)" }}>
+                        <Zap size={11} color="#FFD700" />
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace" }}>Coming Soon</span>
+                      </span>
+                    </div>
+                    {result.tagline && (
+                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.22)", marginBottom: 7, animation: "fadeIn 0.6s 0.15s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                        "{result.tagline}"
+                      </p>
+                    )}
+                    <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(20px,3.2vw,28px)", fontWeight: 700, lineHeight: 1.12, marginBottom: 3, animation: "fadeIn 0.5s 0.2s both" }}>{result.title}</h2>
+                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.25s both" }}>
+                      {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
+                    </p>
+                    {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.3s both" }}>{result.genre}</p>}
+                    {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.35s both" }}>{result.description}</p>}
+
+                    {/* Ratings Not Available */}
+                    <div style={{ animation: "fadeIn 0.5s 0.4s both" }}>
+                      <p style={{ fontSize: 10, letterSpacing: 1.8, color: "rgba(255,215,0,0.5)", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 10 }}>Ratings Not Yet Available</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ display: "flex", gap: 3 }}>
+                          {[0,1,2,3,4].map(i => (
+                            <div key={i} style={{ width: 22, height: 22, borderRadius: 3, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>—/10</span>
+                      </div>
+                      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 10, lineHeight: 1.5, fontStyle: "italic" }}>
+                        Scores from 9 major review sites will appear here after this film is released.
+                      </p>
+                    </div>
+
+                    {/* Release Date */}
+                    {result.release_date && (
+                      <div style={{ background: "rgba(255,215,0,0.04)", border: "1px solid rgba(255,215,0,0.12)", borderRadius: 12, padding: "14px 18px", marginTop: 14, animation: "fadeIn 0.5s 0.45s both" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <Zap size={13} color="#FFD700" />
+                          <span style={{ fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#FFD700", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>Release Date</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, color: "#fff" }}>
+                            {new Date(result.release_date + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                          </span>
+                          {(() => {
+                            const days = Math.ceil((new Date(result.release_date + "T00:00:00") - new Date()) / (1000 * 60 * 60 * 24));
+                            return days > 0 ? <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono',monospace" }}>({days} days away)</span> : null;
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Trailer button if available */}
+                    {result.trailer_key && (
+                      <div style={{ marginTop: 14, animation: "fadeIn 0.5s 0.5s both" }}>
+                        <button
+                          onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            padding: "8px 16px", borderRadius: 8,
+                            background: "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))",
+                            border: "1px solid rgba(255,215,0,0.2)",
+                            color: "#FFD700", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            transition: "all 0.25s",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.18),rgba(255,165,0,0.1))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.4)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; }}
+                        >
+                          <Play size={11} fill="#FFD700" stroke="#FFD700" />
+                          Watch Trailer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cast section for unreleased movies */}
+              {result.cast && result.cast.length > 0 && (
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.035)", padding: "16px 26px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <Users size={13} color="#FFD700" />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5 }}>Cast</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {result.cast.slice(0, 8).map((c, i) => {
+                      const img = c.img || (c.profile_path ? IMG + "w185" + c.profile_path : "");
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, animation: `fadeIn 0.4s ${i * 0.05}s both` }}>
+                          {img ? (
+                            <img src={img} alt={c.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1px solid rgba(255,255,255,0.06)" }} />
+                          ) : (
+                            <div style={{ width: 36, height: 36, borderRadius: "50%", background: `hsl(${hash(c.name || "A") % 360}, 30%, 18%)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                              {(c.name || "?")[0]}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#fff" }}>{c.name}</div>
+                            <div style={{ fontSize: 10, color: "#555" }}>{c.character}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Streaming / Where to Watch if available */}
+              {result.streaming && result.streaming.length > 0 && (
+                <Accordion icon={<Tv size={13} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                  <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
+                  </div>
+                </Accordion>
+              )}
+
+              {/* Recommendations if available */}
+              {result.recommendations && result.recommendations.length > 0 && (
+                <Accordion icon={<Film size={13} />} label="You Might Also Like" open={true} toggle={() => {}}>
+                  <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
+                    {result.recommendations.map((rec, i) => (
+                      <button key={`${rec.title}-${i}`}
+                        onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
+                        style={{ flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left", transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both` }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
+                      >
+                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
+                          {rec.poster_path ? (
+                            <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Film size={18} style={{ color: "#222" }} /></div>
+                          )}
+                        </div>
+                        <div style={{ padding: "6px 8px 8px" }}>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Accordion>
+              )}
+            </div>
+          )}
+
+          {/* Normal result — Released Movie */}
+          {result && !result.notFound && !result.coming_soon && (
             <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
               <div style={{ padding: "24px 26px 22px" }}>
                 <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
