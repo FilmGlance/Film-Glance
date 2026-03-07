@@ -444,16 +444,16 @@ export async function POST(req: NextRequest) {
 
       // If stale, fire background refresh (non-blocking)
       if (isStale && ANTHROPIC_API_KEY) {
-        const isComingSoon = (movieData as any).coming_soon === true;
+        const isComingSoon = (cached.data as any).coming_soon === true;
         fireAndForget(async () => {
           if (isComingSoon) {
             // Re-check release date — movie might have released since last cache
             const freshRelease = await getMovieReleaseInfo(
-              (movieData.title as string) || query, (movieData.year as number) || undefined
+              ((cached.data as any).title as string) || query, ((cached.data as any).year as number) || undefined
             ).catch(() => null);
             if (freshRelease && !freshRelease.isReleased) {
               // Still unreleased — refresh Coming Soon data with fresh TMDB info
-              const freshMv = await buildComingSoonResponse(query, freshRelease, (movieData.year as number) || undefined);
+              const freshMv = await buildComingSoonResponse(query, freshRelease, ((cached.data as any).year as number) || undefined);
               const releaseExpiry = freshRelease.releaseDate
                 ? new Date(freshRelease.releaseDate).toISOString()
                 : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
