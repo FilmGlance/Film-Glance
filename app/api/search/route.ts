@@ -1,5 +1,10 @@
-// app/api/search/route.ts — v5.6
+// app/api/search/route.ts — v5.7
 // Semi-public search endpoint with 5-API verified ratings pipeline.
+//
+// v5.7 CHANGES:
+//   - Release date gate: TMDB release date checked BEFORE Claude is called.
+//     Unreleased movies return "Coming Soon" with TMDB data only (no hallucinated scores).
+//     Saves Anthropic API calls. Cache expires on release date for automatic refresh.
 //
 // v5.6 CHANGES:
 //   - Video review backfill: cache hits with empty video_reviews trigger
@@ -32,6 +37,7 @@
 //      → Stale cache: return instantly + background refresh
 //      → No cache: continue to pipeline
 //   5.5. Sequel resolution via TMDB (fast, ~200ms)
+//   5.75. Release date gate — if unreleased, return Coming Soon (v5.7)
 //   6. Parallel: Claude + TMDB + Verified Ratings (Promise.all)
 //   7. Assembly + cache write (fire-and-forget)
 
@@ -39,7 +45,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
-import { enrichWithTMDB, fetchVideoReviews } from "@/lib/tmdb";
+import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -123,6 +129,66 @@ function backfillVideoReviews(cacheKey: string, movieData: Record<string, unknow
 }
 
 // ── Shared pipeline functions ────────────────────────────────────────────────
+
+/**
+ * v5.7: Build a Coming Soon response for unreleased movies.
+ * Uses TMDB data only — no Claude call (prevents hallucinated ratings).
+ * Returns movie data with coming_soon: true flag and no scores.
+ */
+async function buildComingSoonResponse(
+  queryTitle: string,
+  releaseInfo: { tmdbId: number; officialTitle: string; releaseDate: string | null; overview: string; posterPath: string | null },
+  yearHint?: number
+): Promise<any> {
+  // Fetch details (genre, runtime, tagline, director) + enrichment (poster, cast, trailer, streaming, recs)
+  const [details, tmdb] = await Promise.all([
+    fetchComingSoonDetails(releaseInfo.tmdbId),
+    enrichWithTMDB(releaseInfo.officialTitle, yearHint, undefined, { skipYouTube: true }).catch(() => null),
+  ]);
+
+  const mv: any = {
+    title: releaseInfo.officialTitle,
+    year: yearHint || (releaseInfo.releaseDate ? parseInt(releaseInfo.releaseDate.substring(0, 4)) : 0),
+    genre: details?.genres || "",
+    director: details?.director || "",
+    runtime: details?.runtime || null,
+    tagline: details?.tagline || null,
+    description: details?.overview || releaseInfo.overview || "",
+    release_date: releaseInfo.releaseDate,
+    coming_soon: true,
+    sources: [],
+    cast: [],
+    streaming: [],
+    recommendations: [],
+    video_reviews: [],
+    trailer_key: null,
+    poster: null,
+    poster_path: null,
+  };
+
+  // Apply TMDB enrichment
+  if (tmdb) {
+    if (tmdb.poster_path) {
+      mv.poster_path = tmdb.poster_path;
+      mv.poster = `https://image.tmdb.org/t/p/w500${tmdb.poster_path}`;
+    }
+    if (tmdb.cast && tmdb.cast.length > 0) {
+      mv.cast = tmdb.cast.map((tc) => ({
+        name: tc.name,
+        character: tc.character,
+        profile_path: tc.profile_path,
+      }));
+    }
+    if ((tmdb as any).streaming?.length > 0) mv.streaming = (tmdb as any).streaming;
+    if ((tmdb as any).trailer_key) mv.trailer_key = (tmdb as any).trailer_key;
+    if ((tmdb as any).recommendations?.length > 0) mv.recommendations = (tmdb as any).recommendations;
+  } else if (releaseInfo.posterPath) {
+    mv.poster_path = releaseInfo.posterPath;
+    mv.poster = `https://image.tmdb.org/t/p/w500${releaseInfo.posterPath}`;
+  }
+
+  return mv;
+}
 
 async function runFullPipeline(
   queryForClaude: string,
@@ -378,7 +444,33 @@ export async function POST(req: NextRequest) {
 
       // If stale, fire background refresh (non-blocking)
       if (isStale && ANTHROPIC_API_KEY) {
+        const isComingSoon = (cached.data as any).coming_soon === true;
         fireAndForget(async () => {
+          if (isComingSoon) {
+            // Re-check release date — movie might have released since last cache
+            const freshRelease = await getMovieReleaseInfo(
+              ((cached.data as any).title as string) || query, ((cached.data as any).year as number) || undefined
+            ).catch(() => null);
+            if (freshRelease && !freshRelease.isReleased) {
+              // Still unreleased — refresh Coming Soon data with fresh TMDB info
+              const freshMv = await buildComingSoonResponse(query, freshRelease, ((cached.data as any).year as number) || undefined);
+              const releaseExpiry = freshRelease.releaseDate
+                ? new Date(freshRelease.releaseDate).toISOString()
+                : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+              await supabaseAdmin.from("movie_cache").upsert({
+                search_key: query,
+                data: freshMv,
+                source: "coming-soon",
+                hit_count: (cached.hit_count || 0),
+                cached_at: new Date().toISOString(),
+                expires_at: releaseExpiry,
+              });
+              console.log(`[bg-refresh] ✓ Coming soon "${query}" refreshed, still unreleased until ${releaseExpiry}`);
+              return;
+            }
+            // Movie is now released! Fall through to full pipeline
+            console.log(`[bg-refresh] "${query}" has released — running full pipeline`);
+          }
           console.log(`[bg-refresh] Starting for "${query}"`);
           const start = Date.now();
           const mv = await runFullPipeline(query, query, undefined);
@@ -399,9 +491,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...movieData,
-        score: calcScore((movieData.sources as any[]) || []),
-        disclaimer: RATINGS_DISCLAIMER,
-        _source: isStale ? "swr" : "cache",
+        ...(!(movieData as any).coming_soon && {
+          score: calcScore((movieData.sources as any[]) || []),
+          disclaimer: RATINGS_DISCLAIMER,
+        }),
+        _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
       });
     }
 
@@ -451,12 +545,70 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             ...movieData,
-            score: calcScore((movieData.sources as any[]) || []),
-            disclaimer: RATINGS_DISCLAIMER,
-            _source: isStale ? "swr" : "cache",
+            ...(!(movieData as any).coming_soon && {
+              score: calcScore((movieData.sources as any[]) || []),
+              disclaimer: RATINGS_DISCLAIMER,
+            }),
+            _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
           });
         }
       } catch { /* continue to API */ }
+    }
+
+    // 5.75. Release date gate — check if movie is unreleased (v5.7)
+    //       If TMDB knows the movie but it hasn't been released yet,
+    //       return a "Coming Soon" response with TMDB data only.
+    //       This prevents Claude from hallucinating ratings for unreleased films.
+    const releaseTitle = sequelResolution ? resolvedTitle : query;
+    const releaseInfo = await getMovieReleaseInfo(releaseTitle, resolvedYear).catch(() => null);
+
+    if (releaseInfo && !releaseInfo.isReleased) {
+      console.log(`[coming-soon] "${releaseTitle}" releases ${releaseInfo.releaseDate} — skipping Claude`);
+
+      const comingSoonMv = await buildComingSoonResponse(releaseTitle, releaseInfo, resolvedYear);
+
+      // Cache with TTL set to release date (auto-expires when movie releases)
+      if (supabaseAvailable) {
+        const releaseExpiry = releaseInfo.releaseDate
+          ? new Date(releaseInfo.releaseDate).toISOString()
+          : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days fallback
+
+        fireAndForget(async () => {
+          const cacheData = {
+            data: comingSoonMv,
+            source: "coming-soon",
+            hit_count: 0,
+            cached_at: new Date().toISOString(),
+            expires_at: releaseExpiry,
+          };
+
+          const normalize = (s: string) => s.toLowerCase().trim()
+            .replace(/^(the|a|an)\s+/i, "")
+            .replace(/[''`:;!?.,"()]/g, "").replace(/\s+/g, " ").trim();
+
+          const keys = new Set<string>();
+          keys.add(query);
+          if (sequelResolution) keys.add(normalize(resolvedTitle));
+          keys.add(normalize(releaseInfo.officialTitle));
+
+          const writes: Promise<any>[] = [];
+          for (const key of keys) {
+            writes.push(
+              Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData })).then(() => {})
+            );
+          }
+          writes.push(
+            Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: "coming-soon", ip_address: ip })).then(() => {})
+          );
+          await Promise.all(writes);
+          console.log(`[coming-soon] ✓ Cached "${releaseInfo.officialTitle}" until ${releaseExpiry}`);
+        }, "coming-soon-cache");
+      }
+
+      return NextResponse.json({
+        ...comingSoonMv,
+        _source: "coming-soon",
+      });
     }
 
     // 6. Full pipeline — Claude + TMDB + Verified Ratings in parallel
