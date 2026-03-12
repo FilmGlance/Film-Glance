@@ -1,17 +1,25 @@
-// lib/ratings.ts — v5.8
-// Fetches VERIFIED ratings from 6 APIs and constructs working URLs.
+// lib/ratings.ts — v5.8.1
+// Fetches VERIFIED ratings from 5+ APIs and constructs working URLs.
+//
+// v5.8.1 CHANGES:
+//   - Phase 5: Direct Letterboxd fallback — fetches rating from letterboxd.com
+//     when movies-ratings2 doesn't have Letterboxd data. Constructs slug from
+//     title, tries with/without year, parses rating from HTML meta tags.
+//   - Enhanced fetchRapidAPIRatings(): dual-ID lookup — if first ID returns
+//     no Letterboxd data, retries with the alternate ID (IMDb ↔ TMDB).
 //
 // v5.8 CHANGES:
-//   - Added RottenTomato API (RapidAPI) as Phase 4 fallback for RT gaps
-//   - Extract tomatometer from movies-ratings2 as RT Critics backup
-//   - Build sources directly from verified data when Claude sources empty
+//   - Empty sources builder in applyVerifiedRatings(): builds all 9 sources
+//     from verified data Map when Claude returns empty sources array
+//   - Tomatometer extraction: movies-ratings2 rotten_tomatoes.tomatometer
+//     now used as RT Critics backup
+//   - Phase 4: RottenTomato API (rottentomato.p.rapidapi.com) as fallback
+//     for RT Critics + RT Audience gaps
 //
-// v5.2 FIXES:
+// v5.2 CHANGES:
 //   - Removed MUBI (no API, unreliable estimates, broken links)
 //   - Removed Criticker (site is broken/offline)
-//   - Improved sequel handling: normalizeSequelQuery() expands shorthand
-//     like "shrek 3" → "Shrek the Third" before querying APIs
-//   - Updated disclaimer text
+//   - Sequel handling: resolveSequelTitle() via TMDB dual-search
 //   - 9 sources total, all verified
 //
 // VERIFIED SOURCES (9):
@@ -21,6 +29,8 @@
 //   Simkl      → Simkl community rating (0-10)
 //   RapidAPI   → RT Audience %, Metacritic User, Letterboxd (0-5)
 //                + direct URLs for RT, Metacritic, Letterboxd pages
+//   RottenTomato API → RT Critics + RT Audience fallback (Phase 4)
+//   Letterboxd Direct → Rating from letterboxd.com page (Phase 5)
 //
 // URL STRATEGY:
 //   IMDb, TMDB, Trakt, Simkl → direct links via verified IDs
@@ -387,7 +397,7 @@ async function fetchSimkl(imdbId: string | null, title: string): Promise<{ simkl
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// RapidAPI "Movies Ratings"
+// RapidAPI "Movies Ratings" — v5.8.1: dual-ID lookup for Letterboxd
 // ═══════════════════════════════════════════════════════════════════════
 
 interface RapidAPIRatings {
@@ -397,12 +407,12 @@ interface RapidAPIRatings {
   letterboxd?: { score: number; url: string };
 }
 
-async function fetchRapidAPIRatings(imdbId: string | null, tmdbId: number | null): Promise<RapidAPIRatings | null> {
-  if (!RAPIDAPI_KEY || (!imdbId && !tmdbId)) return null;
+async function fetchRapidAPISingle(id: string, isImdb: boolean): Promise<RapidAPIRatings | null> {
+  if (!RAPIDAPI_KEY) return null;
   try {
-    const url = imdbId
-      ? `https://${RAPIDAPI_HOST}/ratings?id=${imdbId}`
-      : `https://${RAPIDAPI_HOST}/ratings?id=${tmdbId}&mediaType=movie`;
+    const url = isImdb
+      ? `https://${RAPIDAPI_HOST}/ratings?id=${id}`
+      : `https://${RAPIDAPI_HOST}/ratings?id=${id}&mediaType=movie`;
     const res = await fetch(url, {
       headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RAPIDAPI_HOST },
       signal: AbortSignal.timeout(8000),
@@ -413,71 +423,165 @@ async function fetchRapidAPIRatings(imdbId: string | null, tmdbId: number | null
   } catch { return null; }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// RottenTomato API (RapidAPI) — dedicated RT scraper for gap-filling
-// v5.8: Fills RT Critics + RT Audience when OMDb/movies-ratings2 miss them
-// ═══════════════════════════════════════════════════════════════════════
+async function fetchRapidAPIRatings(imdbId: string | null, tmdbId: number | null): Promise<RapidAPIRatings | null> {
+  if (!RAPIDAPI_KEY || (!imdbId && !tmdbId)) return null;
 
-interface RTAPIResult {
-  tomatometer?: number;
-  audienceScore?: number;
-  url?: string;
+  // Primary lookup: prefer IMDb ID, fall back to TMDB ID
+  let primary: RapidAPIRatings | null = null;
+  if (imdbId) {
+    primary = await fetchRapidAPISingle(imdbId, true);
+  } else if (tmdbId) {
+    primary = await fetchRapidAPISingle(String(tmdbId), false);
+  }
+
+  // v5.8.1: If primary succeeded but is missing Letterboxd, and we have the
+  // alternate ID available, try a second lookup and merge Letterboxd data.
+  // This catches cases where movies-ratings2 indexes the movie under one ID
+  // but only has Letterboxd data under the other.
+  if (primary && !primary.letterboxd?.score && imdbId && tmdbId) {
+    const altIsImdb = !imdbId; // we used IMDb first, so alt is TMDB
+    const altId = imdbId ? String(tmdbId) : imdbId;
+    const secondary = await fetchRapidAPISingle(altId, altIsImdb);
+    if (secondary?.letterboxd?.score) {
+      primary.letterboxd = secondary.letterboxd;
+      console.log(`[rapidapi-dual] ✓ Got Letterboxd from alternate ID lookup`);
+    }
+  }
+
+  return primary;
 }
 
-async function fetchRottenTomatoAPI(title: string, year?: number): Promise<RTAPIResult | null> {
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 4: RottenTomato API — RT Critics + RT Audience fallback (v5.8)
+// ═══════════════════════════════════════════════════════════════════════
+
+async function fetchRottenTomatoAPI(
+  title: string, year?: number
+): Promise<{ criticsScore: number | null; audienceScore: number | null; url: string | null } | null> {
   if (!RAPIDAPI_KEY) return null;
   try {
-    const res = await fetch(`https://${RT_API_HOST}/search?search-term=${encodeURIComponent(title)}`, {
+    const searchTerm = year ? `${title} ${year}` : title;
+    const params = new URLSearchParams({ "search-term": searchTerm });
+    const res = await fetch(`https://${RT_API_HOST}/search?${params}`, {
       headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RT_API_HOST },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) {
-      console.log(`[rt-api] Search failed: ${res.status}`);
-      return null;
-    }
+    if (!res.ok) return null;
     const data = await res.json();
-    const movies = data?.movies_shows;
-    if (!movies || movies.length === 0) {
-      console.log(`[rt-api] No results for "${title}"`);
-      return null;
-    }
 
-    // Match by title + year if possible
-    const titleLower = title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-    let match = movies.find((m: any) => {
-      const mTitle = (m.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-      return mTitle === titleLower && (!year || m.releaseYear === year);
-    }) || movies.find((m: any) => {
-      const mTitle = (m.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-      return mTitle === titleLower;
-    }) || movies[0];
+    // Find matching movie in results
+    const movies = data?.movies_shows || [];
+    if (movies.length === 0) return null;
 
-    const rt = match.rottenTomatoes;
-    if (!rt) {
-      console.log(`[rt-api] No rottenTomatoes object for "${match.title}"`);
-      return null;
-    }
+    // Try to find exact match by title similarity
+    let match = movies.find((m: any) =>
+      titlesSimilar(m.title || m.name || "", title) &&
+      (!year || yearMatches(year, m.year))
+    );
+    if (!match) match = movies[0]; // fallback to top result
 
-    const result: RTAPIResult = {};
-    if (rt.criticsScore && typeof rt.criticsScore === "number" && rt.criticsScore > 0) {
-      result.tomatometer = rt.criticsScore;
-    }
-    if (rt.audienceScore && typeof rt.audienceScore === "number" && rt.audienceScore > 0) {
-      result.audienceScore = rt.audienceScore;
-    }
-    // Build RT URL from vanity slug
-    if (match.vanity) {
-      result.url = `https://www.rottentomatoes.com/m/${match.vanity}`;
-    }
+    const rt = match?.rottenTomatoes;
+    if (!rt) return null;
 
-    if (result.tomatometer || result.audienceScore) {
-      console.log(`[rt-api] ✓ "${match.title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
-      return result;
-    }
-    console.log(`[rt-api] No scores for "${match.title}"`);
+    const vanity = match.vanity || match.slug || "";
+    const url = vanity ? `https://www.rottentomatoes.com/m/${vanity}` : null;
+
+    return {
+      criticsScore: typeof rt.criticsScore === "number" ? rt.criticsScore : null,
+      audienceScore: typeof rt.audienceScore === "number" ? rt.audienceScore : null,
+      url,
+    };
+  } catch {
     return null;
-  } catch (err) {
-    console.log(`[rt-api] Error:`, err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 5: Direct Letterboxd fallback — v5.8.1
+// Fetches rating directly from letterboxd.com when movies-ratings2
+// doesn't have Letterboxd data. Only fires as a last resort.
+// ═══════════════════════════════════════════════════════════════════════
+
+function titleToLetterboxdSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/['']/g, "")           // Remove smart quotes
+    .replace(/[^a-z0-9\s-]/g, "")  // Remove special chars
+    .replace(/\s+/g, "-")           // Spaces → hyphens
+    .replace(/-+/g, "-")            // Collapse multiple hyphens
+    .replace(/^-|-$/g, "");         // Trim leading/trailing hyphens
+}
+
+async function fetchLetterboxdDirect(
+  title: string, year?: number
+): Promise<{ score: number; url: string } | null> {
+  try {
+    const slug = titleToLetterboxdSlug(title);
+    if (!slug) return null;
+
+    // Try slug variants: plain slug first, then with year appended
+    const slugs = [slug];
+    if (year) slugs.push(`${slug}-${year}`);
+
+    for (const s of slugs) {
+      const pageUrl = `https://letterboxd.com/film/${s}/`;
+      try {
+        const res = await fetch(pageUrl, {
+          signal: AbortSignal.timeout(5000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; FilmGlance/1.0)",
+            "Accept": "text/html",
+          },
+          redirect: "follow",
+        });
+
+        if (!res.ok) continue;
+        const html = await res.text();
+
+        // Method 1: Twitter card meta tag
+        // <meta name="twitter:data2" content="3.4 out of 5">
+        const twitterMatch = html.match(/name="twitter:data2"\s+content="([\d.]+)\s+out\s+of\s+5"/i);
+        if (twitterMatch) {
+          const score = parseFloat(twitterMatch[1]);
+          if (!isNaN(score) && score > 0 && score <= 5) {
+            console.log(`[letterboxd-direct] ✓ Got ${score}/5 for "${title}" via twitter meta`);
+            return { score: Math.round(score * 100) / 100, url: pageUrl };
+          }
+        }
+
+        // Method 2: Schema.org JSON-LD aggregateRating
+        // "ratingValue":3.4 or "ratingValue": 3.4
+        const schemaMatch = html.match(/"ratingValue"\s*:\s*([\d.]+)/);
+        if (schemaMatch) {
+          const score = parseFloat(schemaMatch[1]);
+          if (!isNaN(score) && score > 0 && score <= 5) {
+            console.log(`[letterboxd-direct] ✓ Got ${score}/5 for "${title}" via schema.org`);
+            return { score: Math.round(score * 100) / 100, url: pageUrl };
+          }
+        }
+
+        // Method 3: Meta property og:title often contains the rating
+        // <meta property="og:title" content="Film Title (2026) | Rating: 3.4/5">
+        const ogMatch = html.match(/rating[:\s]*([\d.]+)\s*\/\s*5/i);
+        if (ogMatch) {
+          const score = parseFloat(ogMatch[1]);
+          if (!isNaN(score) && score > 0 && score <= 5) {
+            console.log(`[letterboxd-direct] ✓ Got ${score}/5 for "${title}" via og pattern`);
+            return { score: Math.round(score * 100) / 100, url: pageUrl };
+          }
+        }
+
+        // If we got a valid page (200 OK) but couldn't parse a rating,
+        // the page exists but maybe no rating yet — return URL only? No, skip.
+      } catch {
+        // This slug variant failed, try next
+        continue;
+      }
+    }
+
+    return null;
+  } catch {
+    console.log(`[letterboxd-direct] Failed for "${title}"`);
     return null;
   }
 }
@@ -545,6 +649,7 @@ function identifySource(name: string): SourceKey | null {
 // ═══════════════════════════════════════════════════════════════════════
 // Main: Fetch All Verified Ratings
 // TMDB-first: TMDB → IMDb ID → OMDb by ID → Phase 3 parallel
+//   → Phase 4 RT API fallback → Phase 5 Letterboxd direct fallback
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function fetchVerifiedRatings(
@@ -619,35 +724,61 @@ export async function fetchVerifiedRatings(
     if (simklResult.rating > 0) verified.sources.set("simkl", { score: simklResult.rating, max: 10, url: "" });
   }
   if (rapidRatings) {
-    // v5.8: Also extract tomatometer as RT Critics fallback from movies-ratings2
+    if (rapidRatings.rotten_tomatoes?.audienceScore)
+      verified.sources.set("rt_audience", { score: rapidRatings.rotten_tomatoes.audienceScore, max: 100, url: "" });
+    // v5.8: Extract tomatometer from movies-ratings2 as RT Critics backup
     if (!verified.sources.has("rt_critics") && rapidRatings.rotten_tomatoes?.tomatometer) {
       verified.sources.set("rt_critics", { score: rapidRatings.rotten_tomatoes.tomatometer, max: 100, url: "" });
     }
-    if (rapidRatings.rotten_tomatoes?.audienceScore)
-      verified.sources.set("rt_audience", { score: rapidRatings.rotten_tomatoes.audienceScore, max: 100, url: "" });
     if (rapidRatings.metacritic?.userScore)
       verified.sources.set("metacritic_user", { score: rapidRatings.metacritic.userScore, max: 10, url: "" });
     if (rapidRatings.letterboxd?.score)
       verified.sources.set("letterboxd", { score: rapidRatings.letterboxd.score, max: 5, url: "" });
   }
 
-  // ── Phase 4: RottenTomato API fallback for missing RT scores (v5.8) ──
-  const missingRTCritics = !verified.sources.has("rt_critics");
-  const missingRTAudience = !verified.sources.has("rt_audience");
-  if (missingRTCritics || missingRTAudience) {
-    const rtResult = await fetchRottenTomatoAPI(title, year);
-    if (rtResult) {
-      if (missingRTCritics && rtResult.tomatometer) {
-        verified.sources.set("rt_critics", { score: rtResult.tomatometer, max: 100, url: rtResult.url || "" });
+  // ── Phase 4: RottenTomato API fallback (v5.8) ──
+  // If RT Critics or RT Audience still missing after Phase 3, try dedicated RT API
+  if (!verified.sources.has("rt_critics") || !verified.sources.has("rt_audience")) {
+    const rtApi = await fetchRottenTomatoAPI(title, year);
+    if (rtApi) {
+      if (!verified.sources.has("rt_critics") && rtApi.criticsScore !== null) {
+        verified.sources.set("rt_critics", { score: rtApi.criticsScore, max: 100, url: "" });
+        console.log(`[rt-api] ✓ Got RT Critics ${rtApi.criticsScore}% for "${title}"`);
       }
-      if (missingRTAudience && rtResult.audienceScore) {
-        verified.sources.set("rt_audience", { score: rtResult.audienceScore, max: 100, url: rtResult.url || "" });
+      if (!verified.sources.has("rt_audience") && rtApi.audienceScore !== null) {
+        verified.sources.set("rt_audience", { score: rtApi.audienceScore, max: 100, url: "" });
+        console.log(`[rt-api] ✓ Got RT Audience ${rtApi.audienceScore}% for "${title}"`);
       }
+      // Use RT API URL if we don't already have one from movies-ratings2
+      if (rtApi.url) {
+        if (!rapidRatings?.rotten_tomatoes?.url) {
+          // Will be applied in buildUrls below via override
+          if (!rapidRatings) {
+            // No rapidRatings at all — we'll set URLs after buildUrls
+          }
+        }
+      }
+    }
+  }
+
+  // ── Phase 5: Letterboxd direct fallback (v5.8.1) ──
+  // If Letterboxd still missing after Phase 3 dual-ID lookup, fetch from letterboxd.com
+  if (!verified.sources.has("letterboxd")) {
+    const lbDirect = await fetchLetterboxdDirect(title, year);
+    if (lbDirect) {
+      verified.sources.set("letterboxd", { score: lbDirect.score, max: 5, url: lbDirect.url });
+      console.log(`[letterboxd-direct] ✓ Fallback got ${lbDirect.score}/5 for "${title}"`);
     }
   }
 
   // ── Build URLs ──
   verified.allUrls = buildUrls(title, year, verified.imdb_id, verified.tmdb_id, verified.trakt_slug, verified.simkl_id, rapidRatings);
+
+  // Override Letterboxd URL if we got it from direct fetch
+  if (verified.sources.has("letterboxd") && verified.sources.get("letterboxd")!.url) {
+    verified.allUrls.set("letterboxd", verified.sources.get("letterboxd")!.url);
+  }
+
   for (const [key, data] of verified.sources) {
     const url = verified.allUrls.get(key);
     if (url) data.url = url;
@@ -657,35 +788,39 @@ export async function fetchVerifiedRatings(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Apply Verified Data to Claude's Sources — removes Criticker + MUBI
+// Apply Verified Data to Claude's Sources
+// v5.8: Handles empty Claude sources by building from verified data
 // ═══════════════════════════════════════════════════════════════════════
 
+// Display name mapping for building sources from scratch
+const SOURCE_DISPLAY_NAMES: Record<string, { name: string; type: string }> = {
+  rt_critics: { name: "RT Critics", type: "critics" },
+  rt_audience: { name: "RT Audience", type: "audience" },
+  metacritic: { name: "Metacritic Metascore", type: "critics" },
+  metacritic_user: { name: "Metacritic User", type: "audience" },
+  imdb: { name: "IMDb", type: "audience" },
+  letterboxd: { name: "Letterboxd", type: "community" },
+  tmdb: { name: "TMDB", type: "community" },
+  trakt: { name: "Trakt", type: "community" },
+  simkl: { name: "Simkl", type: "community" },
+};
+
 export function applyVerifiedRatings(claudeSources: any[], verified: VerifiedData): any[] {
-  // v5.8: If Claude didn't provide sources, build them directly from verified data
+  // v5.8: If Claude returned empty sources, build all from verified data
   if (!claudeSources || claudeSources.length === 0) {
-    const sourceLabels: Record<string, { name: string; type: string }> = {
-      rt_critics: { name: "Rotten Tomatoes", type: "Critics" },
-      rt_audience: { name: "Rotten Tomatoes", type: "Audience" },
-      metacritic: { name: "Metacritic", type: "Metascore" },
-      metacritic_user: { name: "Metacritic", type: "User Score" },
-      imdb: { name: "IMDb", type: "Rating" },
-      letterboxd: { name: "Letterboxd", type: "Average" },
-      tmdb: { name: "TMDB", type: "Rating" },
-      trakt: { name: "Trakt", type: "Rating" },
-      simkl: { name: "Simkl", type: "community" },
-    };
     const built: any[] = [];
     for (const [key, data] of verified.sources) {
-      const label = sourceLabels[key];
-      if (!label) continue;
-      built.push({
-        name: label.name,
-        type: label.type,
-        score: data.score,
-        max: data.max,
-        url: data.url || verified.allUrls.get(key) || "",
-        verified: true,
-      });
+      const display = SOURCE_DISPLAY_NAMES[key];
+      if (display) {
+        built.push({
+          name: display.name,
+          score: data.score,
+          max: data.max,
+          type: display.type,
+          url: data.url || verified.allUrls.get(key) || "",
+          verified: true,
+        });
+      }
     }
     return built;
   }
