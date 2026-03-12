@@ -1575,7 +1575,6 @@ export default function FilmGlance() {
                   {(() => {
                     const count = result.cast.length;
                     const canEvenRows = count % 4 === 0 || count % 3 === 0;
-                    const perRow = count % 4 === 0 ? 4 : 3;
                     if (canEvenRows) {
                       return (
                         <div style={{ padding: "6px 18px 22px", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
@@ -1589,7 +1588,6 @@ export default function FilmGlance() {
                       </div>
                     );
                   })()}
-                  </div>
                 </Accordion>
               )}
 
