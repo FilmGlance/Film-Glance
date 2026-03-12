@@ -567,6 +567,35 @@ export async function fetchVerifiedRatings(
 // ═══════════════════════════════════════════════════════════════════════
 
 export function applyVerifiedRatings(claudeSources: any[], verified: VerifiedData): any[] {
+  // v5.8: If Claude didn't provide sources, build them directly from verified data
+  if (!claudeSources || claudeSources.length === 0) {
+    const sourceLabels: Record<string, { name: string; type: string }> = {
+      rt_critics: { name: "Rotten Tomatoes", type: "Critics" },
+      rt_audience: { name: "Rotten Tomatoes", type: "Audience" },
+      metacritic: { name: "Metacritic", type: "Metascore" },
+      metacritic_user: { name: "Metacritic", type: "User Score" },
+      imdb: { name: "IMDb", type: "Rating" },
+      letterboxd: { name: "Letterboxd", type: "Average" },
+      tmdb: { name: "TMDB", type: "Rating" },
+      trakt: { name: "Trakt", type: "Rating" },
+      simkl: { name: "Simkl", type: "community" },
+    };
+    const built: any[] = [];
+    for (const [key, data] of verified.sources) {
+      const label = sourceLabels[key];
+      if (!label) continue;
+      built.push({
+        name: label.name,
+        type: label.type,
+        score: data.score,
+        max: data.max,
+        url: data.url || verified.allUrls.get(key) || "",
+        verified: true,
+      });
+    }
+    return built;
+  }
+
   // Filter out Criticker (broken) and MUBI (no API, unreliable)
   const filtered = claudeSources.filter((s) => {
     const n = s.name?.toLowerCase() || "";
