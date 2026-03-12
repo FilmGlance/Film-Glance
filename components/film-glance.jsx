@@ -1172,8 +1172,8 @@ export default function FilmGlance() {
             {!result && !loading && (
               <div style={{ animation: "fadeIn 0.7s", marginBottom: 32 }}>
                 <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,5.5vw,48px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 12 }}>
-                  Every Film.<br />
-                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>One Rating at a Glance.</span>
+                  Every Movie Metric<br />
+                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
                 </h1>
                 <p style={{ color: "#4a4a4a", fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
@@ -1254,16 +1254,16 @@ export default function FilmGlance() {
                       </span>
                     </div>
                     {result.tagline && (
-                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.22)", marginBottom: 7, animation: "fadeIn 0.6s 0.15s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.45)", marginBottom: 7, animation: "fadeIn 0.6s 0.15s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                         "{result.tagline}"
                       </p>
                     )}
                     <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(20px,3.2vw,28px)", fontWeight: 700, lineHeight: 1.12, marginBottom: 3, animation: "fadeIn 0.5s 0.2s both" }}>{result.title}</h2>
-                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.25s both" }}>
+                    <p style={{ color: "#aaa", fontSize: 12, marginBottom: 2, animation: "fadeIn 0.5s 0.25s both" }}>
                       {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
                     </p>
-                    {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.3s both" }}>{result.genre}</p>}
-                    {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.35s both" }}>{result.description}</p>}
+                    {result.genre && <p style={{ color: "#666", fontSize: 11, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.3s both" }}>{result.genre}</p>}
+                    {result.description && <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.35s both" }}>{result.description}</p>}
 
                     {/* Ratings Not Available */}
                     <div style={{ animation: "fadeIn 0.5s 0.4s both" }}>
@@ -1403,7 +1403,7 @@ export default function FilmGlance() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                     {result.tagline && (
-                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.22)", marginBottom: 7, animation: "fadeIn 0.6s 0.1s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.45)", marginBottom: 7, animation: "fadeIn 0.6s 0.1s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                         "{result.tagline}"
                       </p>
                     )}
@@ -1421,12 +1421,12 @@ export default function FilmGlance() {
                         </button>
                       )}
                     </div>
-                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
+                    <p style={{ color: "#aaa", fontSize: 12, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
                       {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
                     </p>
-                    {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
-                    {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
-                    <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both", opacity: 0.85 }}>Averaged Movie Score Across Major Review Sites</p>
+                    {result.genre && <p style={{ color: "#666", fontSize: 11, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
+                    {result.description && <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
+                    <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both" }}>Averaged Movie Score Across Major Review Sites</p>
                     <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
                       <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
                       <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
@@ -1572,8 +1572,23 @@ export default function FilmGlance() {
 
               {result.cast && result.cast.length > 0 && (
                 <Accordion icon={<Users size={13} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
-                  <div style={{ padding: "6px 18px 22px", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-                    {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                  {(() => {
+                    const count = result.cast.length;
+                    const canEvenRows = count % 4 === 0 || count % 3 === 0;
+                    const perRow = count % 4 === 0 ? 4 : 3;
+                    if (canEvenRows) {
+                      return (
+                        <div style={{ padding: "6px 18px 22px", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                          {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="fg-scroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
+                        {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                      </div>
+                    );
+                  })()}
                   </div>
                 </Accordion>
               )}
@@ -1750,7 +1765,7 @@ export default function FilmGlance() {
             <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingScroll(true); }}
               onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.35), 0 0 40px rgba(255,215,0,0.12)"; e.currentTarget.style.width = "9px"; e.currentTarget.style.marginLeft = "-4.5px"; }}
               onMouseLeave={(e) => { e.currentTarget.style.boxShadow = `0 0 ${scrollPct > 0.85 ? "14px" : "6px"} ${scrollPct > 0.85 ? "rgba(255,107,0,0.5)" : "rgba(255,215,0,0.3)"}`; e.currentTarget.style.width = "7px"; e.currentTarget.style.marginLeft = "-3.5px"; }}
-              style={{ position: "absolute", top: `${scrollPct * 100}%`, width: 7, left: "50%", marginLeft: -3.5, height: 54, borderRadius: 4, background: `linear-gradient(180deg, #FFD700, ${scrollPct > 0.85 ? "#ff6b00" : "#E8A000"})`, boxShadow: `0 0 ${scrollPct > 0.85 ? "14px" : "6px"} ${scrollPct > 0.85 ? "rgba(255,107,0,0.5)" : "rgba(255,215,0,0.3)"}`, transition: isDraggingScroll ? "none" : "all 0.3s", transform: "translateY(-50%)", cursor: "default" }} />
+              style={{ position: "absolute", top: `${scrollPct * 100}%`, width: 7, left: "50%", marginLeft: -3.5, height: 80, borderRadius: 4, background: `linear-gradient(180deg, #FFD700, ${scrollPct > 0.85 ? "#ff6b00" : "#E8A000"})`, boxShadow: `0 0 ${scrollPct > 0.85 ? "14px" : "6px"} ${scrollPct > 0.85 ? "rgba(255,107,0,0.5)" : "rgba(255,215,0,0.3)"}`, transition: isDraggingScroll ? "none" : "all 0.3s", transform: "translateY(-50%)", cursor: "default" }} />
           </div>
           {scrollPct > 0.8 && (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 50, background: `linear-gradient(to top, rgba(255,215,0,${(scrollPct - 0.8) * 0.15}), transparent)`, pointerEvents: "none", zIndex: 150 }} />)}
         </>
