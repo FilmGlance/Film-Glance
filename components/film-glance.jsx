@@ -369,7 +369,7 @@ async function fetchMovieAPI(title, authToken) {
     if (!r.ok) return null;
 
     const mv = await r.json();
-    if (!mv.title || (!mv.coming_soon && (!mv.sources || mv.sources.length === 0))) return null;
+    if (!mv.title || (!mv.coming_soon && !mv.no_scores && (!mv.sources || mv.sources.length === 0))) return null;
 
     // Construct image URLs from TMDB paths
     // Always prefer TMDB poster_path
@@ -429,6 +429,10 @@ function normalizeResult(mv) {
   if (mv.coming_soon) {
     r.coming_soon = true;
     r.release_date = mv.release_date || null;
+  }
+  // Preserve no_scores flag from API (v5.8 — TMDB fallback for movies Claude can't process)
+  if (mv.no_scores) {
+    r.no_scores = true;
   }
   // Preserve hot_take from API
   if (mv.hot_take && typeof mv.hot_take === 'object') {
@@ -727,6 +731,16 @@ export default function FilmGlance() {
           setResult(res);
         } catch (parseErr) {
           console.error("Coming soon parse error:", parseErr);
+          setResult({ notFound: true, query: q });
+        }
+        DB[q] = mv;
+      } else if (mv && mv.no_scores) {
+        // v5.8: Released movie but Claude couldn't find ratings — display with TMDB data
+        try {
+          const res = normalizeResult(mv);
+          setResult(res);
+        } catch (parseErr) {
+          console.error("No-scores parse error:", parseErr);
           setResult({ notFound: true, query: q });
         }
         DB[q] = mv;
@@ -1169,21 +1183,23 @@ export default function FilmGlance() {
 
           {/* Result */}
           {/* Coming Soon — Unreleased Movie (v5.7) */}
-          {result && !result.notFound && result.coming_soon && (
+          {result && !result.notFound && (result.coming_soon || result.no_scores) && (
             <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
               <div style={{ padding: "24px 26px 22px" }}>
                 <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
                   <div style={{ width: 130, height: 195, borderRadius: 12, overflow: "hidden", flexShrink: 0, boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)", animation: "fadeIn 0.5s both", position: "relative" }}>
                     <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
+                    {result.coming_soon && (
                     <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)", padding: "20px 8px 8px", display: "flex", justifyContent: "center" }}>
                       <span style={{ fontSize: 7.5, letterSpacing: 2, fontWeight: 700, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace", background: "rgba(0,0,0,0.5)", padding: "3px 8px", borderRadius: 4 }}>Unreleased</span>
                     </div>
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                     <div style={{ marginBottom: 8, animation: "fadeIn 0.5s 0.1s both" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06))", border: "1px solid rgba(255,215,0,0.25)" }}>
                         <Zap size={11} color="#FFD700" />
-                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace" }}>Coming Soon</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace" }}>{result.coming_soon ? "Coming Soon" : "New Release"}</span>
                       </span>
                     </div>
                     {result.tagline && (
@@ -1210,12 +1226,14 @@ export default function FilmGlance() {
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>—/10</span>
                       </div>
                       <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 10, lineHeight: 1.5, fontStyle: "italic" }}>
-                        Scores from 9 major review sites will appear here after this film is released.
+                        {result.coming_soon
+                          ? "Scores from 9 major review sites will appear here after this film is released."
+                          : "Scores from 9 major review sites are being tracked and will appear here shortly."}
                       </p>
                     </div>
 
-                    {/* Release Date */}
-                    {result.release_date && (
+                    {/* Release Date — only for unreleased movies */}
+                    {result.coming_soon && result.release_date && (
                       <div style={{ background: "rgba(255,215,0,0.04)", border: "1px solid rgba(255,215,0,0.12)", borderRadius: 12, padding: "14px 18px", marginTop: 14, animation: "fadeIn 0.5s 0.45s both" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           <Zap size={13} color="#FFD700" />
@@ -1327,7 +1345,7 @@ export default function FilmGlance() {
           )}
 
           {/* Normal result — Released Movie */}
-          {result && !result.notFound && !result.coming_soon && (
+          {result && !result.notFound && !result.coming_soon && !result.no_scores && (
             <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
               <div style={{ padding: "24px 26px 22px" }}>
                 <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
