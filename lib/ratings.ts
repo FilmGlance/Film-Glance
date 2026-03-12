@@ -1,5 +1,10 @@
-// lib/ratings.ts — v5.2
-// Fetches VERIFIED ratings from 5 APIs and constructs working URLs.
+// lib/ratings.ts — v5.8
+// Fetches VERIFIED ratings from 6 APIs and constructs working URLs.
+//
+// v5.8 CHANGES:
+//   - Added RottenTomato API (RapidAPI) as Phase 4 fallback for RT gaps
+//   - Extract tomatometer from movies-ratings2 as RT Critics backup
+//   - Build sources directly from verified data when Claude sources empty
 //
 // v5.2 FIXES:
 //   - Removed MUBI (no API, unreliable estimates, broken links)
@@ -31,6 +36,7 @@ const SIMKL_CLIENT_ID = process.env.SIMKL_CLIENT_ID;
 const SIMKL_BASE = "https://api.simkl.com";
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const RAPIDAPI_HOST = "movies-ratings2.p.rapidapi.com";
+const RT_API_HOST = "rottentomato.p.rapidapi.com";
 
 export const RATINGS_DISCLAIMER =
   "Please note slight discrepancies between site ratings due to daily rating fluctuations.";
@@ -408,6 +414,99 @@ async function fetchRapidAPIRatings(imdbId: string | null, tmdbId: number | null
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// RottenTomato API (RapidAPI) — dedicated RT scraper for gap-filling
+// v5.8: Fills RT Critics + RT Audience when OMDb/movies-ratings2 miss them
+// ═══════════════════════════════════════════════════════════════════════
+
+interface RTAPIResult {
+  tomatometer?: number;
+  audienceScore?: number;
+  url?: string;
+}
+
+async function fetchRottenTomatoAPI(title: string, year?: number): Promise<RTAPIResult | null> {
+  if (!RAPIDAPI_KEY) return null;
+  try {
+    const query = year ? `${title} ${year}` : title;
+    const res = await fetch(`https://${RT_API_HOST}/search?query=${encodeURIComponent(query)}&limit=5`, {
+      headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RT_API_HOST },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      console.log(`[rt-api] Search failed: ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+
+    // Find the best match from search results
+    const movies = data?.movies || data?.results || (Array.isArray(data) ? data : []);
+    if (!movies || movies.length === 0) {
+      console.log(`[rt-api] No search results for "${title}"`);
+      return null;
+    }
+
+    // Try to match by title similarity
+    const titleLower = title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+    let match = movies.find((m: any) => {
+      const mTitle = (m.title || m.name || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+      return mTitle === titleLower;
+    }) || movies[0];
+
+    // Extract ratings — try multiple field name patterns
+    const result: RTAPIResult = {};
+
+    // Tomatometer (RT Critics)
+    const tomatometer = match.tomatoScore ?? match.tomatometer ?? match.meterScore ?? match.critics_score ?? match.tomatoMeter;
+    if (tomatometer && typeof tomatometer === "number" && tomatometer > 0) {
+      result.tomatometer = tomatometer;
+    }
+
+    // Audience Score
+    const audience = match.audienceScore ?? match.audience_score ?? match.popcornScore;
+    if (audience && typeof audience === "number" && audience > 0) {
+      result.audienceScore = audience;
+    }
+
+    // URL
+    result.url = match.url || match.vanity ? `https://www.rottentomatoes.com${match.url || match.vanity}` : undefined;
+
+    if (result.tomatometer || result.audienceScore) {
+      console.log(`[rt-api] ✓ Found "${match.title || title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
+      return result;
+    }
+
+    // If search didn't include scores, try the Movies endpoint with the movie's ID/slug
+    const movieId = match.id || match.vanity || match.url;
+    if (movieId) {
+      try {
+        const detailRes = await fetch(`https://${RT_API_HOST}/Movies?id=${encodeURIComponent(movieId)}`, {
+          headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RT_API_HOST },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          const t = detail.tomatoScore ?? detail.tomatometer ?? detail.meterScore ?? detail.critics_score;
+          const a = detail.audienceScore ?? detail.audience_score ?? detail.popcornScore;
+          if (t && typeof t === "number" && t > 0) result.tomatometer = t;
+          if (a && typeof a === "number" && a > 0) result.audienceScore = a;
+          if (!result.url) result.url = detail.url ? `https://www.rottentomatoes.com${detail.url}` : undefined;
+          if (result.tomatometer || result.audienceScore) {
+            console.log(`[rt-api] ✓ Detail found "${title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
+            return result;
+          }
+        }
+      } catch { /* detail fetch failed — non-fatal */ }
+    }
+
+    console.log(`[rt-api] No scores found for "${title}"`);
+    return null;
+  } catch (err) {
+    console.log(`[rt-api] Error:`, err);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // URL Construction — Criticker + MUBI removed
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -544,12 +643,31 @@ export async function fetchVerifiedRatings(
     if (simklResult.rating > 0) verified.sources.set("simkl", { score: simklResult.rating, max: 10, url: "" });
   }
   if (rapidRatings) {
+    // v5.8: Also extract tomatometer as RT Critics fallback from movies-ratings2
+    if (!verified.sources.has("rt_critics") && rapidRatings.rotten_tomatoes?.tomatometer) {
+      verified.sources.set("rt_critics", { score: rapidRatings.rotten_tomatoes.tomatometer, max: 100, url: "" });
+    }
     if (rapidRatings.rotten_tomatoes?.audienceScore)
       verified.sources.set("rt_audience", { score: rapidRatings.rotten_tomatoes.audienceScore, max: 100, url: "" });
     if (rapidRatings.metacritic?.userScore)
       verified.sources.set("metacritic_user", { score: rapidRatings.metacritic.userScore, max: 10, url: "" });
     if (rapidRatings.letterboxd?.score)
       verified.sources.set("letterboxd", { score: rapidRatings.letterboxd.score, max: 5, url: "" });
+  }
+
+  // ── Phase 4: RottenTomato API fallback for missing RT scores (v5.8) ──
+  const missingRTCritics = !verified.sources.has("rt_critics");
+  const missingRTAudience = !verified.sources.has("rt_audience");
+  if (missingRTCritics || missingRTAudience) {
+    const rtResult = await fetchRottenTomatoAPI(title, year);
+    if (rtResult) {
+      if (missingRTCritics && rtResult.tomatometer) {
+        verified.sources.set("rt_critics", { score: rtResult.tomatometer, max: 100, url: rtResult.url || "" });
+      }
+      if (missingRTAudience && rtResult.audienceScore) {
+        verified.sources.set("rt_audience", { score: rtResult.audienceScore, max: 100, url: rtResult.url || "" });
+      }
+    }
   }
 
   // ── Build URLs ──
