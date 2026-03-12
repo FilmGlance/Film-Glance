@@ -1,5 +1,11 @@
-// app/api/search/route.ts — v5.7
+// app/api/search/route.ts — v5.8
 // Semi-public search endpoint with 5-API verified ratings pipeline.
+//
+// v5.8 CHANGES:
+//   - TMDB fallback: When Claude can't process a title (new/obscure movies,
+//     titles that look like phrases), but TMDB confirms it exists, serve
+//     TMDB-only data with no_scores flag. Prevents "No results" for real movies.
+//     Cached with 7-day TTL (shorter, to retry full pipeline sooner).
 //
 // v5.7 CHANGES:
 //   - Release date gate: TMDB release date checked BEFORE Claude is called.
@@ -491,11 +497,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...movieData,
-        ...(!(movieData as any).coming_soon && {
+        ...(!(movieData as any).coming_soon && !(movieData as any).no_scores && {
           score: calcScore((movieData.sources as any[]) || []),
           disclaimer: RATINGS_DISCLAIMER,
         }),
-        _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
+        _source: (movieData as any).coming_soon ? "coming-soon" : (movieData as any).no_scores ? "tmdb-fallback" : (isStale ? "swr" : "cache"),
       });
     }
 
@@ -545,11 +551,11 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             ...movieData,
-            ...(!(movieData as any).coming_soon && {
+            ...(!(movieData as any).coming_soon && !(movieData as any).no_scores && {
               score: calcScore((movieData.sources as any[]) || []),
               disclaimer: RATINGS_DISCLAIMER,
             }),
-            _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
+            _source: (movieData as any).coming_soon ? "coming-soon" : (movieData as any).no_scores ? "tmdb-fallback" : (isStale ? "swr" : "cache"),
           });
         }
       } catch { /* continue to API */ }
@@ -626,6 +632,54 @@ export async function POST(req: NextRequest) {
       );
 
       if (!mv) {
+        // v5.8: TMDB fallback — Claude couldn't process the movie (new/obscure title,
+        // or title looks like a phrase e.g. "How to Make a Killing"), but TMDB
+        // confirmed it exists. Build a response with TMDB data, no fabricated scores.
+        if (releaseInfo) {
+          console.log(`[tmdb-fallback] Claude returned null for "${query}" but TMDB found "${releaseInfo.officialTitle}" — serving TMDB-only`);
+
+          const fallbackMv = await buildComingSoonResponse(releaseTitle, releaseInfo, resolvedYear);
+          fallbackMv.coming_soon = false;
+          fallbackMv.no_scores = true;
+          fallbackMv.sources = [];
+
+          if (supabaseAvailable) {
+            // Cache with shorter TTL (7 days) — retry full pipeline sooner
+            const shortTtl = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            fireAndForget(async () => {
+              const cacheData = {
+                data: fallbackMv,
+                source: "tmdb-fallback",
+                hit_count: 0,
+                cached_at: new Date().toISOString(),
+                expires_at: shortTtl,
+              };
+              const normalize = (s: string) => s.toLowerCase().trim()
+                .replace(/^(the|a|an)\s+/i, "")
+                .replace(/[''`:;!?.,"()]/g, "").replace(/\s+/g, " ").trim();
+              const keys = new Set<string>();
+              keys.add(query);
+              if (resolvedTitle !== query) keys.add(normalize(resolvedTitle));
+              keys.add(normalize(releaseInfo.officialTitle));
+              const writes: Promise<any>[] = [];
+              for (const key of keys) {
+                writes.push(
+                  Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData })).then(() => {})
+                );
+              }
+              writes.push(
+                Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: "tmdb-fallback", ip_address: ip })).then(() => {})
+              );
+              await Promise.all(writes);
+              console.log(`[tmdb-fallback] ✓ Cached "${releaseInfo.officialTitle}" (7-day TTL)`);
+            }, "tmdb-fallback-cache");
+          }
+
+          return NextResponse.json({
+            ...fallbackMv,
+            _source: "tmdb-fallback",
+          });
+        }
         return NextResponse.json({ error: "Movie not found" }, { status: 404 });
       }
 
