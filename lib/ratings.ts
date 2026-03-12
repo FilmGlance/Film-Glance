@@ -427,8 +427,7 @@ interface RTAPIResult {
 async function fetchRottenTomatoAPI(title: string, year?: number): Promise<RTAPIResult | null> {
   if (!RAPIDAPI_KEY) return null;
   try {
-    const query = year ? `${title} ${year}` : title;
-    const res = await fetch(`https://${RT_API_HOST}/search?query=${encodeURIComponent(query)}&limit=5`, {
+    const res = await fetch(`https://${RT_API_HOST}/search?search-term=${encodeURIComponent(title)}`, {
       headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RT_API_HOST },
       signal: AbortSignal.timeout(8000),
     });
@@ -437,68 +436,45 @@ async function fetchRottenTomatoAPI(title: string, year?: number): Promise<RTAPI
       return null;
     }
     const data = await res.json();
-
-    // Find the best match from search results
-    const movies = data?.movies || data?.results || (Array.isArray(data) ? data : []);
+    const movies = data?.movies_shows;
     if (!movies || movies.length === 0) {
-      console.log(`[rt-api] No search results for "${title}"`);
+      console.log(`[rt-api] No results for "${title}"`);
       return null;
     }
 
-    // Try to match by title similarity
+    // Match by title + year if possible
     const titleLower = title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
     let match = movies.find((m: any) => {
-      const mTitle = (m.title || m.name || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+      const mTitle = (m.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+      return mTitle === titleLower && (!year || m.releaseYear === year);
+    }) || movies.find((m: any) => {
+      const mTitle = (m.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
       return mTitle === titleLower;
     }) || movies[0];
 
-    // Extract ratings — try multiple field name patterns
+    const rt = match.rottenTomatoes;
+    if (!rt) {
+      console.log(`[rt-api] No rottenTomatoes object for "${match.title}"`);
+      return null;
+    }
+
     const result: RTAPIResult = {};
-
-    // Tomatometer (RT Critics)
-    const tomatometer = match.tomatoScore ?? match.tomatometer ?? match.meterScore ?? match.critics_score ?? match.tomatoMeter;
-    if (tomatometer && typeof tomatometer === "number" && tomatometer > 0) {
-      result.tomatometer = tomatometer;
+    if (rt.criticsScore && typeof rt.criticsScore === "number" && rt.criticsScore > 0) {
+      result.tomatometer = rt.criticsScore;
     }
-
-    // Audience Score
-    const audience = match.audienceScore ?? match.audience_score ?? match.popcornScore;
-    if (audience && typeof audience === "number" && audience > 0) {
-      result.audienceScore = audience;
+    if (rt.audienceScore && typeof rt.audienceScore === "number" && rt.audienceScore > 0) {
+      result.audienceScore = rt.audienceScore;
     }
-
-    // URL
-    result.url = match.url || match.vanity ? `https://www.rottentomatoes.com${match.url || match.vanity}` : undefined;
+    // Build RT URL from vanity slug
+    if (match.vanity) {
+      result.url = `https://www.rottentomatoes.com/m/${match.vanity}`;
+    }
 
     if (result.tomatometer || result.audienceScore) {
-      console.log(`[rt-api] ✓ Found "${match.title || title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
+      console.log(`[rt-api] ✓ "${match.title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
       return result;
     }
-
-    // If search didn't include scores, try the Movies endpoint with the movie's ID/slug
-    const movieId = match.id || match.vanity || match.url;
-    if (movieId) {
-      try {
-        const detailRes = await fetch(`https://${RT_API_HOST}/Movies?id=${encodeURIComponent(movieId)}`, {
-          headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": RT_API_HOST },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          const t = detail.tomatoScore ?? detail.tomatometer ?? detail.meterScore ?? detail.critics_score;
-          const a = detail.audienceScore ?? detail.audience_score ?? detail.popcornScore;
-          if (t && typeof t === "number" && t > 0) result.tomatometer = t;
-          if (a && typeof a === "number" && a > 0) result.audienceScore = a;
-          if (!result.url) result.url = detail.url ? `https://www.rottentomatoes.com${detail.url}` : undefined;
-          if (result.tomatometer || result.audienceScore) {
-            console.log(`[rt-api] ✓ Detail found "${title}": Critics=${result.tomatometer || "N/A"}, Audience=${result.audienceScore || "N/A"}`);
-            return result;
-          }
-        }
-      } catch { /* detail fetch failed — non-fatal */ }
-    }
-
-    console.log(`[rt-api] No scores found for "${title}"`);
+    console.log(`[rt-api] No scores for "${match.title}"`);
     return null;
   } catch (err) {
     console.log(`[rt-api] Error:`, err);
