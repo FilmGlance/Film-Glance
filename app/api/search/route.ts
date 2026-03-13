@@ -1,11 +1,5 @@
-// app/api/search/route.ts — v5.8
+// app/api/search/route.ts — v5.9
 // Semi-public search endpoint with 5-API verified ratings pipeline.
-//
-// v5.8 CHANGES:
-//   - TMDB fallback: When Claude can't process a title (new/obscure movies,
-//     titles that look like phrases), but TMDB confirms it exists, serve
-//     TMDB-only data with no_scores flag. Prevents "No results" for real movies.
-//     Cached with 7-day TTL (shorter, to retry full pipeline sooner).
 //
 // v5.7 CHANGES:
 //   - Release date gate: TMDB release date checked BEFORE Claude is called.
@@ -199,8 +193,7 @@ async function buildComingSoonResponse(
 async function runFullPipeline(
   queryForClaude: string,
   queryForRatings: string,
-  yearHint?: number,
-  releaseInfo?: { tmdbId: number; officialTitle: string; releaseDate: string | null; overview: string; posterPath: string | null } | null
+  yearHint?: number
 ): Promise<any> {
   const start = Date.now();
 
@@ -236,95 +229,11 @@ async function runFullPipeline(
   const d = await apiRes.json();
   const txt = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
   const match = txt.match(/\{[\s\S]*\}/);
+  if (!match) return null;
 
-  let mv: any = null;
-  let claudeWorked = false;
-
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[0]);
-      if (parsed.error !== "not_a_movie" && parsed.title && parsed.sources && parsed.sources.length > 0) {
-        mv = parsed;
-        claudeWorked = true;
-      }
-    } catch { /* JSON parse failed — fall through to TMDB fallback */ }
-  }
-
-  // v5.8: If Claude failed but TMDB + verified ratings succeeded, build from those
-  if (!claudeWorked) {
-    console.log(`[claude-fallback] Claude couldn't process "${queryForClaude}" — building from TMDB + verified ratings`);
-
-    // We need at least TMDB data to build a skeleton
-    let tmdbResult = tmdb;
-    if (!tmdbResult || !tmdbResult.poster_path) {
-      // One more try with the exact query
-      tmdbResult = await enrichWithTMDB(queryForRatings, yearHint, undefined).catch(() => null);
-    }
-    if (!tmdbResult && !releaseInfo) return null; // No TMDB data at all — truly not found
-
-    // Fetch detailed metadata (genre, runtime, tagline, director) from TMDB
-    let details: { genres: string; runtime: string | null; tagline: string | null; overview: string; director: string | null } | null = null;
-    if (releaseInfo) {
-      details = await fetchComingSoonDetails(releaseInfo.tmdbId).catch(() => null);
-    }
-
-    // Build skeleton movie from TMDB data
-    mv = {
-      title: releaseInfo?.officialTitle || queryForClaude,
-      year: yearHint || (releaseInfo?.releaseDate ? parseInt(releaseInfo.releaseDate.substring(0, 4)) : 0),
-      genre: details?.genres || "",
-      director: details?.director || "",
-      runtime: details?.runtime || null,
-      tagline: details?.tagline || null,
-      description: details?.overview || releaseInfo?.overview || "",
-      cast: [],
-      sources: [],
-      streaming: [],
-      recommendations: [],
-      video_reviews: [],
-      trailer_key: null,
-      poster: null,
-      poster_path: null,
-      hot_take: null,
-      boxOffice: null,
-      awards: [],
-    };
-
-    // Apply TMDB media (poster, cast, streaming, trailer, recs, video reviews)
-    if (tmdbResult) {
-      if (tmdbResult.poster_path) {
-        mv.poster_path = tmdbResult.poster_path;
-        mv.poster = `https://image.tmdb.org/t/p/w500${tmdbResult.poster_path}`;
-      }
-      if (tmdbResult.cast && tmdbResult.cast.length > 0) {
-        mv.cast = tmdbResult.cast.map((tc) => ({
-          name: tc.name,
-          character: tc.character,
-          profile_path: tc.profile_path,
-        }));
-      }
-      if ((tmdbResult as any).streaming?.length > 0) mv.streaming = (tmdbResult as any).streaming;
-      if ((tmdbResult as any).trailer_key) mv.trailer_key = (tmdbResult as any).trailer_key;
-      if ((tmdbResult as any).recommendations?.length > 0) mv.recommendations = (tmdbResult as any).recommendations;
-      if ((tmdbResult as any).video_reviews?.length > 0) mv.video_reviews = (tmdbResult as any).video_reviews;
-    } else if (releaseInfo?.posterPath) {
-      mv.poster_path = releaseInfo.posterPath;
-      mv.poster = `https://image.tmdb.org/t/p/w500${releaseInfo.posterPath}`;
-    }
-
-    // Apply verified ratings — this is where RT, IMDb, Metacritic, Letterboxd, etc. come from
-    if (verified) {
-      mv.sources = applyVerifiedRatings([], verified);
-      console.log(`[claude-fallback] ✓ Applied ${mv.sources.length} verified sources for "${mv.title}"`);
-    }
-
-    // If we still have no sources after verified ratings, flag it
-    if (!mv.sources || mv.sources.length === 0) {
-      mv.no_scores = true;
-      console.log(`[claude-fallback] No verified ratings found either — flagging no_scores`);
-    }
-
-    return mv;
+  const mv = JSON.parse(match[0]);
+  if (mv.error === "not_a_movie" || !mv.title || !mv.sources || mv.sources.length === 0) {
+    return null;
   }
 
   delete mv.poster;
@@ -582,11 +491,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...movieData,
-        ...(!(movieData as any).coming_soon && !(movieData as any).no_scores && {
+        ...(!(movieData as any).coming_soon && {
           score: calcScore((movieData.sources as any[]) || []),
           disclaimer: RATINGS_DISCLAIMER,
         }),
-        _source: (movieData as any).coming_soon ? "coming-soon" : (movieData as any).no_scores ? "tmdb-fallback" : (isStale ? "swr" : "cache"),
+        _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
       });
     }
 
@@ -636,11 +545,11 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             ...movieData,
-            ...(!(movieData as any).coming_soon && !(movieData as any).no_scores && {
+            ...(!(movieData as any).coming_soon && {
               score: calcScore((movieData.sources as any[]) || []),
               disclaimer: RATINGS_DISCLAIMER,
             }),
-            _source: (movieData as any).coming_soon ? "coming-soon" : (movieData as any).no_scores ? "tmdb-fallback" : (isStale ? "swr" : "cache"),
+            _source: (movieData as any).coming_soon ? "coming-soon" : (isStale ? "swr" : "cache"),
           });
         }
       } catch { /* continue to API */ }
@@ -702,6 +611,40 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 5.8. Title validation gate — prevent hallucinated results for misspelled queries (v5.9)
+    //      If TMDB found a movie but the official title doesn't closely match the query,
+    //      either redirect to the correct title or return 404 for suggestions.
+    //      This prevents Claude from hallucinating data for "avatarrr", "forsss gump", etc.
+    let pipelineTitle = sequelResolution ? resolvedTitle : query;
+    let pipelineYear = resolvedYear;
+
+    if (releaseInfo && releaseInfo.officialTitle) {
+      const normQ = query.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+      const normT = releaseInfo.officialTitle.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+
+      if (normQ !== normT) {
+        // Check similarity: substring with close length, or high word overlap
+        const lenRatio = Math.min(normQ.length, normT.length) / Math.max(normQ.length, normT.length);
+        const isCloseSubstring = (normT.includes(normQ) || normQ.includes(normT)) && lenRatio >= 0.75;
+        const wordsQ = new Set(normQ.split(" ").filter(w => w.length > 1));
+        const wordsT = new Set(normT.split(" ").filter(w => w.length > 1));
+        const overlap = [...wordsQ].filter(w => wordsT.has(w)).length;
+        const minWords = Math.min(wordsQ.size, wordsT.size);
+        const wordMatch = minWords > 0 && overlap / minWords >= 0.75;
+
+        if (isCloseSubstring || wordMatch) {
+          // Close enough — redirect pipeline to use the correct TMDB title
+          console.log(`[title-gate] Redirecting "${query}" → "${releaseInfo.officialTitle}" (close match)`);
+          pipelineTitle = releaseInfo.officialTitle;
+          pipelineYear = releaseInfo.releaseDate ? parseInt(releaseInfo.releaseDate.substring(0, 4)) : pipelineYear;
+        } else {
+          // Too different — return 404 so frontend shows "Did you mean?" suggestions
+          console.log(`[title-gate] Query "${query}" doesn't match TMDB title "${releaseInfo.officialTitle}" — returning 404 for suggestions`);
+          return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+        }
+      }
+    }
+
     // 6. Full pipeline — Claude + TMDB + Verified Ratings in parallel
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: "Movie API not configured" }, { status: 503 });
@@ -711,61 +654,12 @@ export async function POST(req: NextRequest) {
 
     try {
       const mv = await runFullPipeline(
-        sequelResolution ? resolvedTitle : query,
-        sequelResolution ? resolvedTitle : query,
-        resolvedYear,
-        releaseInfo
+        pipelineTitle,
+        pipelineTitle,
+        pipelineYear
       );
 
       if (!mv) {
-        // v5.8: TMDB fallback — Claude couldn't process the movie (new/obscure title,
-        // or title looks like a phrase e.g. "How to Make a Killing"), but TMDB
-        // confirmed it exists. Build a response with TMDB data, no fabricated scores.
-        if (releaseInfo) {
-          console.log(`[tmdb-fallback] Claude returned null for "${query}" but TMDB found "${releaseInfo.officialTitle}" — serving TMDB-only`);
-
-          const fallbackMv = await buildComingSoonResponse(releaseTitle, releaseInfo, resolvedYear);
-          fallbackMv.coming_soon = false;
-          fallbackMv.no_scores = true;
-          fallbackMv.sources = [];
-
-          if (supabaseAvailable) {
-            // Cache with shorter TTL (7 days) — retry full pipeline sooner
-            const shortTtl = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-            fireAndForget(async () => {
-              const cacheData = {
-                data: fallbackMv,
-                source: "tmdb-fallback",
-                hit_count: 0,
-                cached_at: new Date().toISOString(),
-                expires_at: shortTtl,
-              };
-              const normalize = (s: string) => s.toLowerCase().trim()
-                .replace(/^(the|a|an)\s+/i, "")
-                .replace(/[''`:;!?.,"()]/g, "").replace(/\s+/g, " ").trim();
-              const keys = new Set<string>();
-              keys.add(query);
-              if (resolvedTitle !== query) keys.add(normalize(resolvedTitle));
-              keys.add(normalize(releaseInfo.officialTitle));
-              const writes: Promise<any>[] = [];
-              for (const key of keys) {
-                writes.push(
-                  Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData })).then(() => {})
-                );
-              }
-              writes.push(
-                Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: "tmdb-fallback", ip_address: ip })).then(() => {})
-              );
-              await Promise.all(writes);
-              console.log(`[tmdb-fallback] ✓ Cached "${releaseInfo.officialTitle}" (7-day TTL)`);
-            }, "tmdb-fallback-cache");
-          }
-
-          return NextResponse.json({
-            ...fallbackMv,
-            _source: "tmdb-fallback",
-          });
-        }
         return NextResponse.json({ error: "Movie not found" }, { status: 404 });
       }
 
@@ -773,45 +667,16 @@ export async function POST(req: NextRequest) {
 
       // 7. Fire-and-forget cache write + log
       if (supabaseAvailable) {
-        if (mv.no_scores) {
-          // Shorter cache TTL for no-scores results — retry sooner
-          const shortTtl = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-          fireAndForget(async () => {
-            const cacheData = {
-              data: mv,
-              source: "claude-fallback",
-              hit_count: 0,
-              cached_at: new Date().toISOString(),
-              expires_at: shortTtl,
-            };
-            const normalize = (s: string) => s.toLowerCase().trim()
-              .replace(/^(the|a|an)\s+/i, "")
-              .replace(/[''`:;!?.,"()]/g, "").replace(/\s+/g, " ").trim();
-            const keys = new Set<string>();
-            keys.add(query);
-            if (resolvedTitle !== query) keys.add(normalize(resolvedTitle));
-            if (mv.title) keys.add(normalize(mv.title));
-            const writes: Promise<any>[] = [];
-            for (const key of keys) {
-              writes.push(Promise.resolve(supabaseAdmin.from("movie_cache").upsert({ search_key: key, ...cacheData })).then(() => {}));
-            }
-            writes.push(Promise.resolve(supabaseAdmin.from("search_log").insert({ user_id: user?.id || null, query, source: "claude-fallback", ip_address: ip })).then(() => {}));
-            await Promise.all(writes);
-          }, "no-scores-cache-write");
-        } else {
-          fireAndForget(async () => {
-            await writeCacheEntries(query, resolvedTitle !== query ? resolvedTitle : null, mv.title, mv, user?.id || null, ip, "api");
-          }, "cache-write");
-        }
+        fireAndForget(async () => {
+          await writeCacheEntries(query, pipelineTitle !== query ? pipelineTitle : null, mv.title, mv, user?.id || null, ip, "api");
+        }, "cache-write");
       }
 
       return NextResponse.json({
         ...mv,
-        ...(!mv.no_scores && {
-          score: calcScore(mv.sources),
-          disclaimer: RATINGS_DISCLAIMER,
-        }),
-        _source: mv.no_scores ? "claude-fallback" : "api",
+        score: calcScore(mv.sources),
+        disclaimer: RATINGS_DISCLAIMER,
+        _source: "api",
       });
     } catch (apiErr) {
       console.error("Pipeline error:", apiErr);

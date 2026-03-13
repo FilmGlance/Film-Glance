@@ -5,7 +5,7 @@ import {
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "5.7";
+const FG_VERSION = "5.9";
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -125,7 +125,7 @@ function CastMember({ name, character, img, idx, visible }) {
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0) scale(1)" : "translateY(10px) scale(0.95)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04 + 0.05}s`,
-        minWidth: 78, maxWidth: 90, flexShrink: 0
+        minWidth: 78, maxWidth: 90, flexShrink: 0, width: "calc(25% - 6px)"
       }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
@@ -369,7 +369,7 @@ async function fetchMovieAPI(title, authToken) {
     if (!r.ok) return null;
 
     const mv = await r.json();
-    if (!mv.title || (!mv.coming_soon && !mv.no_scores && (!mv.sources || mv.sources.length === 0))) return null;
+    if (!mv.title || (!mv.coming_soon && (!mv.sources || mv.sources.length === 0))) return null;
 
     // Construct image URLs from TMDB paths
     // Always prefer TMDB poster_path
@@ -429,10 +429,6 @@ function normalizeResult(mv) {
   if (mv.coming_soon) {
     r.coming_soon = true;
     r.release_date = mv.release_date || null;
-  }
-  // Preserve no_scores flag from API (v5.8 — TMDB fallback for movies Claude can't process)
-  if (mv.no_scores) {
-    r.no_scores = true;
   }
   // Preserve hot_take from API
   if (mv.hot_take && typeof mv.hot_take === 'object') {
@@ -578,13 +574,13 @@ export default function FilmGlance() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadMsg, setLoadMsg] = useState("");
-  const [srcOpen, setSrcOpen] = useState(false);
-  const [castOpen, setCastOpen] = useState(false);
-  const [watchOpen, setWatchOpen] = useState(false);
-  const [boxOfficeOpen, setBoxOfficeOpen] = useState(false);
-  const [awardsOpen, setAwardsOpen] = useState(false);
-  const [reviewsOpen, setReviewsOpen] = useState(false);
-  const [hotTakeOpen, setHotTakeOpen] = useState(false);
+  const [srcOpen, setSrcOpen] = useState(true);
+  const [castOpen, setCastOpen] = useState(true);
+  const [watchOpen, setWatchOpen] = useState(true);
+  const [boxOfficeOpen, setBoxOfficeOpen] = useState(true);
+  const [awardsOpen, setAwardsOpen] = useState(true);
+  const [reviewsOpen, setReviewsOpen] = useState(true);
+  const [hotTakeOpen, setHotTakeOpen] = useState(true);
   const [videoModal, setVideoModal] = useState(null); // { id, title } or null
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -605,6 +601,9 @@ export default function FilmGlance() {
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
+  const scrollTrackRef = useRef(null);
+  const [scrollPct, setScrollPct] = useState(0);
+  const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
@@ -668,6 +667,33 @@ export default function FilmGlance() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Scroll tracking for gold scrollbar (window scroll)
+  useEffect(() => {
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollPct(max > 0 ? Math.min(window.scrollY / max, 1) : 0);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [result]);
+
+  // Drag-to-scroll for gold scrollbar
+  useEffect(() => {
+    if (!isDraggingScroll) return;
+    const onMove = (e) => {
+      const track = scrollTrackRef.current;
+      if (!track) return;
+      const rect = track.getBoundingClientRect();
+      const pct = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+      window.scrollTo(0, pct * (document.documentElement.scrollHeight - window.innerHeight));
+    };
+    const onUp = () => setIsDraggingScroll(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [isDraggingScroll]);
+
   const loginWithGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -704,7 +730,7 @@ export default function FilmGlance() {
     // Auth is prompted only when daily limit is reached or for favorites.
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
-    setLoading(true); setResult(null); setSrcOpen(false); setCastOpen(false); setWatchOpen(false); setBoxOfficeOpen(false); setAwardsOpen(false); setReviewsOpen(false); setHotTakeOpen(false); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
+    setLoading(true); setResult(null); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -731,16 +757,6 @@ export default function FilmGlance() {
           setResult(res);
         } catch (parseErr) {
           console.error("Coming soon parse error:", parseErr);
-          setResult({ notFound: true, query: q });
-        }
-        DB[q] = mv;
-      } else if (mv && mv.no_scores) {
-        // v5.8: Released movie but Claude couldn't find ratings — display with TMDB data
-        try {
-          const res = normalizeResult(mv);
-          setResult(res);
-        } catch (parseErr) {
-          console.error("No-scores parse error:", parseErr);
           setResult({ notFound: true, query: q });
         }
         DB[q] = mv;
@@ -779,7 +795,6 @@ export default function FilmGlance() {
         }
         // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
         DB[q] = mv; // Client-side session cache
-        setTimeout(() => setSrcOpen(true), 300);
       } else {
         setErrMsg("Could not find this movie. Check spelling or try the full title.");
         setResult({ notFound: true, query: q });
@@ -885,14 +900,41 @@ export default function FilmGlance() {
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         input::placeholder { color: #3a3a3a; } input:focus { outline: none; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 2px; }
-        .castscroll::-webkit-scrollbar { height: 3px; }
+        ::-webkit-scrollbar { width: 0px; height: 0px; }
+        .fg-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        .fg-scroll::-webkit-scrollbar { display: none; }
+        .castscroll::-webkit-scrollbar { height: 0px; }
+
+        /* Gold glowing search bar */
+        .glow-wrap { position: relative; }
+        .glow-layer { position: absolute; z-index: 1; overflow: hidden; height: 100%; width: 100%; border-radius: 14px; }
+        .glow-layer::before { content: ''; position: absolute; z-index: -1; width: 800px; height: 800px; background-repeat: no-repeat; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(60deg); transition: all 2s ease; }
+        .glow-1 { max-height: 70px; filter: blur(3px); }
+        .glow-1::before { background: conic-gradient(#000, #b8860b 5%, #000 38%, #000 50%, #E8A000 60%, #000 87%); }
+        .glow-wrap:hover .glow-1::before { transform: translate(-50%, -50%) rotate(-120deg); }
+        .glow-wrap:focus-within .glow-1::before { transform: translate(-50%, -50%) rotate(420deg); transition-duration: 4s; }
+        .glow-2 { max-height: 66px; filter: blur(3px); }
+        .glow-2::before { width: 600px; height: 600px; background: conic-gradient(rgba(0,0,0,0), #6b4f12, rgba(0,0,0,0) 10%, rgba(0,0,0,0) 50%, #8b6914, rgba(0,0,0,0) 60%); transform: translate(-50%, -50%) rotate(82deg); }
+        .glow-wrap:hover .glow-2::before { transform: translate(-50%, -50%) rotate(-98deg); }
+        .glow-wrap:focus-within .glow-2::before { transform: translate(-50%, -50%) rotate(442deg); transition-duration: 4s; }
+        .glow-3 { max-height: 66px; filter: blur(3px); }
+        .glow-3::before { width: 600px; height: 600px; background: conic-gradient(rgba(0,0,0,0), #6b4f12, rgba(0,0,0,0) 10%, rgba(0,0,0,0) 50%, #8b6914, rgba(0,0,0,0) 60%); transform: translate(-50%, -50%) rotate(82deg); }
+        .glow-wrap:hover .glow-3::before { transform: translate(-50%, -50%) rotate(-98deg); }
+        .glow-wrap:focus-within .glow-3::before { transform: translate(-50%, -50%) rotate(442deg); transition-duration: 4s; }
+        .glow-4 { max-height: 63px; filter: blur(2px); border-radius: 12px; }
+        .glow-4::before { width: 600px; height: 600px; background: conic-gradient(rgba(0,0,0,0) 0%, #ffe082, rgba(0,0,0,0) 8%, rgba(0,0,0,0) 50%, #ffd54f, rgba(0,0,0,0) 58%); filter: brightness(1.4); transform: translate(-50%, -50%) rotate(83deg); }
+        .glow-wrap:hover .glow-4::before { transform: translate(-50%, -50%) rotate(-97deg); }
+        .glow-wrap:focus-within .glow-4::before { transform: translate(-50%, -50%) rotate(443deg); transition-duration: 4s; }
+        .glow-5 { max-height: 59px; filter: blur(0.5px); }
+        .glow-5::before { width: 600px; height: 600px; background: conic-gradient(#0a0a0a, #b8860b 5%, #0a0a0a 14%, #0a0a0a 50%, #E8A000 60%, #0a0a0a 64%); filter: brightness(1.3); transform: translate(-50%, -50%) rotate(70deg); }
+        .glow-wrap:hover .glow-5::before { transform: translate(-50%, -50%) rotate(-110deg); }
+        .glow-wrap:focus-within .glow-5::before { transform: translate(-50%, -50%) rotate(430deg); transition-duration: 4s; }
+        .glow-mask { position: absolute; width: 30px; height: 20px; background: #E8A000; top: 10px; left: 8px; filter: blur(24px); opacity: 0.6; transition: opacity 2s; pointer-events: none; z-index: 3; }
+        .glow-wrap:hover .glow-mask { opacity: 0; }
       `}</style>
 
       {/* Header */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.03)", position: "relative", zIndex: 10 }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.03)", position: "sticky", top: 0, zIndex: 50, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px) saturate(1.3)", WebkitBackdropFilter: "blur(24px) saturate(1.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={resetHome}>
           <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.05))", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,215,0,0.08)" }}>
             <Film size={14} style={{ color: "#FFD700" }} />
@@ -929,7 +971,10 @@ export default function FilmGlance() {
               )}
             </div>
           ) : (
-            <button onClick={() => setShowAuth(true)} style={{ padding: "6px 16px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Sign In</button>
+            <button onClick={() => setShowAuth(true)} style={{ padding: "6px 16px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer", transition: "all 0.3s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.18)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; e.currentTarget.style.boxShadow = "none"; }}
+            >Sign In</button>
           )}
         </div>
       </header>
@@ -1123,12 +1168,12 @@ export default function FilmGlance() {
       ) : (
         <main style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 5 }}>
           {/* Search area */}
-          <div style={{ textAlign: "center", paddingTop: result || loading ? 16 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32 }}>
+          <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) }}>
             {!result && !loading && (
               <div style={{ animation: "fadeIn 0.7s", marginBottom: 32 }}>
                 <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,5.5vw,48px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 12 }}>
-                  Every Film.<br />
-                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>One Rating at a Glance.</span>
+                  Every Movie Metric<br />
+                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
                 </h1>
                 <p style={{ color: "#4a4a4a", fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
@@ -1136,20 +1181,28 @@ export default function FilmGlance() {
               </div>
             )}
             <div style={{ position: "relative", maxWidth: 560, margin: "0 auto" }}>
-              <div style={{ position: "relative", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, animation: !result && !loading ? "glow 4s ease-in-out infinite" : "none" }}>
-                <Search size={16} style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#3a3a3a", pointerEvents: "none", zIndex: 1 }} />
-                <input ref={inputRef} type="text" value={query}
-                  onChange={e => { setQuery(e.target.value); setShowSug(true); }}
-                  onFocus={() => setShowSug(true)}
-                  onBlur={() => setTimeout(() => setShowSug(false), 180)}
-                  onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
-                  placeholder="Search any movie..."
-                  style={{ width: "100%", padding: "15px 110px 15px 44px", background: "transparent", border: "none", color: "#fff", fontSize: 14.5, fontFamily: "'Syne',sans-serif" }}
-                />
-                <button onClick={() => doSearch()} disabled={loading}
-                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "8px 20px", borderRadius: 10, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#777" : "#050505", fontSize: 12.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-                  {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : "Glance"}
-                </button>
+              <div className="glow-wrap" style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div className="glow-layer glow-1" />
+                <div className="glow-layer glow-2" />
+                <div className="glow-layer glow-3" />
+                <div className="glow-layer glow-4" />
+                <div className="glow-layer glow-5" />
+                <div className="glow-mask" />
+                <div style={{ position: "relative", width: "100%", zIndex: 2 }}>
+                  <Search size={16} style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#3a3a3a", pointerEvents: "none", zIndex: 3 }} />
+                  <input ref={inputRef} type="text" value={query}
+                    onChange={e => { setQuery(e.target.value); setShowSug(true); }}
+                    onFocus={() => setShowSug(true)}
+                    onBlur={() => setTimeout(() => setShowSug(false), 180)}
+                    onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
+                    placeholder="Search any movie..."
+                    style={{ width: "100%", padding: "15px 110px 15px 44px", background: "#050505", border: "none", borderRadius: 13, color: "#fff", fontSize: 14.5, fontFamily: "'Syne',sans-serif", outline: "none" }}
+                  />
+                  <button onClick={() => doSearch()} disabled={loading}
+                    style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "8px 20px", borderRadius: 10, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#777" : "#050505", fontSize: 12.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5, zIndex: 3 }}>
+                    {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : "Glance"}
+                  </button>
+                </div>
               </div>
               {showSug && !loading && !result && filt.length > 0 && (
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 5, background: "#090909", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 12, overflow: "hidden", zIndex: 20, animation: "slideUp 0.2s", boxShadow: "0 12px 36px rgba(0,0,0,0.5)", maxHeight: 280, overflowY: "auto" }}>
@@ -1183,36 +1236,34 @@ export default function FilmGlance() {
 
           {/* Result */}
           {/* Coming Soon — Unreleased Movie (v5.7) */}
-          {result && !result.notFound && (result.coming_soon || result.no_scores) && (
+          {result && !result.notFound && result.coming_soon && (
             <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
               <div style={{ padding: "24px 26px 22px" }}>
                 <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
                   <div style={{ width: 130, height: 195, borderRadius: 12, overflow: "hidden", flexShrink: 0, boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)", animation: "fadeIn 0.5s both", position: "relative" }}>
                     <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
-                    {result.coming_soon && (
                     <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)", padding: "20px 8px 8px", display: "flex", justifyContent: "center" }}>
                       <span style={{ fontSize: 7.5, letterSpacing: 2, fontWeight: 700, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace", background: "rgba(0,0,0,0.5)", padding: "3px 8px", borderRadius: 4 }}>Unreleased</span>
                     </div>
-                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                     <div style={{ marginBottom: 8, animation: "fadeIn 0.5s 0.1s both" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06))", border: "1px solid rgba(255,215,0,0.25)" }}>
                         <Zap size={11} color="#FFD700" />
-                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace" }}>{result.coming_soon ? "Coming Soon" : "New Release"}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: "#FFD700", fontFamily: "'JetBrains Mono',monospace" }}>Coming Soon</span>
                       </span>
                     </div>
                     {result.tagline && (
-                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.22)", marginBottom: 7, animation: "fadeIn 0.6s 0.15s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.45)", marginBottom: 7, animation: "fadeIn 0.6s 0.15s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                         "{result.tagline}"
                       </p>
                     )}
                     <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(20px,3.2vw,28px)", fontWeight: 700, lineHeight: 1.12, marginBottom: 3, animation: "fadeIn 0.5s 0.2s both" }}>{result.title}</h2>
-                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.25s both" }}>
+                    <p style={{ color: "#aaa", fontSize: 12, marginBottom: 2, animation: "fadeIn 0.5s 0.25s both" }}>
                       {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
                     </p>
-                    {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.3s both" }}>{result.genre}</p>}
-                    {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.35s both" }}>{result.description}</p>}
+                    {result.genre && <p style={{ color: "#666", fontSize: 11, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.3s both" }}>{result.genre}</p>}
+                    {result.description && <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.35s both" }}>{result.description}</p>}
 
                     {/* Ratings Not Available */}
                     <div style={{ animation: "fadeIn 0.5s 0.4s both" }}>
@@ -1226,14 +1277,12 @@ export default function FilmGlance() {
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>—/10</span>
                       </div>
                       <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 10, lineHeight: 1.5, fontStyle: "italic" }}>
-                        {result.coming_soon
-                          ? "Scores from 9 major review sites will appear here after this film is released."
-                          : "Scores from 9 major review sites are being tracked and will appear here shortly."}
+                        Scores from 9 major review sites will appear here after this film is released.
                       </p>
                     </div>
 
-                    {/* Release Date — only for unreleased movies */}
-                    {result.coming_soon && result.release_date && (
+                    {/* Release Date */}
+                    {result.release_date && (
                       <div style={{ background: "rgba(255,215,0,0.04)", border: "1px solid rgba(255,215,0,0.12)", borderRadius: 12, padding: "14px 18px", marginTop: 14, animation: "fadeIn 0.5s 0.45s both" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           <Zap size={13} color="#FFD700" />
@@ -1264,8 +1313,8 @@ export default function FilmGlance() {
                             color: "#FFD700", fontSize: 11, fontWeight: 700, cursor: "pointer",
                             transition: "all 0.25s",
                           }}
-                          onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.18),rgba(255,165,0,0.1))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.4)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; e.currentTarget.style.boxShadow = "none"; }}
                         >
                           <Play size={11} fill="#FFD700" stroke="#FFD700" />
                           Watch Trailer
@@ -1345,8 +1394,8 @@ export default function FilmGlance() {
           )}
 
           {/* Normal result — Released Movie */}
-          {result && !result.notFound && !result.coming_soon && !result.no_scores && (
-            <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
+          {result && !result.notFound && !result.coming_soon && (
+            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", boxShadow: "0 8px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)" }}>
               <div style={{ padding: "24px 26px 22px" }}>
                 <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
                   <div style={{ width: 130, height: 195, borderRadius: 12, overflow: "hidden", flexShrink: 0, boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)", animation: "fadeIn 0.5s both" }}>
@@ -1354,7 +1403,7 @@ export default function FilmGlance() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                     {result.tagline && (
-                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.22)", marginBottom: 7, animation: "fadeIn 0.6s 0.1s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.45)", marginBottom: 7, animation: "fadeIn 0.6s 0.1s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                         "{result.tagline}"
                       </p>
                     )}
@@ -1372,12 +1421,12 @@ export default function FilmGlance() {
                         </button>
                       )}
                     </div>
-                    <p style={{ color: "#888", fontSize: 11.5, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
+                    <p style={{ color: "#aaa", fontSize: 12, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
                       {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
                     </p>
-                    {result.genre && <p style={{ color: "#3a3a3a", fontSize: 10.5, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
-                    {result.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
-                    <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both", opacity: 0.85 }}>Averaged Movie Score Across Major Review Sites</p>
+                    {result.genre && <p style={{ color: "#666", fontSize: 11, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
+                    {result.description && <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
+                    <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both" }}>Averaged Movie Score Across Major Review Sites</p>
                     <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
                       <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
                       <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
@@ -1396,8 +1445,8 @@ export default function FilmGlance() {
                             color: "#FFD700", fontSize: 11, fontWeight: 700, cursor: "pointer",
                             transition: "all 0.25s",
                           }}
-                          onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.18),rgba(255,165,0,0.1))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.4)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; e.currentTarget.style.boxShadow = "none"; }}
                         >
                           <Play size={11} fill="#FFD700" stroke="#FFD700" />
                           Watch Trailer
@@ -1523,9 +1572,22 @@ export default function FilmGlance() {
 
               {result.cast && result.cast.length > 0 && (
                 <Accordion icon={<Users size={13} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
-                  <div className="castscroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
-                    {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
-                  </div>
+                  {(() => {
+                    const count = result.cast.length;
+                    const canEvenRows = count % 4 === 0 || count % 3 === 0;
+                    if (canEvenRows) {
+                      return (
+                        <div style={{ padding: "6px 18px 22px", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                          {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="fg-scroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
+                        {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
+                      </div>
+                    );
+                  })()}
                 </Accordion>
               )}
 
@@ -1684,6 +1746,27 @@ export default function FilmGlance() {
             </div>
           </footer>
         </main>
+      )}
+
+      {/* Gold scroll indicator — only on results */}
+      {(result && !result.notFound) && (
+        <>
+          <div ref={scrollTrackRef} onClick={(e) => {
+            const track = scrollTrackRef.current;
+            if (!track) return;
+            const rect = track.getBoundingClientRect();
+            const pct = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+            window.scrollTo(0, pct * (document.documentElement.scrollHeight - window.innerHeight));
+          }}
+            style={{ position: "fixed", right: 4, top: 120, bottom: 20, width: 18, borderRadius: 4, zIndex: 200, cursor: "default", display: "flex", justifyContent: "center" }}>
+            <div style={{ width: 7, height: "100%", borderRadius: 4, background: "rgba(255,215,0,0.06)" }} />
+            <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingScroll(true); }}
+              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.35), 0 0 40px rgba(255,215,0,0.12)"; e.currentTarget.style.width = "9px"; e.currentTarget.style.marginLeft = "-4.5px"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = `0 0 ${scrollPct > 0.85 ? "14px" : "6px"} ${scrollPct > 0.85 ? "rgba(255,107,0,0.5)" : "rgba(255,215,0,0.3)"}`; e.currentTarget.style.width = "7px"; e.currentTarget.style.marginLeft = "-3.5px"; }}
+              style={{ position: "absolute", top: `${scrollPct * 100}%`, width: 7, left: "50%", marginLeft: -3.5, height: 80, borderRadius: 4, background: `linear-gradient(180deg, #FFD700, ${scrollPct > 0.85 ? "#ff6b00" : "#E8A000"})`, boxShadow: `0 0 ${scrollPct > 0.85 ? "14px" : "6px"} ${scrollPct > 0.85 ? "rgba(255,107,0,0.5)" : "rgba(255,215,0,0.3)"}`, transition: isDraggingScroll ? "none" : "all 0.3s", transform: "translateY(-50%)", cursor: "default" }} />
+          </div>
+          {scrollPct > 0.8 && (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 50, background: `linear-gradient(to top, rgba(255,215,0,${(scrollPct - 0.8) * 0.15}), transparent)`, pointerEvents: "none", zIndex: 150 }} />)}
+        </>
       )}
     </div>
   );
