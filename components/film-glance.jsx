@@ -1591,30 +1591,6 @@ export default function FilmGlance() {
                 </Accordion>
               )}
 
-              {result.boxOffice && (
-                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
-                  <div style={{ padding: "4px 18px 18px" }}>
-                    <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={null} idx={2} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Domestic Gross" val={result.boxOffice.domestic} rank={result.boxOffice.domesticRank} idx={3} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="International Gross" val={result.boxOffice.international} rank={null} idx={4} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Worldwide Gross" val={result.boxOffice.worldwide} rank={result.boxOffice.worldwideRank} idx={5} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Estimated ROI" val={result.boxOffice.roi} rank={null} idx={6} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Theater Count (Widest)" val={result.boxOffice.theaterCount} rank={null} idx={7} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Days in Theater" val={result.boxOffice.daysInTheater || result.boxOffice.daysInRelease} rank={null} idx={8} visible={boxOfficeOpen} />
-                    {!result.boxOffice.openingRank && !result.boxOffice.domesticRank && !result.boxOffice.worldwideRank && !result.boxOffice.budgetRank && (
-                      <p style={{
-                        fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 12,
-                        lineHeight: 1.45, textAlign: "center", padding: "0 4px",
-                      }}>
-                        All-time ranking data not available for this title.
-                      </p>
-                    )}
-                  </div>
-                </Accordion>
-              )}
-
               {result.awards && result.awards.length > 0 && (
                 <Accordion icon={<Award size={13} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
                   <div style={{ padding: "4px 18px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1636,10 +1612,35 @@ export default function FilmGlance() {
                             fontFamily: "'JetBrains Mono',monospace",
                           }}>{a.result}</span>
                           <span style={{ fontSize: 11.5, fontWeight: 600, color: "#ccc" }}>{a.award}</span>
+                          {a.year && <span style={{ fontSize: 10, color: "#777", fontFamily: "'JetBrains Mono',monospace" }}>{a.year}</span>}
                         </div>
                         <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", lineHeight: 1.4, margin: 0 }}>{a.detail}</p>
                       </div>
                     ))}
+                  </div>
+                </Accordion>
+              )}
+
+              {result.boxOffice && (
+                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
+                  <div style={{ padding: "4px 18px 18px" }}>
+                    <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={null} idx={2} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Domestic Gross" val={result.boxOffice.domestic} rank={result.boxOffice.domesticRank} idx={3} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="International Gross" val={result.boxOffice.international} rank={null} idx={4} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Worldwide Gross" val={result.boxOffice.worldwide} rank={result.boxOffice.worldwideRank} idx={5} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Estimated ROI" val={result.boxOffice.roi} rank={null} idx={6} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Theater Count (Widest)" val={result.boxOffice.theaterCount} rank={null} idx={7} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Days in Theater" val={result.boxOffice.daysInTheater || result.boxOffice.daysInRelease} rank={null} idx={8} visible={boxOfficeOpen} />
+                    {!result.boxOffice.openingRank && !result.boxOffice.domesticRank && !result.boxOffice.worldwideRank && !result.boxOffice.budgetRank && (
+                      <p style={{
+                        fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 12,
+                        lineHeight: 1.45, textAlign: "center", padding: "0 4px",
+                      }}>
+                        All-time ranking data not available for this title.
+                      </p>
+                    )}
                   </div>
                 </Accordion>
               )}

@@ -70,7 +70,7 @@ const CLAUDE_SYSTEM = [
 ].join("\n");
 
 function claudeUserPrompt(title: string): string {
-  return `Movie: "${title}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings summarizing general positive sentiment about the film, and "bad": array of 3 short strings summarizing general negative sentiment — keep each point to one succinct line, NO SPOILERS, never reveal plot points or endings), boxOffice (budget as "$200,000,000", openingWeekend as "$128,122,480", openingRank as "#X all-time" or null, pta as "$XX,XXX" per-theater average, domestic as dollar string, domesticRank as "#X all-time" or null, international as dollar string, worldwide as dollar string, worldwideRank as "#X all-time" or null, roi as "XXX%" estimated return on investment, theaterCount as number string like "4,662", daysInTheater as "XX days"), awards (award/result/detail for Oscar, Globe, BAFTA, SAG, Cannes etc). ONLY JSON.`;
+  return `Movie: "${title}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings summarizing general positive sentiment about the film, and "bad": array of 3 short strings summarizing general negative sentiment — keep each point to one succinct line, NO SPOILERS, never reveal plot points or endings), awards (IMPORTANT: always populate this array — list ALL major awards including Oscar, Golden Globe, BAFTA, SAG, Cannes, Critics Choice, etc. Each entry: award as string like "Academy Awards", result as "Won" or "Nominated", detail as string like "Best Picture", year as number like 2009. Include both wins AND nominations. Do NOT return an empty array for any movie that has received nominations or wins), boxOffice (budget as "$200,000,000", openingWeekend as "$128,122,480", openingRank as "#X all-time" or null, pta as "$XX,XXX" per-theater average, domestic as dollar string, domesticRank as "#X all-time" or null, international as dollar string, worldwide as dollar string, worldwideRank as "#X all-time" or null, roi as "XXX%" estimated return on investment, theaterCount as number string like "4,662", daysInTheater as "XX days"). ONLY JSON.`;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ async function runFullPipeline(
     signal: AbortSignal.timeout(18000),
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 2500,
+      max_tokens: 3500,
       system: CLAUDE_SYSTEM,
       messages: [{ role: "user", content: claudeUserPrompt(queryForClaude) }],
     }),
@@ -227,6 +227,9 @@ async function runFullPipeline(
   if (!apiRes.ok) throw new Error(`Anthropic API error: ${apiRes.status}`);
 
   const d = await apiRes.json();
+  if (d.stop_reason === "max_tokens") {
+    console.warn(`[claude-truncated] Response for "${queryForClaude}" hit max_tokens — awards or other trailing fields may be missing`);
+  }
   const txt = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
   const match = txt.match(/\{[\s\S]*\}/);
   if (!match) return null;

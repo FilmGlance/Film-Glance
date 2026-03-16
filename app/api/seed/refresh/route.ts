@@ -29,7 +29,7 @@ const CLAUDE_SYSTEM = [
 ].join("\n");
 
 function claudeUserPrompt(title: string): string {
-  return `Movie: "${title}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings, and "bad": array of 3 short strings — NO SPOILERS), boxOffice (budget, openingWeekend, openingRank, pta, domestic, domesticRank, international, worldwide, worldwideRank, roi, theaterCount, daysInTheater), awards (award/result/detail). ONLY JSON.`;
+  return `Movie: "${title}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings, and "bad": array of 3 short strings — NO SPOILERS), awards (IMPORTANT: always populate this array — list ALL major awards including Oscar, Golden Globe, BAFTA, SAG, Cannes, Critics Choice, etc. Each entry: award as string like "Academy Awards", result as "Won" or "Nominated", detail as string like "Best Picture", year as number like 2009. Include both wins AND nominations. Do NOT return an empty array for any movie that has received nominations or wins), boxOffice (budget, openingWeekend, openingRank, pta, domestic, domesticRank, international, worldwide, worldwideRank, roi, theaterCount, daysInTheater). ONLY JSON.`;
 }
 
 function delay(ms: number) {
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 2500,
+          max_tokens: 3500,
           system: CLAUDE_SYSTEM,
           messages: [{ role: "user", content: claudeUserPrompt(title) }],
         }),
