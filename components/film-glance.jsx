@@ -1612,6 +1612,7 @@ export default function FilmGlance() {
                             fontFamily: "'JetBrains Mono',monospace",
                           }}>{a.result}</span>
                           <span style={{ fontSize: 11.5, fontWeight: 600, color: "#ccc" }}>{a.award}</span>
+                          {a.year && <span style={{ fontSize: 10, color: "#777", fontFamily: "'JetBrains Mono',monospace" }}>{a.year}</span>}
                         </div>
                         <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", lineHeight: 1.4, margin: 0 }}>{a.detail}</p>
                       </div>
