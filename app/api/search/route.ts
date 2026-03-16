@@ -207,7 +207,7 @@ async function runFullPipeline(
     signal: AbortSignal.timeout(18000),
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 2500,
+      max_tokens: 3500,
       system: CLAUDE_SYSTEM,
       messages: [{ role: "user", content: claudeUserPrompt(queryForClaude) }],
     }),
@@ -227,6 +227,9 @@ async function runFullPipeline(
   if (!apiRes.ok) throw new Error(`Anthropic API error: ${apiRes.status}`);
 
   const d = await apiRes.json();
+  if (d.stop_reason === "max_tokens") {
+    console.warn(`[claude-truncated] Response for "${queryForClaude}" hit max_tokens — awards or other trailing fields may be missing`);
+  }
   const txt = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
   const match = txt.match(/\{[\s\S]*\}/);
   if (!match) return null;
