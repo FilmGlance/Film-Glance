@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 2500,
+          max_tokens: 3500,
           system: CLAUDE_SYSTEM,
           messages: [{ role: "user", content: claudeUserPrompt(title) }],
         }),
