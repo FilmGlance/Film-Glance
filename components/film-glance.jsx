@@ -567,56 +567,6 @@ function Accordion({ icon, label, count, open, toggle, children }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   POSTER CRAWL — 3D Star Wars-style background for homepage
-   ═══════════════════════════════════════════════════════════════════════════ */
-function PosterCrawl() {
-  const [posters, setPosters] = useState([]);
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/posters")
-      .then(r => r.json())
-      .then(data => { if (!cancelled && Array.isArray(data) && data.length > 0) setPosters(data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  if (posters.length === 0) return null;
-
-  // Double the poster set for longer scroll before loop
-  const doubled = [...posters, ...posters];
-  // Shuffle so the loop seam isn't noticeable
-  for (let i = doubled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [doubled[i], doubled[j]] = [doubled[j], doubled[i]];
-  }
-  // Duplicate for seamless infinite loop (animation scrolls 0% to -50%)
-  const allSlots = [...doubled, ...doubled];
-
-  return (
-    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 700, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* Top fade */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "40vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.8) 40%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Bottom fade — solid band hides the near edge */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "35vh", background: "linear-gradient(to top, #050505 0%, #050505 35%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Left fade */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "10vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Right fade */}
-      <div style={{ position: "absolute", top: 0, right: 0, width: "10vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* 3D plane */}
-      <div style={{ position: "absolute", bottom: "-180%", left: "50%", width: "260%", marginLeft: "-130%", transformOrigin: "50% 100%", transform: "rotateX(54deg)" }}>
-        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, padding: 16 }}>
-          {allSlots.map((path, i) => (
-            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.45, background: "#1a1a1a" }}>
-              <img src={`https://image.tmdb.org/t/p/w342${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    MAIN APP
    ═══════════════════════════════════════════════════════════════════════════ */
 export default function FilmGlance() {
@@ -949,8 +899,6 @@ export default function FilmGlance() {
         @keyframes countUp { from { opacity: 0; transform: scale(0.55) translateY(5px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes posterCrawl { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
-        .poster-crawl-grid { animation: posterCrawl 240s linear infinite; }
         input::placeholder { color: #3a3a3a; } input:focus { outline: none; }
         ::-webkit-scrollbar { width: 0px; height: 0px; }
         .fg-scroll { scrollbar-width: none; -ms-overflow-style: none; }
@@ -1030,9 +978,6 @@ export default function FilmGlance() {
           )}
         </div>
       </header>
-
-      {/* 3D Poster Crawl — homepage only */}
-      {!result && !loading && <PosterCrawl />}
 
       {/* Video Modal */}
       {videoModal && (
