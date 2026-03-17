@@ -582,11 +582,11 @@ function PosterCrawl() {
 
   if (posters.length === 0) return null;
 
-  // Build exactly 440 unique poster slots (duplicate set for seamless loop)
-  const half = 220;
+  // Build poster slots — need enough to fill the 3D plane beyond viewport
+  const half = 500;
   const slots = [];
   for (let i = 0; i < half; i++) slots.push(posters[i % posters.length]);
-  // Duplicate for infinite scroll seamlessness
+  // Duplicate entire set for seamless infinite scroll (animation scrolls to -50%)
   const allSlots = [...slots, ...slots];
 
   return (
@@ -943,7 +943,7 @@ export default function FilmGlance() {
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes posterCrawl { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
-        .poster-crawl-grid { animation: posterCrawl 80s linear infinite; }
+        .poster-crawl-grid { animation: posterCrawl 120s linear infinite; }
         input::placeholder { color: #3a3a3a; } input:focus { outline: none; }
         ::-webkit-scrollbar { width: 0px; height: 0px; }
         .fg-scroll { scrollbar-width: none; -ms-overflow-style: none; }
@@ -1223,7 +1223,7 @@ export default function FilmGlance() {
                   Every Movie Metric<br />
                   <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
                 </h1>
-                <p style={{ color: "#4a4a4a", fontSize: 15, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>
+                <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 15, fontWeight: 600, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
                 </p>
               </div>
