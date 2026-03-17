@@ -582,32 +582,32 @@ function PosterCrawl() {
 
   if (posters.length === 0) return null;
 
-  // Triple the poster set for maximum scroll length before loop
-  const tripled = [...posters, ...posters, ...posters];
-  // Shuffle to avoid visible pattern at the duplicate seam
-  for (let i = tripled.length - 1; i > 0; i--) {
+  // Double the poster set for longer scroll before loop
+  const doubled = [...posters, ...posters];
+  // Shuffle so the loop seam isn't noticeable
+  for (let i = doubled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [tripled[i], tripled[j]] = [tripled[j], tripled[i]];
+    [doubled[i], doubled[j]] = [doubled[j], doubled[i]];
   }
-  // Duplicate for seamless loop (animation goes 0% to -50%)
-  const allSlots = [...tripled, ...tripled];
+  // Duplicate for seamless infinite loop (animation scrolls 0% to -50%)
+  const allSlots = [...doubled, ...doubled];
 
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 500, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 700, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
       {/* Top fade */}
       <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "40vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.8) 40%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Bottom fade — solid enough to hide grid edge */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "40vh", background: "linear-gradient(to top, #050505 0%, #050505 30%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* Bottom fade — solid band hides the near edge */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "35vh", background: "linear-gradient(to top, #050505 0%, #050505 35%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* Left fade */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "12vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: 0, left: 0, width: "10vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* Right fade */}
-      <div style={{ position: "absolute", top: 0, right: 0, width: "12vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: 0, right: 0, width: "10vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* 3D plane */}
-      <div style={{ position: "absolute", bottom: "-500%", left: "50%", width: "500%", marginLeft: "-250%", transformOrigin: "50% 100%", transform: "rotateX(60deg)" }}>
-        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, padding: 20 }}>
+      <div style={{ position: "absolute", bottom: "-180%", left: "50%", width: "260%", marginLeft: "-130%", transformOrigin: "50% 100%", transform: "rotateX(54deg)" }}>
+        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, padding: 16 }}>
           {allSlots.map((path, i) => (
             <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.45, background: "#1a1a1a" }}>
-              <img src={`https://image.tmdb.org/t/p/w500${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
+              <img src={`https://image.tmdb.org/t/p/w342${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
             </div>
           ))}
         </div>
