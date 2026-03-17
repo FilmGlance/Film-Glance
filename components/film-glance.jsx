@@ -598,10 +598,10 @@ function PosterCrawl() {
       <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "20vh", background: "linear-gradient(to top, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* 3D rotated plane — extended much deeper to prevent visible edges */}
       <div style={{ position: "absolute", bottom: "-200%", left: "50%", width: "280%", marginLeft: "-140%", transformOrigin: "50% 100%", transform: "rotateX(55deg)" }}>
-        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 10, padding: 12 }}>
+        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, padding: 16 }}>
           {allSlots.map((path, i) => (
-            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 5, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.30, background: "#1a1a1a" }}>
-              <img src={`https://image.tmdb.org/t/p/w200${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
+            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.40, background: "#1a1a1a" }}>
+              <img src={`https://image.tmdb.org/t/p/w342${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
             </div>
           ))}
         </div>
