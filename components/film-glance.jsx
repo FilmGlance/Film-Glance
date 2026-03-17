@@ -582,29 +582,32 @@ function PosterCrawl() {
 
   if (posters.length === 0) return null;
 
-  // Use ALL available posters — need massive grid for 3D perspective coverage
-  const half = Math.max(posters.length, 500);
-  const slots = [];
-  for (let i = 0; i < half; i++) slots.push(posters[i % posters.length]);
-  // Duplicate entire set — animation scrolls to -50% so the seam is never visible
-  const allSlots = [...slots, ...slots];
+  // Triple the poster set for maximum scroll length before loop
+  const tripled = [...posters, ...posters, ...posters];
+  // Shuffle to avoid visible pattern at the duplicate seam
+  for (let i = tripled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [tripled[i], tripled[j]] = [tripled[j], tripled[i]];
+  }
+  // Duplicate for seamless loop (animation goes 0% to -50%)
+  const allSlots = [...tripled, ...tripled];
 
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 600, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* Top fade — keeps header and hero crisp */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "45vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.85) 35%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Bottom fade — strong enough to completely hide the grid edge */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "35vh", background: "linear-gradient(to top, #050505 0%, #050505 25%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 500, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+      {/* Top fade */}
+      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "40vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.8) 40%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* Bottom fade — solid enough to hide grid edge */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "40vh", background: "linear-gradient(to top, #050505 0%, #050505 30%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* Left fade */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "15vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: 0, left: 0, width: "12vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
       {/* Right fade */}
-      <div style={{ position: "absolute", top: 0, right: 0, width: "15vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* 3D rotated plane — extremely deep to prevent any visible edge */}
-      <div style={{ position: "absolute", bottom: "-350%", left: "50%", width: "400%", marginLeft: "-200%", transformOrigin: "50% 100%", transform: "rotateX(58deg)" }}>
-        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 14, padding: 16 }}>
+      <div style={{ position: "absolute", top: 0, right: 0, width: "12vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* 3D plane */}
+      <div style={{ position: "absolute", bottom: "-500%", left: "50%", width: "500%", marginLeft: "-250%", transformOrigin: "50% 100%", transform: "rotateX(60deg)" }}>
+        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, padding: 20 }}>
           {allSlots.map((path, i) => (
-            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.40, background: "#1a1a1a" }}>
-              <img src={`https://image.tmdb.org/t/p/w342${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
+            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.45, background: "#1a1a1a" }}>
+              <img src={`https://image.tmdb.org/t/p/w500${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
             </div>
           ))}
         </div>
@@ -947,7 +950,7 @@ export default function FilmGlance() {
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes posterCrawl { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
-        .poster-crawl-grid { animation: posterCrawl 180s linear infinite; }
+        .poster-crawl-grid { animation: posterCrawl 240s linear infinite; }
         input::placeholder { color: #3a3a3a; } input:focus { outline: none; }
         ::-webkit-scrollbar { width: 0px; height: 0px; }
         .fg-scroll { scrollbar-width: none; -ms-overflow-style: none; }
