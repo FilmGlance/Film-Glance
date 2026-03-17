@@ -582,8 +582,7 @@ function PosterCrawl() {
 
   if (posters.length === 0) return null;
 
-  // Use ALL available posters for maximum coverage — 3D perspective magnifies bottom tiles
-  // so we need a very large grid to avoid visible edges
+  // Use ALL available posters — need massive grid for 3D perspective coverage
   const half = Math.max(posters.length, 500);
   const slots = [];
   for (let i = 0; i < half; i++) slots.push(posters[i % posters.length]);
@@ -594,11 +593,15 @@ function PosterCrawl() {
     <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 600, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
       {/* Top fade — keeps header and hero crisp */}
       <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "45vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.85) 35%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* Bottom fade */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "20vh", background: "linear-gradient(to top, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
-      {/* 3D rotated plane — extended much deeper to prevent visible edges */}
-      <div style={{ position: "absolute", bottom: "-200%", left: "50%", width: "280%", marginLeft: "-140%", transformOrigin: "50% 100%", transform: "rotateX(55deg)" }}>
-        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, padding: 16 }}>
+      {/* Bottom fade — strong enough to completely hide the grid edge */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "35vh", background: "linear-gradient(to top, #050505 0%, #050505 25%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* Left fade */}
+      <div style={{ position: "absolute", top: 0, left: 0, width: "15vw", height: "100%", background: "linear-gradient(to right, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* Right fade */}
+      <div style={{ position: "absolute", top: 0, right: 0, width: "15vw", height: "100%", background: "linear-gradient(to left, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* 3D rotated plane — extremely deep to prevent any visible edge */}
+      <div style={{ position: "absolute", bottom: "-350%", left: "50%", width: "400%", marginLeft: "-200%", transformOrigin: "50% 100%", transform: "rotateX(58deg)" }}>
+        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 14, padding: 16 }}>
           {allSlots.map((path, i) => (
             <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 6, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.40, background: "#1a1a1a" }}>
               <img src={`https://image.tmdb.org/t/p/w342${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
@@ -1224,7 +1227,7 @@ export default function FilmGlance() {
                   Every Movie Metric<br />
                   <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
                 </h1>
-                <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 15, fontWeight: 600, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>
+                <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 17, fontWeight: 600, maxWidth: 460, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you everything you'll ever want to know about it!
                 </p>
               </div>
