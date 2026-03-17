@@ -567,6 +567,49 @@ function Accordion({ icon, label, count, open, toggle, children }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   POSTER CRAWL — 3D Star Wars-style background for homepage
+   ═══════════════════════════════════════════════════════════════════════════ */
+function PosterCrawl() {
+  const [posters, setPosters] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/posters")
+      .then(r => r.json())
+      .then(data => { if (!cancelled && Array.isArray(data) && data.length > 0) setPosters(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  if (posters.length === 0) return null;
+
+  // Build exactly 440 unique poster slots (duplicate set for seamless loop)
+  const half = 220;
+  const slots = [];
+  for (let i = 0; i < half; i++) slots.push(posters[i % posters.length]);
+  // Duplicate for infinite scroll seamlessness
+  const allSlots = [...slots, ...slots];
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", perspective: 800, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+      {/* Top fade — keeps header and hero crisp */}
+      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "45vh", background: "linear-gradient(to bottom, #050505 0%, rgba(5,5,5,0.85) 35%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* Bottom fade */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "15vh", background: "linear-gradient(to top, #050505 0%, transparent 100%)", zIndex: 1, pointerEvents: "none" }} />
+      {/* 3D rotated plane */}
+      <div style={{ position: "absolute", bottom: "-120%", left: "50%", width: "220%", marginLeft: "-110%", transformOrigin: "50% 100%", transform: "rotateX(52deg)" }}>
+        <div className="poster-crawl-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12, padding: 16 }}>
+          {allSlots.map((path, i) => (
+            <div key={i} style={{ width: "100%", aspectRatio: "2/3", borderRadius: 5, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.9)", opacity: 0.30, background: "#1a1a1a" }}>
+              <img src={`https://image.tmdb.org/t/p/w200${path}`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={e => { e.target.style.display = "none"; }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    MAIN APP
    ═══════════════════════════════════════════════════════════════════════════ */
 export default function FilmGlance() {
@@ -899,6 +942,8 @@ export default function FilmGlance() {
         @keyframes countUp { from { opacity: 0; transform: scale(0.55) translateY(5px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes posterCrawl { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
+        .poster-crawl-grid { animation: posterCrawl 80s linear infinite; }
         input::placeholder { color: #3a3a3a; } input:focus { outline: none; }
         ::-webkit-scrollbar { width: 0px; height: 0px; }
         .fg-scroll { scrollbar-width: none; -ms-overflow-style: none; }
@@ -978,6 +1023,9 @@ export default function FilmGlance() {
           )}
         </div>
       </header>
+
+      {/* 3D Poster Crawl — homepage only */}
+      {!result && !loading && <PosterCrawl />}
 
       {/* Video Modal */}
       {videoModal && (
@@ -1166,21 +1214,21 @@ export default function FilmGlance() {
           )}
         </div>
       ) : (
-        <main style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 5 }}>
+        <main style={{ maxWidth: 720, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 5 }}>
           {/* Search area */}
           <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) }}>
             {!result && !loading && (
               <div style={{ animation: "fadeIn 0.7s", marginBottom: 32 }}>
-                <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,5.5vw,48px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 12 }}>
+                <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(34px,7vw,58px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 16 }}>
                   Every Movie Metric<br />
                   <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
                 </h1>
-                <p style={{ color: "#4a4a4a", fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.55 }}>
+                <p style={{ color: "#4a4a4a", fontSize: 15, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>
                   Search any movie ever made and we'll show you the averaged rated score across the major movie review sites.
                 </p>
               </div>
             )}
-            <div style={{ position: "relative", maxWidth: 560, margin: "0 auto" }}>
+            <div style={{ position: "relative", maxWidth: 640, margin: "0 auto" }}>
               <div className="glow-wrap" style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div className="glow-layer glow-1" />
                 <div className="glow-layer glow-2" />
@@ -1189,17 +1237,17 @@ export default function FilmGlance() {
                 <div className="glow-layer glow-5" />
                 <div className="glow-mask" />
                 <div style={{ position: "relative", width: "100%", zIndex: 2 }}>
-                  <Search size={16} style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#3a3a3a", pointerEvents: "none", zIndex: 3 }} />
+                  <Search size={18} style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", color: "#3a3a3a", pointerEvents: "none", zIndex: 3 }} />
                   <input ref={inputRef} type="text" value={query}
                     onChange={e => { setQuery(e.target.value); setShowSug(true); }}
                     onFocus={() => setShowSug(true)}
                     onBlur={() => setTimeout(() => setShowSug(false), 180)}
                     onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
                     placeholder="Search any movie..."
-                    style={{ width: "100%", padding: "15px 110px 15px 44px", background: "#050505", border: "none", borderRadius: 13, color: "#fff", fontSize: 14.5, fontFamily: "'Syne',sans-serif", outline: "none" }}
+                    style={{ width: "100%", padding: "18px 120px 18px 48px", background: "#050505", border: "none", borderRadius: 14, color: "#fff", fontSize: 16, fontFamily: "'Syne',sans-serif", outline: "none" }}
                   />
                   <button onClick={() => doSearch()} disabled={loading}
-                    style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "8px 20px", borderRadius: 10, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#777" : "#050505", fontSize: 12.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5, zIndex: 3 }}>
+                    style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", padding: "10px 24px", borderRadius: 11, border: "none", background: loading ? "#222" : "linear-gradient(135deg,#FFD700,#E8A000)", color: loading ? "#777" : "#050505", fontSize: 13.5, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5, zIndex: 3 }}>
                     {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : "Glance"}
                   </button>
                 </div>
