@@ -1,4 +1,14 @@
 {
+  "rewrites": [
+    {
+      "source": "/discuss/:path*",
+      "destination": "https://discuss.filmglance.com/discuss/:path*"
+    },
+    {
+      "source": "/discuss",
+      "destination": "https://discuss.filmglance.com/discuss/"
+    }
+  ],
   "crons": [
     {
       "path": "/api/seed/refresh",
