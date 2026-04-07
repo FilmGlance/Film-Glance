@@ -1,0 +1,22 @@
+body,html{background-color:#0a0a0a!important;color:#e0e0e0!important}
+.main-header,header,.header,nav.navbar{background-color:#0a0a0a!important;border-bottom:1px solid rgba(255,215,0,0.2)!important}
+.content,.container,.row,main,#content{background-color:transparent!important}
+.card,.card-body,.card-header,.panel,.panel-body{background-color:#111!important;border-color:#222!important;color:#e0e0e0!important}
+[component="category/topic"],[component="category-item"],.category-item,.category-header,.topic-list-item{border-color:#1a1a1a!important}
+a{color:#FFD700!important}
+a:hover{color:#E8A000!important}
+.btn-primary{background-color:#FFD700!important;border-color:#FFD700!important;color:#0a0a0a!important}
+.btn-primary:hover{background-color:#E8A000!important;border-color:#E8A000!important}
+.navbar-brand,.forum-title,h1{color:#FFD700!important}
+.sidebar-left,[component="sidebar/left"]{background-color:#0a0a0a!important}
+.sidebar-left .nav-link,[component="sidebar/left"] a{color:#888!important}
+.sidebar-left .nav-link:hover,.sidebar-left .nav-link.active,[component="sidebar/left"] a:hover{color:#FFD700!important}
+.breadcrumb-item a{color:#FFD700!important}
+.breadcrumb-item.active{color:#aaa!important}
+input,textarea,select,.form-control{background-color:#111!important;color:#e0e0e0!important;border-color:#333!important}
+.dropdown-menu{background-color:#111!important;border-color:#333!important}
+.dropdown-item{color:#e0e0e0!important}
+.dropdown-item:hover{background-color:#1a1a1a!important;color:#FFD700!important}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#FFD700,#E8A000);border-radius:4px}
