@@ -1,7 +1,7 @@
-/* Film Glance Forum Theme v4 */
+/* Film Glance Forum Theme v4.1 */
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap');
 
-/* === FIX #1: FORCE BLACK BACKGROUND EVERYWHERE === */
+/* === FORCE BLACK BACKGROUND EVERYWHERE === */
 :root,
 [data-theme="dark"],
 [data-theme="light"] {
@@ -34,36 +34,39 @@ body.skin-darkly, body.skin-default {
   font-family: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-/* Kill any background images or gradients on body */
 body { background-image: none !important; }
 
-/* === FIX #2: REMOVE WHITE SIDE BARS === */
+/* === KILL ALL LIGHT BACKGROUNDS / WHITE PANELS === */
+.container-fluid, .container-lg, .container-md, .container-sm,
+.page, #panel, .panel-default, .panel-body,
+nav, aside, section, div[class*="sidebar"],
+div[class*="panel"], div[class*="wrapper"],
+.off-canvas-bg, .off-canvas,
+#main-nav, .bottom-sheet,
+.col-auto, .sticky-sidebar,
+.content, .container, .container-fluid, .row,
+main, #content, [component="content"],
+.col, [class*="col-"] {
+  background-color: #050505 !important;
+  background: #050505 !important;
+}
+
+/* Ensure content area itself is transparent so cards show */
+[component="categories/category"],
+.category-item, .topic-list-item,
+[component="post"], .card {
+  background: rgba(12,12,12,0.9) !important;
+}
+
+/* === SIDEBAR === */
 .sidebar-left, [component="sidebar/left"],
 .sidebar, .off-canvas, .nav-wrapper,
-.sidebar-right, [component="sidebar/right"],
-aside, .col-lg-3, .col-md-3 {
+.sidebar-right, [component="sidebar/right"] {
   background-color: #050505 !important;
+  background: #050505 !important;
   border-color: rgba(255,255,255,0.03) !important;
 }
 
-/* === HEADER / NAVBAR === */
-.header, header, nav.navbar, .navbar,
-[component="header"], #header-menu,
-.sticky-header, .navbar-fixed-top {
-  background: rgba(5,5,5,0.92) !important;
-  backdrop-filter: blur(24px) saturate(1.3) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
-  border-bottom: 1px solid rgba(255,215,0,0.08) !important;
-}
-
-/* === FIX #5: REMOVE NODEBB BRANDING TEXT === */
-.navbar-brand, .forum-title, [component="header/brand"] {
-  color: #FFD700 !important;
-  font-family: 'Syne', sans-serif !important;
-  font-weight: 700 !important;
-}
-
-/* === SIDEBAR NAV LINKS === */
 .sidebar-left .nav-link, .sidebar .nav-link,
 [component="sidebar/left"] a, .off-canvas a,
 .sidebar .nav-item a {
@@ -77,14 +80,23 @@ aside, .col-lg-3, .col-md-3 {
   background: rgba(255,215,0,0.04) !important;
 }
 
-/* === MAIN CONTENT === */
-.content, .container, .container-fluid, .row,
-main, #content, [component="content"],
-.col, [class*="col-"] {
-  background-color: transparent !important;
+/* === HEADER / NAVBAR === */
+.header, header, nav.navbar, .navbar,
+[component="header"], #header-menu,
+.sticky-header, .navbar-fixed-top {
+  background: rgba(5,5,5,0.92) !important;
+  backdrop-filter: blur(24px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
+  border-bottom: 1px solid rgba(255,215,0,0.08) !important;
 }
 
-/* === FIX #3 & #7: CATEGORY ICON BOXES — GOLD BRANDED === */
+.navbar-brand, .forum-title, [component="header/brand"] {
+  color: #FFD700 !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+/* === CATEGORY ICON BOXES — GOLD === */
 .category-icon, [component="category/icon"],
 .category-item .icon, .category-header .icon,
 .rounded-1,
@@ -98,7 +110,6 @@ main, #content, [component="content"],
   border-radius: 8px !important;
 }
 
-/* Gold icons inside */
 .category-item i, .category-item .fa,
 .category-item .fas, .category-item .far,
 .category-item .fab, .category-item svg,
@@ -122,7 +133,6 @@ main, #content, [component="content"],
   background: rgba(255,215,0,0.02) !important;
 }
 
-/* Category names */
 .category-item h3, .category-item .title,
 [component="category/name"], .category-name,
 .category-item h3 a, [component="category/name"] a {
@@ -134,13 +144,12 @@ main, #content, [component="content"],
   color: #FFD700 !important;
 }
 
-/* Category descriptions */
 .category-item .description,
 [component="category/description"] {
   color: rgba(255,255,255,0.45) !important;
 }
 
-/* === FIX #4: POST PREVIEW LINE COLOR — GOLD === */
+/* === POST PREVIEW LINE — GOLD === */
 .category-item .border-start,
 [component="categories/category"] .border-start,
 .border-start, .border-left,
@@ -150,7 +159,7 @@ main, #content, [component="content"],
   border-color: #FFD700 !important;
 }
 
-/* Stats numbers */
+/* === STATS === */
 .category-stat, .stat, .human-readable-number,
 .category-item span, [component="categories/category"] span {
   color: rgba(255,255,255,0.6) !important;
@@ -167,22 +176,16 @@ main, #content, [component="content"],
   color: rgba(255,255,255,0.35) !important;
 }
 
-/* No new posts text */
-.text-muted {
-  color: rgba(255,255,255,0.35) !important;
-}
+.text-muted { color: rgba(255,255,255,0.35) !important; }
 
-/* Recent post teasers */
 .teaser-content, [component="category/lastpost"],
-.recent-reply {
-  color: rgba(255,255,255,0.5) !important;
-}
+.recent-reply { color: rgba(255,255,255,0.5) !important; }
 
 .teaser-timestamp, .timeago, time {
   color: rgba(255,255,255,0.3) !important;
 }
 
-/* === FIX #6: ACTION BAR — BLACK NOT WHITE === */
+/* === ACTION BAR — BLACK NOT WHITE === */
 .action-bar, .category-tools, .topic-actions,
 .nav-pills, .nav-tabs, .toolbar,
 ul.nav.nav-pills, .category-filter,
@@ -337,7 +340,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Syne', sans-serif !important;
 }
 
-/* === ALL TEXT CONTRAST === */
+/* === TEXT CONTRAST === */
 p, li, td, th, dt, dd, span, label, small,
 figcaption, .form-text, .help-block {
   color: rgba(255,255,255,0.6) !important;
