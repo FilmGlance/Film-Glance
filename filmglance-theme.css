@@ -1,4 +1,4 @@
-/* Film Glance Forum Theme v4.1 */
+/* Film Glance Forum Theme v4.2 */
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap');
 
 /* === FORCE BLACK BACKGROUND EVERYWHERE === */
@@ -11,10 +11,10 @@
   --bs-body-color-rgb: 224,224,224 !important;
   --bs-primary: #FFD700 !important;
   --bs-primary-rgb: 255,215,0 !important;
-  --bs-secondary-bg: #0a0a0a !important;
-  --bs-tertiary-bg: #0a0a0a !important;
-  --bs-light: #0a0a0a !important;
-  --bs-light-rgb: 10,10,10 !important;
+  --bs-secondary-bg: #050505 !important;
+  --bs-tertiary-bg: #050505 !important;
+  --bs-light: #050505 !important;
+  --bs-light-rgb: 5,5,5 !important;
   --bs-dark: #050505 !important;
   --bs-dark-rgb: 5,5,5 !important;
   --bs-border-color: rgba(255,255,255,0.06) !important;
@@ -28,7 +28,7 @@
 }
 
 html, body, #wrapper, #content, .wrapper, main,
-body.skin-darkly, body.skin-default {
+body.skin-darkly, body.skin-default, body.skin-noskin {
   background-color: #050505 !important;
   color: #e0e0e0 !important;
   font-family: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif !important;
@@ -36,45 +36,68 @@ body.skin-darkly, body.skin-default {
 
 body { background-image: none !important; }
 
-/* === KILL ALL LIGHT BACKGROUNDS / WHITE PANELS === */
+/* === EXACT NODEBB SIDEBAR OVERRIDES === */
+.skin-noskin nav.sidebar,
+.skin-noskin .sidebar,
+body.skin-noskin nav.sidebar,
+body nav.sidebar,
+nav.sidebar,
+nav[component="sidebar/left"],
+nav[component="sidebar/right"],
+.sidebar-left, .sidebar-right,
+.bottombar-nav,
+.skin-noskin .bottombar-nav,
+body .bottombar-nav {
+  background-color: #050505 !important;
+  background: #050505 !important;
+  color: #e0e0e0 !important;
+}
+
+/* bg-light class used extensively by Harmony */
+.bg-light, .bg-white, .bg-body,
+body .bg-light, body .bg-white, body .bg-body,
+.skin-noskin .bg-light {
+  background-color: #050505 !important;
+  background: #050505 !important;
+}
+
+/* === KILL ALL LIGHT BACKGROUNDS === */
 .container-fluid, .container-lg, .container-md, .container-sm,
 .page, #panel, .panel-default, .panel-body,
-nav, aside, section, div[class*="sidebar"],
+aside, section, div[class*="sidebar"],
 div[class*="panel"], div[class*="wrapper"],
 .off-canvas-bg, .off-canvas,
 #main-nav, .bottom-sheet,
 .col-auto, .sticky-sidebar,
-.content, .container, .container-fluid, .row,
+.content, .container, .row,
 main, #content, [component="content"],
-.col, [class*="col-"] {
+.col, [class*="col-"],
+.layout-container, .d-flex,
+.flex-column, .border-start {
   background-color: #050505 !important;
   background: #050505 !important;
 }
 
-/* Ensure content area itself is transparent so cards show */
+/* Re-apply card backgrounds (they sit on top) */
 [component="categories/category"],
 .category-item, .topic-list-item,
-[component="post"], .card {
+[component="post"], .card,
+.card-body, .card-header {
   background: rgba(12,12,12,0.9) !important;
 }
 
-/* === SIDEBAR === */
-.sidebar-left, [component="sidebar/left"],
-.sidebar, .off-canvas, .nav-wrapper,
-.sidebar-right, [component="sidebar/right"] {
-  background-color: #050505 !important;
-  background: #050505 !important;
-  border-color: rgba(255,255,255,0.03) !important;
-}
-
-.sidebar-left .nav-link, .sidebar .nav-link,
+/* === SIDEBAR NAV LINKS === */
+.sidebar .nav-link, nav.sidebar .nav-link,
+.sidebar-left .nav-link,
 [component="sidebar/left"] a, .off-canvas a,
-.sidebar .nav-item a {
+.sidebar .nav-item a, nav.sidebar a {
   color: rgba(255,255,255,0.35) !important;
+  background: transparent !important;
 }
 
-.sidebar-left .nav-link:hover, .sidebar .nav-link:hover,
-.sidebar-left .nav-link.active, .sidebar .nav-link.active,
+.sidebar .nav-link:hover, nav.sidebar .nav-link:hover,
+.sidebar-left .nav-link:hover,
+.sidebar .nav-link.active, nav.sidebar .nav-link.active,
 [component="sidebar/left"] a:hover {
   color: #FFD700 !important;
   background: rgba(255,215,0,0.04) !important;
@@ -185,11 +208,10 @@ main, #content, [component="content"],
   color: rgba(255,255,255,0.3) !important;
 }
 
-/* === ACTION BAR — BLACK NOT WHITE === */
+/* === ACTION BAR — BLACK === */
 .action-bar, .category-tools, .topic-actions,
 .nav-pills, .nav-tabs, .toolbar,
 ul.nav.nav-pills, .category-filter,
-.bg-light, .bg-white,
 [class*="bg-light"], [class*="bg-white"] {
   background: #0a0a0a !important;
   background-color: #0a0a0a !important;
@@ -207,8 +229,7 @@ ul.nav.nav-pills, .category-filter,
   border: none !important;
 }
 
-.nav-pills .nav-link:hover, .nav-tabs .nav-link:hover,
-.action-bar a:hover, .toolbar a:hover {
+.nav-pills .nav-link:hover, .nav-tabs .nav-link:hover {
   color: #FFD700 !important;
   background: rgba(255,215,0,0.04) !important;
 }
@@ -356,6 +377,14 @@ figcaption, .form-text, .help-block {
 
 /* === FOOTER === */
 footer, .footer { background: #050505 !important; border-top: 1px solid rgba(255,255,255,0.03) !important; }
+
+/* === BOTTOMBAR === */
+.bottombar, [component="bottombar"],
+div.bottombar, .bottom-sheet {
+  background-color: #050505 !important;
+  background: #050505 !important;
+  border-top: 1px solid rgba(255,255,255,0.04) !important;
+}
 
 /* === SCROLLBAR === */
 ::-webkit-scrollbar { width: 7px; }
