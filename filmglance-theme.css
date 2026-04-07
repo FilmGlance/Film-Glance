@@ -1,13 +1,46 @@
-/* Film Glance Forum Theme — Dark/Gold Cinema Aesthetic */
-/* Matches filmglance.com main site design language */
-
+/* Film Glance Forum Theme v3 — Dark/Gold Cinema Aesthetic */
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap');
 
 /* === FOUNDATIONS === */
 html, body {
-  background-color: #050505 !important;
+  background-color: #8f7373 !important;
   color: #e0e0e0 !important;
   font-family: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* === FIX #3: BRANDING HEADER === */
+.fg-brand-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: #050505;
+  border-bottom: 1px solid rgba(255,215,0,0.08);
+  font-family: 'Syne', sans-serif;
+}
+.fg-brand-bar .fg-logo {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.05));
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,215,0,0.08);
+  font-size: 14px;
+}
+.fg-brand-bar .fg-title {
+  font-size: 15px; font-weight: 700; color: #FFD700;
+  letter-spacing: 0.5px;
+}
+.fg-brand-bar .fg-sep {
+  color: rgba(255,255,255,0.15); font-size: 18px; font-weight: 300;
+}
+.fg-brand-bar .fg-forum-label {
+  font-size: 13px; color: rgba(255,255,255,0.5); font-weight: 500;
+}
+.fg-brand-bar .fg-back-link {
+  margin-left: auto; font-size: 11px;
+  color: rgba(255,255,255,0.3) !important; text-decoration: none !important;
+}
+.fg-brand-bar .fg-back-link:hover {
+  color: #FFD700 !important;
 }
 
 /* === HEADER / NAVBAR === */
@@ -23,7 +56,66 @@ html, body {
   color: #FFD700 !important;
   font-family: 'Syne', sans-serif !important;
   font-weight: 700 !important;
-  letter-spacing: 0.5px;
+}
+
+/* === FIX #2: WHITE ACTION BAR === */
+.action-bar, .category-tools, .topic-actions,
+.nav-pills, .nav-tabs, .toolbar,
+ul.nav.nav-pills, .category-filter {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 10px !important;
+}
+
+.nav-pills .nav-link, .nav-tabs .nav-link,
+.action-bar a, .category-tools a,
+.action-bar .nav-link, .toolbar a {
+  color: rgba(255,255,255,0.6) !important;
+  background: transparent !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 500 !important;
+  border: none !important;
+}
+
+.nav-pills .nav-link:hover, .nav-tabs .nav-link:hover,
+.action-bar a:hover, .toolbar a:hover {
+  color: #FFD700 !important;
+  background: rgba(255,215,0,0.04) !important;
+}
+
+.nav-pills .nav-link.active, .nav-tabs .nav-link.active {
+  background: rgba(255,215,0,0.08) !important;
+  color: #FFD700 !important;
+}
+
+/* === FIX #1: CATEGORY ICONS — GOLD BRANDED === */
+.category-icon, [component="category/icon"],
+.category-item .icon, .category-header .icon,
+i.fa.category-icon,
+.category-item > div:first-child .icon,
+[component="categories/category"] .category-icon {
+  background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(232,160,0,0.08)) !important;
+  border: 1px solid rgba(255,215,0,0.18) !important;
+  border-radius: 8px !important;
+  color: #FFD700 !important;
+}
+
+/* Override all colored category icon backgrounds */
+.category-item [style*="background-color"],
+[component="categories/category"] [style*="background-color"],
+.category-header [style*="background-color"] {
+  background-color: rgba(255,215,0,0.1) !important;
+  background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(232,160,0,0.08)) !important;
+  border: 1px solid rgba(255,215,0,0.18) !important;
+  border-radius: 8px !important;
+}
+
+/* Make category icon font-awesome icons gold */
+.category-item i.fa, .category-item i.fas,
+.category-item i.far, .category-item i.fab,
+[component="categories/category"] i.fa,
+[component="categories/category"] i.fas {
+  color: #FFD700 !important;
 }
 
 /* === SIDEBAR === */
@@ -36,7 +128,6 @@ html, body {
 .sidebar-left .nav-link, .sidebar .nav-link,
 [component="sidebar/left"] a, .off-canvas a {
   color: rgba(255,255,255,0.35) !important;
-  transition: all 0.25s ease !important;
 }
 
 .sidebar-left .nav-link:hover, .sidebar .nav-link:hover,
@@ -46,17 +137,15 @@ html, body {
   background: rgba(255,215,0,0.04) !important;
 }
 
-/* === MAIN CONTENT AREA === */
+/* === MAIN CONTENT === */
 .content, .container, .container-fluid, .row,
-main, #content, .main-post-header, .topic,
-[component="content"] {
+main, #content, [component="content"] {
   background-color: transparent !important;
 }
 
 /* === CARDS & PANELS === */
 .card, .card-body, .card-header, .card-footer,
-.panel, .panel-body, .panel-default,
-.well, .alert:not(.alert-info):not(.alert-success):not(.alert-danger):not(.alert-warning) {
+.panel, .panel-body, .panel-default {
   background-color: rgba(10,10,10,0.8) !important;
   border: 1px solid rgba(255,255,255,0.035) !important;
   color: #e0e0e0 !important;
@@ -71,7 +160,6 @@ main, #content, .main-post-header, .topic,
   border-radius: 12px !important;
   margin-bottom: 8px !important;
   padding: 16px !important;
-  transition: all 0.25s ease !important;
 }
 
 [component="categories/category"]:hover,
@@ -89,17 +177,57 @@ main, #content, .main-post-header, .topic,
 
 .category-item .description,
 [component="category/description"] {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(255,255,255,0.45) !important;
 }
 
-.category-stat, .stat {
+/* === FIX #4: TEXT CONTRAST — no more black on black === */
+.category-stat, .stat, .human-readable-number,
+.category-item span, [component="categories/category"] span,
+.post-info, .post-author, .user-info,
+.teaser-content, .teaser-timestamp,
+small, .small, label,
+.form-text, .help-block,
+.meta, .topic-meta, .post-meta,
+.category-children a,
+p, li, td, th, dt, dd, figcaption {
+  color: rgba(255,255,255,0.55) !important;
+}
+
+/* "No new posts" text */
+.category-item .no-new-posts,
+[component="categories/category"] .text-muted,
+.text-muted {
+  color: rgba(255,255,255,0.35) !important;
+}
+
+/* Stats numbers (0 topics, 0 posts) */
+.category-stat .human-readable-number,
+.stat .human-readable-number,
+.category-item b, .category-item strong {
+  color: rgba(255,255,255,0.7) !important;
+  font-weight: 600 !important;
+}
+
+/* "topics" "posts" labels */
+.category-stat small, .stat small {
+  color: rgba(255,255,255,0.35) !important;
+}
+
+/* Recent post teaser text */
+.teaser-content, [component="category/lastpost"],
+.recent-reply {
   color: rgba(255,255,255,0.5) !important;
+}
+
+/* Timestamp in teasers */
+.teaser-timestamp, .timeago, time {
+  color: rgba(255,255,255,0.3) !important;
+  font-size: 11px !important;
 }
 
 /* === TOPIC LIST === */
 .topic-list-item, [component="category/topic"] {
   border-bottom: 1px solid rgba(255,255,255,0.03) !important;
-  transition: all 0.2s ease !important;
 }
 
 .topic-list-item:hover, [component="category/topic"]:hover {
@@ -129,28 +257,17 @@ main, #content, .main-post-header, .topic,
   line-height: 1.7 !important;
 }
 
-.timeago, .timestamp, time {
-  color: rgba(255,255,255,0.3) !important;
-  font-size: 11px !important;
-}
-
 /* === LINKS === */
-a {
-  color: #FFD700 !important;
-  transition: color 0.2s ease !important;
-  text-decoration: none !important;
-}
+a { color: #FFD700 !important; text-decoration: none !important; }
+a:hover { color: #E8A000 !important; }
 
-a:hover {
-  color: #E8A000 !important;
-}
+.category-item h3 a, [component="category/name"] a { color: #fff !important; }
+.category-item h3 a:hover, [component="category/name"] a:hover { color: #FFD700 !important; }
 
-.category-item h3 a, [component="category/name"] a {
-  color: #fff !important;
-}
-.category-item h3 a:hover, [component="category/name"] a:hover {
-  color: #FFD700 !important;
-}
+/* Home breadcrumb link */
+.breadcrumb-item a { color: #FFD700 !important; }
+.breadcrumb-item.active { color: rgba(255,255,255,0.5) !important; }
+.breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,0.2) !important; }
 
 /* === BUTTONS === */
 .btn-primary {
@@ -161,7 +278,6 @@ a:hover {
   font-family: 'Syne', sans-serif !important;
   border-radius: 10px !important;
   padding: 8px 20px !important;
-  transition: all 0.3s ease !important;
   box-shadow: 0 2px 12px rgba(255,215,0,0.15) !important;
 }
 
@@ -183,14 +299,15 @@ a:hover {
   box-shadow: 0 0 20px rgba(255,215,0,0.15) !important;
 }
 
-.btn-secondary, .btn-default, .btn-outline-secondary {
+.btn-secondary, .btn-default, .btn-outline-secondary,
+.btn-light, .btn-outline-light {
   background: rgba(255,255,255,0.04) !important;
   border: 1px solid rgba(255,255,255,0.08) !important;
   color: #bbb !important;
   border-radius: 10px !important;
 }
 
-.btn-secondary:hover, .btn-default:hover {
+.btn-secondary:hover, .btn-default:hover, .btn-light:hover {
   background: rgba(255,255,255,0.08) !important;
   color: #fff !important;
 }
@@ -216,22 +333,11 @@ input:focus, textarea:focus, select:focus,
   border: 1px solid rgba(255,215,0,0.1) !important;
   border-radius: 12px !important;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
-  padding: 6px !important;
 }
 
-.dropdown-item {
-  color: #d0d0d0 !important;
-  border-radius: 8px !important;
-}
-
-.dropdown-item:hover, .dropdown-item:focus {
-  background-color: rgba(255,215,0,0.06) !important;
-  color: #FFD700 !important;
-}
-
-.dropdown-divider {
-  border-color: rgba(255,255,255,0.05) !important;
-}
+.dropdown-item { color: #d0d0d0 !important; border-radius: 8px !important; }
+.dropdown-item:hover { background-color: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+.dropdown-divider { border-color: rgba(255,255,255,0.05) !important; }
 
 /* === MODALS === */
 .modal-content {
@@ -240,43 +346,27 @@ input:focus, textarea:focus, select:focus,
   border-radius: 16px !important;
   box-shadow: 0 20px 60px rgba(0,0,0,0.7) !important;
 }
-
 .modal-header { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
 .modal-footer { border-top: 1px solid rgba(255,255,255,0.05) !important; }
-
-/* === BREADCRUMBS === */
-.breadcrumb { background: transparent !important; }
-.breadcrumb-item a { color: #FFD700 !important; }
-.breadcrumb-item.active { color: rgba(255,255,255,0.4) !important; }
-.breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,0.2) !important; }
+.modal-title { color: #f0f0f0 !important; }
 
 /* === PAGINATION === */
 .page-link {
   background-color: #0a0a0a !important;
   border-color: rgba(255,255,255,0.06) !important;
   color: #bbb !important;
-  border-radius: 8px !important;
 }
-
-.page-link:hover {
-  background-color: rgba(255,215,0,0.06) !important;
-  color: #FFD700 !important;
-}
-
+.page-link:hover { background-color: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
 .page-item.active .page-link {
   background: linear-gradient(135deg, #FFD700, #E8A000) !important;
-  border-color: #FFD700 !important;
-  color: #050505 !important;
-  font-weight: 700 !important;
+  border-color: #FFD700 !important; color: #050505 !important;
 }
 
 /* === BADGES === */
-.badge.bg-primary, .label-primary {
-  background: rgba(255,215,0,0.12) !important;
-  color: #FFD700 !important;
-}
+.badge.bg-primary { background: rgba(255,215,0,0.12) !important; color: #FFD700 !important; }
+.badge { color: #e0e0e0 !important; }
 
-/* === USER AVATARS === */
+/* === AVATARS === */
 .avatar, [component="user/picture"] {
   border: 2px solid rgba(255,215,0,0.1) !important;
   border-radius: 50% !important;
@@ -289,15 +379,12 @@ footer, .footer, #footer {
   color: rgba(255,255,255,0.3) !important;
 }
 
-/* === NOTIFICATIONS === */
-.alert-info {
-  background: rgba(255,215,0,0.05) !important;
-  border-color: rgba(255,215,0,0.12) !important;
-  color: #FFD700 !important;
-}
+/* === ALERTS === */
+.alert-info { background: rgba(255,215,0,0.05) !important; border-color: rgba(255,215,0,0.12) !important; color: #FFD700 !important; }
+.alert-success { background: rgba(40,167,69,0.08) !important; border-color: rgba(40,167,69,0.2) !important; color: #6fcf7f !important; }
+.alert-danger { background: rgba(220,53,69,0.08) !important; border-color: rgba(220,53,69,0.2) !important; color: #e88 !important; }
 
-/* === TEXT === */
-.text-muted { color: rgba(255,255,255,0.35) !important; }
+/* === HEADINGS === */
 h1, h2, h3, h4, h5, h6 {
   color: #f0f0f0 !important;
   font-family: 'Syne', sans-serif !important;
@@ -307,7 +394,6 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-track { background: #050505; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #FFD700, #E8A000); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { box-shadow: 0 0 12px rgba(255,215,0,0.3); }
 * { scrollbar-width: thin; scrollbar-color: #FFD700 #050505; }
 
 /* === SELECTION === */
@@ -315,10 +401,35 @@ h1, h2, h3, h4, h5, h6 {
 
 /* === MISC === */
 hr { border-color: rgba(255,255,255,0.04) !important; }
-blockquote { border-left: 3px solid rgba(255,215,0,0.3) !important; background: rgba(255,215,0,0.02) !important; padding: 12px 16px !important; border-radius: 0 8px 8px 0 !important; }
-code { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; border-radius: 4px !important; padding: 2px 6px !important; }
-pre { background: #0a0a0a !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 10px !important; }
+blockquote { border-left: 3px solid rgba(255,215,0,0.3) !important; background: rgba(255,215,0,0.02) !important; }
+code { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+pre { background: #0a0a0a !important; border: 1px solid rgba(255,255,255,0.06) !important; }
 .progress { background-color: #151515 !important; }
 .progress-bar { background: linear-gradient(90deg, #FFD700, #E8A000) !important; }
-.tag, .label { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; border: 1px solid rgba(255,215,0,0.1) !important; border-radius: 6px !important; }
-.new-posts, .unread-count { background: #FFD700 !important; color: #050505 !important; font-weight: 700 !important; }
+.tag, .label { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; border: 1px solid rgba(255,215,0,0.1) !important; }
+.new-posts, .unread-count { background: #FFD700 !important; color: #050505 !important; }
+
+/* === TABLE === */
+.table, table { color: #d0d0d0 !important; }
+.table > :not(caption) > * > * { background-color: transparent !important; border-bottom-color: rgba(255,255,255,0.04) !important; }
+
+/* === COMPOSER === */
+.composer, [component="composer"] {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255,215,0,0.1) !important;
+}
+
+/* === LIST GROUP === */
+.list-group-item {
+  background-color: #0a0a0a !important;
+  border-color: rgba(255,255,255,0.04) !important;
+  color: #d0d0d0 !important;
+}
+.list-group-item:hover {
+  background-color: rgba(255,215,0,0.03) !important;
+}
+
+/* === POPOVER / TOOLTIP === */
+.popover { background-color: #0a0a0a !important; border-color: rgba(255,215,0,0.1) !important; }
+.popover-body { color: #d0d0d0 !important; }
+.tooltip-inner { background-color: #1a1a1a !important; color: #e0e0e0 !important; }
