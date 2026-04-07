@@ -1,22 +1,324 @@
-body,html{background-color:#0a0a0a!important;color:#e0e0e0!important}
-.main-header,header,.header,nav.navbar{background-color:#0a0a0a!important;border-bottom:1px solid rgba(255,215,0,0.2)!important}
-.content,.container,.row,main,#content{background-color:transparent!important}
-.card,.card-body,.card-header,.panel,.panel-body{background-color:#111!important;border-color:#222!important;color:#e0e0e0!important}
-[component="category/topic"],[component="category-item"],.category-item,.category-header,.topic-list-item{border-color:#1a1a1a!important}
-a{color:#FFD700!important}
-a:hover{color:#E8A000!important}
-.btn-primary{background-color:#FFD700!important;border-color:#FFD700!important;color:#0a0a0a!important}
-.btn-primary:hover{background-color:#E8A000!important;border-color:#E8A000!important}
-.navbar-brand,.forum-title,h1{color:#FFD700!important}
-.sidebar-left,[component="sidebar/left"]{background-color:#0a0a0a!important}
-.sidebar-left .nav-link,[component="sidebar/left"] a{color:#888!important}
-.sidebar-left .nav-link:hover,.sidebar-left .nav-link.active,[component="sidebar/left"] a:hover{color:#FFD700!important}
-.breadcrumb-item a{color:#FFD700!important}
-.breadcrumb-item.active{color:#aaa!important}
-input,textarea,select,.form-control{background-color:#111!important;color:#e0e0e0!important;border-color:#333!important}
-.dropdown-menu{background-color:#111!important;border-color:#333!important}
-.dropdown-item{color:#e0e0e0!important}
-.dropdown-item:hover{background-color:#1a1a1a!important;color:#FFD700!important}
-::-webkit-scrollbar{width:8px}
-::-webkit-scrollbar-track{background:#0a0a0a}
-::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#FFD700,#E8A000);border-radius:4px}
+/* Film Glance Forum Theme — Dark/Gold Cinema Aesthetic */
+/* Matches filmglance.com main site design language */
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap');
+
+/* === FOUNDATIONS === */
+html, body {
+  background-color: #050505 !important;
+  color: #e0e0e0 !important;
+  font-family: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* === HEADER / NAVBAR === */
+.header, header, nav.navbar, .navbar,
+[component="header"], #header-menu {
+  background: rgba(5,5,5,0.85) !important;
+  backdrop-filter: blur(24px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
+  border-bottom: 1px solid rgba(255,215,0,0.08) !important;
+}
+
+.navbar-brand, .forum-title, [component="header/brand"] {
+  color: #FFD700 !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+}
+
+/* === SIDEBAR === */
+.sidebar-left, [component="sidebar/left"],
+.sidebar, .off-canvas, .nav-wrapper {
+  background-color: #050505 !important;
+  border-right: 1px solid rgba(255,255,255,0.03) !important;
+}
+
+.sidebar-left .nav-link, .sidebar .nav-link,
+[component="sidebar/left"] a, .off-canvas a {
+  color: rgba(255,255,255,0.35) !important;
+  transition: all 0.25s ease !important;
+}
+
+.sidebar-left .nav-link:hover, .sidebar .nav-link:hover,
+.sidebar-left .nav-link.active, .sidebar .nav-link.active,
+[component="sidebar/left"] a:hover {
+  color: #FFD700 !important;
+  background: rgba(255,215,0,0.04) !important;
+}
+
+/* === MAIN CONTENT AREA === */
+.content, .container, .container-fluid, .row,
+main, #content, .main-post-header, .topic,
+[component="content"] {
+  background-color: transparent !important;
+}
+
+/* === CARDS & PANELS === */
+.card, .card-body, .card-header, .card-footer,
+.panel, .panel-body, .panel-default,
+.well, .alert:not(.alert-info):not(.alert-success):not(.alert-danger):not(.alert-warning) {
+  background-color: rgba(10,10,10,0.8) !important;
+  border: 1px solid rgba(255,255,255,0.035) !important;
+  color: #e0e0e0 !important;
+  border-radius: 12px !important;
+}
+
+/* === CATEGORY LIST === */
+[component="categories/category"],
+.category-item, .category-header {
+  background: rgba(10,10,10,0.6) !important;
+  border: 1px solid rgba(255,255,255,0.035) !important;
+  border-radius: 12px !important;
+  margin-bottom: 8px !important;
+  padding: 16px !important;
+  transition: all 0.25s ease !important;
+}
+
+[component="categories/category"]:hover,
+.category-item:hover {
+  border-color: rgba(255,215,0,0.12) !important;
+  background: rgba(255,215,0,0.02) !important;
+}
+
+.category-item h3, .category-item .title,
+[component="category/name"], .category-name {
+  color: #fff !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 600 !important;
+}
+
+.category-item .description,
+[component="category/description"] {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+.category-stat, .stat {
+  color: rgba(255,255,255,0.5) !important;
+}
+
+/* === TOPIC LIST === */
+.topic-list-item, [component="category/topic"] {
+  border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+  transition: all 0.2s ease !important;
+}
+
+.topic-list-item:hover, [component="category/topic"]:hover {
+  background: rgba(255,215,0,0.02) !important;
+}
+
+.topic-title, [component="topic/header"] a {
+  color: #e8e8e8 !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 500 !important;
+}
+
+.topic-title:hover, [component="topic/header"] a:hover {
+  color: #FFD700 !important;
+}
+
+/* === POSTS === */
+[component="post"], .post-container {
+  background: rgba(10,10,10,0.5) !important;
+  border: 1px solid rgba(255,255,255,0.035) !important;
+  border-radius: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+.post-content, [component="post/content"] {
+  color: #d0d0d0 !important;
+  line-height: 1.7 !important;
+}
+
+.timeago, .timestamp, time {
+  color: rgba(255,255,255,0.3) !important;
+  font-size: 11px !important;
+}
+
+/* === LINKS === */
+a {
+  color: #FFD700 !important;
+  transition: color 0.2s ease !important;
+  text-decoration: none !important;
+}
+
+a:hover {
+  color: #E8A000 !important;
+}
+
+.category-item h3 a, [component="category/name"] a {
+  color: #fff !important;
+}
+.category-item h3 a:hover, [component="category/name"] a:hover {
+  color: #FFD700 !important;
+}
+
+/* === BUTTONS === */
+.btn-primary {
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  border: none !important;
+  color: #050505 !important;
+  font-weight: 700 !important;
+  font-family: 'Syne', sans-serif !important;
+  border-radius: 10px !important;
+  padding: 8px 20px !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 2px 12px rgba(255,215,0,0.15) !important;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #E8A000, #d4940a) !important;
+  box-shadow: 0 4px 20px rgba(255,215,0,0.3) !important;
+}
+
+.btn-outline-primary {
+  border: 1px solid rgba(255,215,0,0.18) !important;
+  background: rgba(255,215,0,0.03) !important;
+  color: #FFD700 !important;
+  border-radius: 10px !important;
+}
+
+.btn-outline-primary:hover {
+  border-color: rgba(255,215,0,0.5) !important;
+  background: rgba(255,215,0,0.08) !important;
+  box-shadow: 0 0 20px rgba(255,215,0,0.15) !important;
+}
+
+.btn-secondary, .btn-default, .btn-outline-secondary {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: #bbb !important;
+  border-radius: 10px !important;
+}
+
+.btn-secondary:hover, .btn-default:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
+}
+
+/* === FORMS & INPUTS === */
+input, textarea, select, .form-control, .form-select {
+  background-color: #0a0a0a !important;
+  color: #e0e0e0 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 10px !important;
+}
+
+input:focus, textarea:focus, select:focus,
+.form-control:focus, .form-select:focus {
+  border-color: rgba(255,215,0,0.3) !important;
+  box-shadow: 0 0 0 3px rgba(255,215,0,0.06) !important;
+  outline: none !important;
+}
+
+/* === DROPDOWNS === */
+.dropdown-menu {
+  background-color: #0a0a0a !important;
+  border: 1px solid rgba(255,215,0,0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+  padding: 6px !important;
+}
+
+.dropdown-item {
+  color: #d0d0d0 !important;
+  border-radius: 8px !important;
+}
+
+.dropdown-item:hover, .dropdown-item:focus {
+  background-color: rgba(255,215,0,0.06) !important;
+  color: #FFD700 !important;
+}
+
+.dropdown-divider {
+  border-color: rgba(255,255,255,0.05) !important;
+}
+
+/* === MODALS === */
+.modal-content {
+  background-color: #0a0a0a !important;
+  border: 1px solid rgba(255,215,0,0.12) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7) !important;
+}
+
+.modal-header { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+.modal-footer { border-top: 1px solid rgba(255,255,255,0.05) !important; }
+
+/* === BREADCRUMBS === */
+.breadcrumb { background: transparent !important; }
+.breadcrumb-item a { color: #FFD700 !important; }
+.breadcrumb-item.active { color: rgba(255,255,255,0.4) !important; }
+.breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,0.2) !important; }
+
+/* === PAGINATION === */
+.page-link {
+  background-color: #0a0a0a !important;
+  border-color: rgba(255,255,255,0.06) !important;
+  color: #bbb !important;
+  border-radius: 8px !important;
+}
+
+.page-link:hover {
+  background-color: rgba(255,215,0,0.06) !important;
+  color: #FFD700 !important;
+}
+
+.page-item.active .page-link {
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  border-color: #FFD700 !important;
+  color: #050505 !important;
+  font-weight: 700 !important;
+}
+
+/* === BADGES === */
+.badge.bg-primary, .label-primary {
+  background: rgba(255,215,0,0.12) !important;
+  color: #FFD700 !important;
+}
+
+/* === USER AVATARS === */
+.avatar, [component="user/picture"] {
+  border: 2px solid rgba(255,215,0,0.1) !important;
+  border-radius: 50% !important;
+}
+
+/* === FOOTER === */
+footer, .footer, #footer {
+  background: #050505 !important;
+  border-top: 1px solid rgba(255,255,255,0.03) !important;
+  color: rgba(255,255,255,0.3) !important;
+}
+
+/* === NOTIFICATIONS === */
+.alert-info {
+  background: rgba(255,215,0,0.05) !important;
+  border-color: rgba(255,215,0,0.12) !important;
+  color: #FFD700 !important;
+}
+
+/* === TEXT === */
+.text-muted { color: rgba(255,255,255,0.35) !important; }
+h1, h2, h3, h4, h5, h6 {
+  color: #f0f0f0 !important;
+  font-family: 'Syne', sans-serif !important;
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar-track { background: #050505; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #FFD700, #E8A000); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { box-shadow: 0 0 12px rgba(255,215,0,0.3); }
+* { scrollbar-width: thin; scrollbar-color: #FFD700 #050505; }
+
+/* === SELECTION === */
+::selection { background: rgba(255,215,0,0.2); color: #fff; }
+
+/* === MISC === */
+hr { border-color: rgba(255,255,255,0.04) !important; }
+blockquote { border-left: 3px solid rgba(255,215,0,0.3) !important; background: rgba(255,215,0,0.02) !important; padding: 12px 16px !important; border-radius: 0 8px 8px 0 !important; }
+code { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; border-radius: 4px !important; padding: 2px 6px !important; }
+pre { background: #0a0a0a !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 10px !important; }
+.progress { background-color: #151515 !important; }
+.progress-bar { background: linear-gradient(90deg, #FFD700, #E8A000) !important; }
+.tag, .label { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; border: 1px solid rgba(255,215,0,0.1) !important; border-radius: 6px !important; }
+.new-posts, .unread-count { background: #FFD700 !important; color: #050505 !important; font-weight: 700 !important; }
