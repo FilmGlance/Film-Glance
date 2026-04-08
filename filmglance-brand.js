@@ -1,12 +1,14 @@
 document.addEventListener('DOMContentLoaded', function() {
 
   /* ================================================================
-     FILM GLANCE FORUM — BRANDING + AUTH UI
+     FILM GLANCE FORUM — BRANDING + AUTH UI v2
      Features:
-       1. Branding bar with Sign In / Register buttons
-       2. Registration success drop-down notification
-       3. 100-thread guest viewing limit with registration modal
-       4. Login/register modal on guest post/reply/topic attempt
+       1. Branded header bar matching Film Glance site aesthetic
+       2. Sign In / Register buttons (gold-styled)
+       3. Registration success drop-down notification
+       4. 100-thread guest viewing limit with registration modal
+       5. Login/register modal on guest post/reply/topic attempt
+       6. Hides redundant NodeBB site title
      ================================================================ */
 
   var GUEST_THREAD_LIMIT = 100;
@@ -17,13 +19,15 @@ document.addEventListener('DOMContentLoaded', function() {
   /* ── Helpers ────────────────────────────────────────────────────── */
 
   function isLoggedIn() {
-    /* NodeBB exposes config.loggedIn globally */
-    if (window.config && typeof window.config.loggedIn !== 'undefined') {
-      return !!window.config.loggedIn;
-    }
-    /* Fallback: check for user menu elements */
-    var userIcon = document.querySelector('[component="header/avatar"]');
-    return !!userIcon;
+    /* NodeBB exposes app.user.uid after boot — 0 means guest */
+    if (window.app && window.app.user && window.app.user.uid > 0) return true;
+    /* Fallback: config object */
+    if (window.config && window.config.loggedIn) return true;
+    /* Fallback: check for logged-in-only DOM elements */
+    if (document.querySelector('[component="header/avatar"], [component="sidebar/me"]')) return true;
+    /* Fallback: check body class */
+    if (document.body.classList.contains('loggedIn')) return true;
+    return false;
   }
 
   function getThreadCount() {
@@ -40,8 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function isTopicPage() {
-    var path = window.location.pathname;
-    return /\/discuss\/topic\//.test(path);
+    return /\/discuss\/topic\//.test(window.location.pathname);
   }
 
 
@@ -55,29 +58,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var bar = document.createElement('div');
     bar.className = 'fg-brand-bar';
-    bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;'
-      + 'padding:10px 20px;background:#050505;border-bottom:1px solid rgba(255,215,0,0.12);'
-      + 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif;position:relative;z-index:1000;';
 
-    /* Left side: logo + nav */
+    /* Left side: Film Glance logo */
     var left = document.createElement('div');
-    left.style.cssText = 'display:flex;align-items:center;gap:10px;';
-    left.innerHTML =
-      '<span style="font-family:Georgia,Times New Roman,serif;font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px;">'
-      + 'Film <span style="color:#FFD700;">Glance</span></span>'
-      + '<span style="color:rgba(255,215,0,0.3);font-size:14px;">|</span>'
-      + '<span style="color:#999;font-size:13px;">Discussion Forum</span>';
+    left.className = 'fg-brand-left';
 
-    /* Right side: auth buttons or user info */
+    left.innerHTML =
+      '<a href="https://filmglance.com" style="text-decoration:none;display:flex;align-items:center;gap:12px;">'
+      + '<div class="fg-logo">\uD83C\uDFAC</div>'
+      + '<div style="display:flex;flex-direction:column;line-height:1.2;">'
+      + '<span style="font-family:Syne,Georgia,serif;font-size:18px;font-weight:800;letter-spacing:-0.5px;">'
+      + '<span style="color:#ffffff;">Film</span> <span style="color:#FFD700;">Glance</span></span>'
+      + '<span style="font-family:Syne,sans-serif;font-size:10px;color:rgba(255,215,0,0.6);'
+      + 'letter-spacing:2.5px;text-transform:uppercase;font-weight:600;">Discussion Forum</span>'
+      + '</div>'
+      + '</a>';
+
+    /* Right side: auth buttons */
     var right = document.createElement('div');
     right.className = 'fg-auth-buttons';
-    right.style.cssText = 'display:flex;align-items:center;gap:10px;';
 
     bar.appendChild(left);
     bar.appendChild(right);
     document.body.insertBefore(bar, document.body.firstChild);
 
     updateAuthButtons();
+    hideNodeBBHeader();
   }
 
   function updateAuthButtons() {
@@ -85,34 +91,27 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!container) return;
 
     if (isLoggedIn()) {
-      /* Show back link only when logged in */
       container.innerHTML =
-        '<a href="https://filmglance.com" style="color:#888;font-size:12px;text-decoration:none;'
-        + 'transition:color 0.2s;" onmouseover="this.style.color=\'#FFD700\'" '
-        + 'onmouseout="this.style.color=\'#888\'">\u2190 Back to Film Glance</a>';
+        '<a href="https://filmglance.com" class="fg-back-link">'
+        + '\u2190 Back to Film Glance</a>';
     } else {
-      /* Show Sign In + Register buttons */
       container.innerHTML =
-        '<a href="' + FORUM_BASE + '/login" class="fg-btn-signin" style="'
-        + 'padding:7px 18px;font-size:12px;font-weight:600;color:#FFD700;'
-        + 'background:transparent;border:1px solid rgba(255,215,0,0.3);'
-        + 'border-radius:8px;text-decoration:none;transition:all 0.2s;'
-        + 'letter-spacing:0.3px;" '
-        + 'onmouseover="this.style.borderColor=\'rgba(255,215,0,0.6)\';this.style.boxShadow=\'0 0 12px rgba(255,215,0,0.15)\'" '
-        + 'onmouseout="this.style.borderColor=\'rgba(255,215,0,0.3)\';this.style.boxShadow=\'none\'">'
-        + 'Sign In</a>'
-        + '<a href="' + FORUM_BASE + '/register" class="fg-btn-register" style="'
-        + 'padding:7px 18px;font-size:12px;font-weight:700;color:#050505;'
-        + 'background:linear-gradient(135deg,#FFD700,#E8A000);'
-        + 'border:1px solid #FFD700;border-radius:8px;text-decoration:none;'
-        + 'transition:all 0.2s;letter-spacing:0.3px;" '
-        + 'onmouseover="this.style.boxShadow=\'0 0 16px rgba(255,215,0,0.3)\'" '
-        + 'onmouseout="this.style.boxShadow=\'none\'">'
-        + 'Register</a>'
-        + '<a href="https://filmglance.com" style="color:#555;font-size:11px;text-decoration:none;'
-        + 'margin-left:6px;transition:color 0.2s;" onmouseover="this.style.color=\'#FFD700\'" '
-        + 'onmouseout="this.style.color=\'#555\'">\u2190 Film Glance</a>';
+        '<a href="' + FORUM_BASE + '/login" class="fg-btn-signin">Sign In</a>'
+        + '<a href="' + FORUM_BASE + '/register" class="fg-btn-register">Register</a>';
     }
+  }
+
+  function hideNodeBBHeader() {
+    /* Hide the redundant NodeBB brand/title in the navbar */
+    var selectors = [
+      '.navbar-brand',
+      '[component="brand/wrapper"]',
+      'a.navbar-brand'
+    ];
+    selectors.forEach(function(sel) {
+      var el = document.querySelector(sel);
+      if (el) el.style.display = 'none';
+    });
   }
 
 
@@ -124,24 +123,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var notif = document.createElement('div');
     notif.className = 'fg-notification';
-    notif.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
-      + 'transform:translateY(-100%);transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);';
 
     notif.innerHTML =
-      '<div style="max-width:560px;margin:0 auto;padding:16px 24px;'
-      + 'background:linear-gradient(135deg,#0a0a0a,#111);'
-      + 'border:1px solid rgba(255,215,0,0.25);border-top:none;'
-      + 'border-radius:0 0 12px 12px;display:flex;align-items:center;gap:12px;'
-      + 'box-shadow:0 4px 24px rgba(0,0,0,0.6),0 0 20px rgba(255,215,0,0.08);'
-      + 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">'
-      + '<span style="display:flex;align-items:center;justify-content:center;'
-      + 'width:28px;height:28px;min-width:28px;border-radius:50%;'
-      + 'background:linear-gradient(135deg,#FFD700,#E8A000);'
-      + 'color:#050505;font-size:14px;font-weight:700;">\u2713</span>'
-      + '<span style="flex:1;font-size:14px;font-weight:600;color:#fff;line-height:1.4;">'
-      + message + '</span>'
-      + '<span class="fg-notif-close" style="cursor:pointer;color:#666;font-size:20px;'
-      + 'padding:0 4px;transition:color 0.2s;">\u00D7</span>'
+      '<div class="fg-notif-inner">'
+      + '<span class="fg-notif-icon">\u2713</span>'
+      + '<span class="fg-notif-text">' + message + '</span>'
+      + '<span class="fg-notif-close">\u00D7</span>'
       + '</div>';
 
     document.body.appendChild(notif);
@@ -176,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var messages = {
       'thread_limit': {
-        title: "You've reached your guest viewing limit",
+        title: "You\u2019ve reached your guest viewing limit",
         body: "Guests can browse up to 100 threads. Create a free account to get unlimited access to all discussions, archived IMDb posts, and community features."
       },
       'post': {
@@ -193,63 +180,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var overlay = document.createElement('div');
     overlay.className = 'fg-auth-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;'
-      + 'background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);'
-      + 'display:flex;align-items:center;justify-content:center;'
-      + 'opacity:0;transition:opacity 0.3s;';
 
     overlay.innerHTML =
-      '<div class="fg-auth-modal" style="'
-      + 'width:90%;max-width:420px;background:#0a0a0a;'
-      + 'border:1px solid rgba(255,215,0,0.12);border-radius:16px;'
-      + 'padding:36px 32px;text-align:center;position:relative;'
-      + 'box-shadow:0 8px 40px rgba(0,0,0,0.5),0 0 30px rgba(255,215,0,0.05);'
-      + 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif;'
-      + 'transform:scale(0.95);transition:transform 0.3s cubic-bezier(0.16,1,0.3,1);">'
+      '<div class="fg-auth-modal">'
 
-      /* Close button */
+      /* Close button — not shown for thread limit */
       + (reason !== 'thread_limit'
-        ? '<span class="fg-modal-close" style="position:absolute;top:14px;right:18px;'
-          + 'color:#555;font-size:22px;cursor:pointer;transition:color 0.2s;'
-          + 'line-height:1;">\u00D7</span>'
+        ? '<span class="fg-modal-close">\u00D7</span>'
         : '')
 
       /* Logo */
-      + '<div style="margin-bottom:20px;">'
-      + '<span style="font-family:Georgia,Times New Roman,serif;font-size:22px;font-weight:700;'
-      + 'color:#fff;letter-spacing:-0.3px;">Film <span style="color:#FFD700;">Glance</span></span>'
+      + '<div class="fg-modal-logo">'
+      + '<span style="font-family:Syne,Georgia,serif;font-size:22px;font-weight:800;letter-spacing:-0.3px;">'
+      + '<span style="color:#ffffff;">Film</span> <span style="color:#FFD700;">Glance</span></span>'
       + '</div>'
 
       /* Divider */
-      + '<div style="height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.15),transparent);'
-      + 'margin-bottom:20px;"></div>'
+      + '<div class="fg-modal-divider"></div>'
 
       /* Title */
-      + '<h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#fff;">'
-      + msg.title + '</h2>'
+      + '<h2 class="fg-modal-title">' + msg.title + '</h2>'
 
       /* Body */
-      + '<p style="margin:0 0 28px;font-size:13px;color:#999;line-height:1.6;">'
-      + msg.body + '</p>'
+      + '<p class="fg-modal-body">' + msg.body + '</p>'
 
       /* Buttons */
-      + '<div style="display:flex;flex-direction:column;gap:10px;">'
-
-      + '<a href="' + FORUM_BASE + '/register" style="display:block;padding:13px 24px;'
-      + 'background:linear-gradient(135deg,#FFD700,#E8A000);color:#050505;'
-      + 'font-size:14px;font-weight:700;text-decoration:none;border-radius:10px;'
-      + 'letter-spacing:0.3px;transition:box-shadow 0.2s;" '
-      + 'onmouseover="this.style.boxShadow=\'0 0 20px rgba(255,215,0,0.3)\'" '
-      + 'onmouseout="this.style.boxShadow=\'none\'">Create Free Account</a>'
-
-      + '<a href="' + FORUM_BASE + '/login" style="display:block;padding:13px 24px;'
-      + 'background:transparent;color:#FFD700;'
-      + 'font-size:13px;font-weight:600;text-decoration:none;border-radius:10px;'
-      + 'border:1px solid rgba(255,215,0,0.25);transition:all 0.2s;" '
-      + 'onmouseover="this.style.borderColor=\'rgba(255,215,0,0.5)\';this.style.boxShadow=\'0 0 12px rgba(255,215,0,0.12)\'" '
-      + 'onmouseout="this.style.borderColor=\'rgba(255,215,0,0.25)\';this.style.boxShadow=\'none\'">'
+      + '<div class="fg-modal-buttons">'
+      + '<a href="' + FORUM_BASE + '/register" class="fg-modal-btn-primary">Create Free Account</a>'
+      + '<a href="' + FORUM_BASE + '/login" class="fg-modal-btn-secondary">'
       + 'Already have an account? Sign In</a>'
-
       + '</div>'
       + '</div>';
 
@@ -258,13 +217,11 @@ document.addEventListener('DOMContentLoaded', function() {
     /* Animate in */
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
-        overlay.style.opacity = '1';
-        var modal = overlay.querySelector('.fg-auth-modal');
-        if (modal) modal.style.transform = 'scale(1)';
+        overlay.classList.add('fg-visible');
       });
     });
 
-    /* Close handlers (not for thread limit — that one is mandatory) */
+    /* Close handlers */
     var closeBtn = overlay.querySelector('.fg-modal-close');
     if (closeBtn) {
       closeBtn.onmouseover = function() { closeBtn.style.color = '#FFD700'; };
@@ -279,9 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function dismissModal() {
-      overlay.style.opacity = '0';
-      var modal = overlay.querySelector('.fg-auth-modal');
-      if (modal) modal.style.transform = 'scale(0.95)';
+      overlay.classList.remove('fg-visible');
       setTimeout(function() {
         if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       }, 300);
@@ -296,7 +251,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!isTopicPage()) return;
 
     var count = incrementThreadCount();
-
     if (count >= GUEST_THREAD_LIMIT) {
       showAuthModal('thread_limit');
     }
@@ -309,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isLoggedIn()) return;
 
     document.body.addEventListener('click', function(e) {
+      /* Re-check on every click in case login state changed */
       if (isLoggedIn()) return;
 
       var target = e.target;
@@ -323,8 +278,8 @@ document.addEventListener('DOMContentLoaded', function() {
       /* Detect new topic button */
       if (component === 'category/post'
           || action === 'topics.new_topic'
-          || text === 'new topic'
-          || href.indexOf('/compose') > -1) {
+          || href.indexOf('/compose') > -1
+          || (el.tagName === 'A' && text === 'new topic')) {
         e.preventDefault();
         e.stopPropagation();
         showAuthModal('topic');
@@ -335,8 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (component === 'post/reply'
           || component === 'topic/reply'
           || action === 'posts.reply'
-          || text === 'reply'
-          || (el.tagName === 'BUTTON' && text.indexOf('reply') > -1)) {
+          || (el.tagName === 'BUTTON' && text === 'reply')) {
         e.preventDefault();
         e.stopPropagation();
         showAuthModal('post');
@@ -351,14 +305,13 @@ document.addEventListener('DOMContentLoaded', function() {
         showAuthModal('post');
         return;
       }
-    }, true); /* useCapture to intercept before NodeBB handlers */
+    }, true);
   }
 
 
   /* ── 6. Registration Success Detection ─────────────────────────── */
 
   function detectRegistrationSuccess() {
-    /* Method 1: Check sessionStorage flag from form submission */
     try {
       if (sessionStorage.getItem(REG_FLAG_KEY) === '1') {
         sessionStorage.removeItem(REG_FLAG_KEY);
@@ -368,7 +321,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     } catch(e) {}
 
-    /* Method 2: MutationObserver for NodeBB's native alerts */
     var observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(m) {
         m.addedNodes.forEach(function(node) {
@@ -379,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
               || (text.indexOf('verification') > -1 && text.indexOf('sent') > -1)) {
             if (node.classList && (node.classList.contains('alert')
                 || node.classList.contains('alert-success')
-                || node.querySelector && node.querySelector('.alert-success'))) {
+                || (node.querySelector && node.querySelector('.alert-success')))) {
               showFGNotification('Registration Successful! Check Your Inbox To Verify Your Account', 7000);
             }
           }
@@ -388,7 +340,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    /* Method 3: Hook registration form submission to set flag */
     hookRegistrationForm();
   }
 
@@ -404,18 +355,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
   /* ── Initialize ─────────────────────────────────────────────────── */
 
-  buildBrandBar();
-  checkThreadLimit();
-  interceptGuestActions();
-  detectRegistrationSuccess();
+  /* Wait briefly for NodeBB to populate config/app objects */
+  function init() {
+    buildBrandBar();
+    checkThreadLimit();
+    interceptGuestActions();
+    detectRegistrationSuccess();
+  }
 
-  /* Re-initialize on NodeBB SPA page transitions */
+  /* NodeBB fires this when it's fully ready */
   if (window.$ && window.$(window)) {
+    window.$(window).on('action:app.load', function() {
+      init();
+    });
     window.$(window).on('action:ajaxify.end', function() {
       buildBrandBar();
       checkThreadLimit();
       hookRegistrationForm();
     });
   }
+
+  /* Fallback: run after short delay if NodeBB events don't fire */
+  setTimeout(init, 800);
 
 });
