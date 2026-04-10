@@ -1,11 +1,22 @@
 /* ================================================================
-   FILM GLANCE FORUM — AUTH UI + FORM CONTRAST (append to theme CSS)
+   FILM GLANCE FORUM — BANNER + AUTH UI + FIXES (append to theme)
    ================================================================ */
 
-/* Playfair Display for Film Glance logo (matches main site) */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 
-/* === HIDE NODEBB DEFAULT NAVBAR (replaced by our brand bar) === */
+/* === CRITICAL: Override theme span color for branding elements === */
+.fg-text-white,
+.fg-banner .fg-text-white,
+.fg-banner-wrap .fg-text-white {
+  color: #ffffff !important;
+}
+.fg-text-gold,
+.fg-banner .fg-text-gold,
+.fg-banner-wrap .fg-text-gold {
+  color: #FFD700 !important;
+}
+
+/* === HIDE NODEBB DEFAULT NAVBAR === */
 #header-menu,
 nav.navbar,
 .navbar,
@@ -15,9 +26,191 @@ a.navbar-brand {
   display: none !important;
 }
 
+/* === BANNER === */
+.fg-banner-wrap {
+  position: relative;
+  z-index: 1050;
+}
+.fg-banner {
+  display: block;
+  width: 100%;
+  height: 150px;
+  position: relative;
+  background: linear-gradient(90deg, #050505, #0a0a0a, #050505);
+  text-decoration: none !important;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+.fg-banner:hover {
+  opacity: 0.92;
+}
+
+/* === SIGN IN BUTTON (prominent, bigger than filmglance.com) === */
+.fg-btn-signin {
+  display: inline-block !important;
+  padding: 10px 28px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,215,0,0.25) !important;
+  background: rgba(255,215,0,0.05) !important;
+  color: #FFD700 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  transition: all 0.3s !important;
+  letter-spacing: 0.3px;
+}
+.fg-btn-signin:hover {
+  border-color: rgba(255,215,0,0.7) !important;
+  background: rgba(255,215,0,0.1) !important;
+  box-shadow: 0 0 24px rgba(255,215,0,0.25), 0 0 48px rgba(255,215,0,0.1) !important;
+  color: #FFD700 !important;
+}
+
+/* === USER BUTTON (when logged in) === */
+.fg-btn-user {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 8px 18px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(255,215,0,0.18) !important;
+  background: rgba(255,215,0,0.03) !important;
+  color: #FFD700 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  transition: all 0.3s !important;
+}
+.fg-btn-user:hover {
+  border-color: rgba(255,215,0,0.6) !important;
+  background: rgba(255,215,0,0.08) !important;
+  box-shadow: 0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1) !important;
+  color: #FFD700 !important;
+}
+
+/* === DROP-DOWN NOTIFICATION === */
+.fg-notification {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 99999;
+  transform: translateY(-100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fg-notif-inner {
+  max-width: 520px;
+  margin: 12px auto 0;
+  padding: 14px 18px;
+  background: #070707;
+  border-radius: 14px;
+  border: 1px solid rgba(255,215,0,0.07);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.fg-notif-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06));
+  border: 1px solid rgba(255,215,0,0.15);
+  display: flex; align-items: center; justify-content: center;
+}
+.fg-notif-text {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  margin: 0 !important;
+  font-family: 'Syne', sans-serif !important;
+}
+.fg-notif-close {
+  cursor: pointer;
+  color: #444;
+  font-size: 18px;
+  padding: 2px;
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+
+/* === AUTH MODAL === */
+.fg-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.88);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.fg-auth-overlay.fg-visible {
+  opacity: 1;
+}
+.fg-auth-modal {
+  width: 100%;
+  max-width: 390px;
+  background: #070707;
+  border-radius: 20px;
+  border: 1px solid rgba(255,215,0,0.07);
+  padding: 36px 30px;
+  position: relative;
+  font-family: system-ui, -apple-system, sans-serif;
+  transform: scale(0.95);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fg-auth-overlay.fg-visible .fg-auth-modal {
+  transform: scale(1);
+}
+.fg-modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  color: #444 !important;
+  font-size: 17px;
+  cursor: pointer;
+  transition: color 0.2s;
+  background: none; border: none;
+}
+.fg-modal-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  margin: 0 auto 12px;
+  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06));
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,215,0,0.1);
+}
+.fg-modal-heading {
+  font-family: 'Playfair Display', serif !important;
+  font-size: 22px !important;
+  color: #ffffff !important;
+  margin: 0 !important;
+}
+.fg-modal-btn-primary {
+  display: block !important;
+  width: 100% !important;
+  padding: 12px !important;
+  text-align: center !important;
+  border-radius: 11px !important;
+  border: none !important;
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  color: #050505 !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  box-sizing: border-box !important;
+  transition: box-shadow 0.2s !important;
+}
+.fg-modal-btn-primary:hover {
+  box-shadow: 0 0 20px rgba(255,215,0,0.3) !important;
+  color: #050505 !important;
+}
+
 /* === REGISTRATION + LOGIN FORM CONTRAST === */
 
-/* Page headings */
 .register h1, .register h2, .register h3,
 .login h1, .login h2, .login h3,
 [component="register"] h1, [component="register"] h2 {
@@ -25,11 +218,8 @@ a.navbar-brand {
   font-family: 'Playfair Display', serif !important;
 }
 
-/* Form labels — bright white, visible */
-.register label,
-.login label,
-.register .form-label,
-.login .form-label,
+.register label, .login label,
+.register .form-label, .login .form-label,
 [component="register"] label,
 [component="register/local"] label {
   color: #ffffff !important;
@@ -37,16 +227,9 @@ a.navbar-brand {
   font-size: 14px !important;
 }
 
-/* Input fields — dark with visible text and gold focus */
-.register input,
-.register textarea,
-.register .form-control,
-.register select,
-.login input,
-.login textarea,
-.login .form-control,
-[component="register"] input,
-[component="register"] .form-control,
+.register input, .register textarea, .register .form-control, .register select,
+.login input, .login textarea, .login .form-control,
+[component="register"] input, [component="register"] .form-control,
 [component="register/local"] input {
   background-color: #0a0a0a !important;
   color: #ffffff !important;
@@ -55,44 +238,32 @@ a.navbar-brand {
   padding: 10px 14px !important;
   border-radius: 10px !important;
 }
-.register input:focus,
-.register .form-control:focus,
-.login input:focus,
-.login .form-control:focus,
+.register input:focus, .register .form-control:focus,
+.login input:focus, .login .form-control:focus,
 [component="register"] input:focus {
   border-color: rgba(255,215,0,0.4) !important;
   box-shadow: 0 0 0 3px rgba(255,215,0,0.08) !important;
   outline: none !important;
 }
 
-/* Placeholder text — visible grey */
-.register input::placeholder,
-.login input::placeholder,
-.register .form-control::placeholder,
-.login .form-control::placeholder {
+.register input::placeholder, .login input::placeholder,
+.register .form-control::placeholder, .login .form-control::placeholder {
   color: rgba(255,255,255,0.3) !important;
   opacity: 1 !important;
 }
 
-/* Help text / hints */
-.register .form-text,
-.register .help-block,
-.register small,
-.login .form-text,
-.login small,
+.register .form-text, .register .help-block, .register small,
+.login .form-text, .login small,
 [component="register"] .form-text {
   color: rgba(255,255,255,0.4) !important;
   font-size: 12px !important;
 }
 
-/* Description text */
 .register p, .login p {
   color: rgba(255,255,255,0.6) !important;
 }
 
-/* Submit button — gold gradient matching Film Glance */
-.register .btn-primary,
-.login .btn-primary,
+.register .btn-primary, .login .btn-primary,
 [component="register"] .btn-primary,
 [component="register/local"] .btn-primary,
 #login .btn-primary {
@@ -103,36 +274,22 @@ a.navbar-brand {
   font-size: 13.5px !important;
   padding: 12px 24px !important;
   border-radius: 11px !important;
-  transition: box-shadow 0.2s !important;
 }
-.register .btn-primary:hover,
-.login .btn-primary:hover {
+.register .btn-primary:hover, .login .btn-primary:hover {
   box-shadow: 0 0 20px rgba(255,215,0,0.3) !important;
 }
 
-/* Password toggle */
-.register .input-group-text,
-.login .input-group-text {
+.register .input-group-text, .login .input-group-text {
   background-color: #0a0a0a !important;
   border-color: rgba(255,255,255,0.12) !important;
   color: #FFD700 !important;
 }
 
-/* Validation states */
 .register .is-invalid { border-color: #ef4444 !important; }
 .register .is-valid { border-color: #22c55e !important; }
 .register .invalid-feedback { color: #ef4444 !important; font-size: 12px !important; }
 .register .valid-feedback { color: #22c55e !important; font-size: 12px !important; }
 
-/* Terms/checkbox labels */
-.register .form-check-label {
-  color: rgba(255,255,255,0.5) !important;
-}
-.register .form-check-label a {
-  color: #FFD700 !important;
-}
-
-/* Links on login/register pages */
-.register a, .login a {
-  color: #FFD700 !important;
-}
+.register .form-check-label { color: rgba(255,255,255,0.5) !important; }
+.register .form-check-label a { color: #FFD700 !important; }
+.register a, .login a { color: #FFD700 !important; }
