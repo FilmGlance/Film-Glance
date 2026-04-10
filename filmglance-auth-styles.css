@@ -1,0 +1,138 @@
+/* ================================================================
+   FILM GLANCE FORUM — AUTH UI + FORM CONTRAST (append to theme CSS)
+   ================================================================ */
+
+/* Playfair Display for Film Glance logo (matches main site) */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+/* === HIDE NODEBB DEFAULT NAVBAR (replaced by our brand bar) === */
+#header-menu,
+nav.navbar,
+.navbar,
+[component="brand/wrapper"],
+.navbar-brand,
+a.navbar-brand {
+  display: none !important;
+}
+
+/* === REGISTRATION + LOGIN FORM CONTRAST === */
+
+/* Page headings */
+.register h1, .register h2, .register h3,
+.login h1, .login h2, .login h3,
+[component="register"] h1, [component="register"] h2 {
+  color: #ffffff !important;
+  font-family: 'Playfair Display', serif !important;
+}
+
+/* Form labels — bright white, visible */
+.register label,
+.login label,
+.register .form-label,
+.login .form-label,
+[component="register"] label,
+[component="register/local"] label {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+
+/* Input fields — dark with visible text and gold focus */
+.register input,
+.register textarea,
+.register .form-control,
+.register select,
+.login input,
+.login textarea,
+.login .form-control,
+[component="register"] input,
+[component="register"] .form-control,
+[component="register/local"] input {
+  background-color: #0a0a0a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  font-size: 14px !important;
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+}
+.register input:focus,
+.register .form-control:focus,
+.login input:focus,
+.login .form-control:focus,
+[component="register"] input:focus {
+  border-color: rgba(255,215,0,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(255,215,0,0.08) !important;
+  outline: none !important;
+}
+
+/* Placeholder text — visible grey */
+.register input::placeholder,
+.login input::placeholder,
+.register .form-control::placeholder,
+.login .form-control::placeholder {
+  color: rgba(255,255,255,0.3) !important;
+  opacity: 1 !important;
+}
+
+/* Help text / hints */
+.register .form-text,
+.register .help-block,
+.register small,
+.login .form-text,
+.login small,
+[component="register"] .form-text {
+  color: rgba(255,255,255,0.4) !important;
+  font-size: 12px !important;
+}
+
+/* Description text */
+.register p, .login p {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+/* Submit button — gold gradient matching Film Glance */
+.register .btn-primary,
+.login .btn-primary,
+[component="register"] .btn-primary,
+[component="register/local"] .btn-primary,
+#login .btn-primary {
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  border: none !important;
+  color: #050505 !important;
+  font-weight: 700 !important;
+  font-size: 13.5px !important;
+  padding: 12px 24px !important;
+  border-radius: 11px !important;
+  transition: box-shadow 0.2s !important;
+}
+.register .btn-primary:hover,
+.login .btn-primary:hover {
+  box-shadow: 0 0 20px rgba(255,215,0,0.3) !important;
+}
+
+/* Password toggle */
+.register .input-group-text,
+.login .input-group-text {
+  background-color: #0a0a0a !important;
+  border-color: rgba(255,255,255,0.12) !important;
+  color: #FFD700 !important;
+}
+
+/* Validation states */
+.register .is-invalid { border-color: #ef4444 !important; }
+.register .is-valid { border-color: #22c55e !important; }
+.register .invalid-feedback { color: #ef4444 !important; font-size: 12px !important; }
+.register .valid-feedback { color: #22c55e !important; font-size: 12px !important; }
+
+/* Terms/checkbox labels */
+.register .form-check-label {
+  color: rgba(255,255,255,0.5) !important;
+}
+.register .form-check-label a {
+  color: #FFD700 !important;
+}
+
+/* Links on login/register pages */
+.register a, .login a {
+  color: #FFD700 !important;
+}
