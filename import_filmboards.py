@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-FilmBoards → NodeBB Import Script v3
+FilmBoards → NodeBB Import Script v4
 ======================================
 Each original thread becomes its own NodeBB topic.
 Each original post/reply becomes a NodeBB reply.
+Bad titles (relative timestamps, bare numbers) replaced with first post content.
 
 - Movie boards (with IMDb ID) → "The Cinema" (cid 6)
 - Non-movie boards → "The IMDb Archives" (cid 25)
@@ -20,6 +21,7 @@ Usage:
 import json
 import os
 import sys
+import re
 import time
 import argparse
 import requests
@@ -104,6 +106,51 @@ def api_post(path, payload):
     return None
 
 
+def is_bad_title(t):
+    """Detect titles that are relative timestamps, bare numbers, or meaningless."""
+    t = t.strip()
+    if not t or len(t) < 3:
+        return True
+    if re.match(r'^\d+$', t):
+        return True
+    if re.match(r'^\d+\s+(years?|months?|days?|hours?|minutes?|weeks?)\s+ago$', t, re.IGNORECASE):
+        return True
+    if re.match(r'^(about\s+)?\d+\s+(years?|months?|days?|hours?|minutes?|weeks?)\s+ago$', t, re.IGNORECASE):
+        return True
+    if re.match(r'^(less than|more than)\s+(a|an|\d+)\s+(year|month|day|hour|minute|week)', t, re.IGNORECASE):
+        return True
+    if re.match(r'^(yesterday|today|last\s+week|last\s+month|last\s+year)$', t, re.IGNORECASE):
+        return True
+    if t.lower() in ('post deleted', 'deleted', 'untitled', 'thread', 'no title',
+                      'this message has been deleted', 'n/a', 'none', 'null'):
+        return True
+    if re.match(r'^thread:?\s*\d*$', t, re.IGNORECASE):
+        return True
+    return False
+
+
+def clean_title(raw_title, posts):
+    """Get a good title from the thread data."""
+    t = (raw_title or "").strip()
+
+    if is_bad_title(t):
+        # Use first line of first post content as title
+        if posts:
+            first_content = (posts[0].get("content") or "").strip()
+            if first_content:
+                # Take first line, up to 120 chars
+                first_line = first_content.split('\n')[0].strip()
+                if len(first_line) > 3 and not is_bad_title(first_line):
+                    return first_line[:120]
+                # If first line is also bad, take first 120 chars
+                snippet = first_content[:120].replace('\n', ' ').strip()
+                if len(snippet) > 3:
+                    return snippet
+        return "Archived Thread"
+
+    return t[:255]
+
+
 def format_post_content(post):
     """Format a single post with author and date header."""
     author = post.get("author") or "Unknown"
@@ -118,22 +165,19 @@ def format_post_content(post):
 
 def import_thread(thread, cid, board_title, state):
     """Import one original thread as a NodeBB topic with replies."""
-    title = thread.get("title") or thread.get("thread_title") or ""
+    raw_title = thread.get("title") or thread.get("thread_title") or ""
     posts = thread.get("posts") or []
 
     if not posts:
         state["stats"]["skipped_empty"] += 1
         return "empty"
 
-    # Use thread title, fall back to first post content snippet
-    if not title or len(title.strip()) < 2:
-        first_content = (posts[0].get("content") or "").strip()
-        title = first_content[:100] if first_content else "Untitled Thread"
+    # Get a clean, meaningful title
+    title = clean_title(raw_title, posts)
 
-    # Clean title for NodeBB (min 3 chars, max 255)
-    title = title.strip()[:255]
+    # Ensure minimum length for NodeBB
     if len(title) < 3:
-        title = f"Thread: {title}" if title else "Untitled Thread"
+        title = "Archived Thread"
 
     # First post becomes the topic content
     first_post = posts[0]
@@ -173,7 +217,6 @@ def import_thread(thread, cid, board_title, state):
         if not content or len(content) < 3:
             continue
 
-        # Chunk if too long
         if len(content) > 30000:
             chunks = [content[j:j+30000] for j in range(0, len(content), 30000)]
             for chunk in chunks:
@@ -216,7 +259,7 @@ def import_board(filepath, state):
     cid = CINEMA_CID if imdb_id else ARCHIVES_CID
     cat_name = "The Cinema" if imdb_id else "The IMDb Archives"
 
-    # Resume support: skip threads already done in this board
+    # Resume support
     start_idx = 0
     if state["current_board"] == fname:
         start_idx = state["current_thread_idx"]
@@ -231,19 +274,15 @@ def import_board(filepath, state):
 
     for i in range(start_idx, len(threads)):
         thread = threads[i]
-        thread_title = (thread.get("title") or thread.get("thread_title") or "")[:60]
-
-        result = import_thread(thread, cid, board_title, state)
+        import_thread(thread, cid, board_title, state)
 
         state["current_thread_idx"] = i + 1
 
-        # Save state every 10 threads
         if (i + 1) % 10 == 0:
             save_state(state)
             if (i + 1) % 50 == 0:
                 log(f"  ... {i+1}/{len(threads)} threads done")
 
-    # Board complete
     state["completed_boards"].append(fname)
     state["current_board"] = None
     state["current_thread_idx"] = 0
