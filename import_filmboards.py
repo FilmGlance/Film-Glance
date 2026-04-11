@@ -9,7 +9,7 @@ Bad titles (relative timestamps, bare numbers) replaced with first post content.
 v5 CHANGES:
   - Deduplication: threads with identical titles within a board are handled:
     - Same title + same/similar first post → true duplicate → keep thread with most posts
-    - Same title + different first post → unique discussions → keep all, append " (2)", " (3)"
+    - Same title + different first post → unique discussions → MERGE all posts into one thread
   - --analyze flag: scan all boards and report duplicate stats without importing
   - Dedup stats tracked in import_state.json and progress logs
 
@@ -86,7 +86,7 @@ def load_state():
             "replies_created": 0,
             "skipped_empty": 0,
             "skipped_duplicate": 0,
-            "renamed_same_title": 0,
+            "merged_same_title": 0,
             "errors": 0
         }
     }
@@ -216,7 +216,7 @@ def deduplicate_threads(threads, board_title=""):
     2. For groups with multiple threads:
        a. Compare first post content of each thread in the group
        b. If content is similar (>= threshold) → true duplicate → keep the one with most posts
-       c. If content is different → unique discussions → keep all, append " (2)", " (3)" to title
+       c. If content is different → unique discussions → MERGE all posts into one thread
     3. Return (deduped_threads, stats_dict)
 
     Each returned thread gets a "_deduped_title" field with the final title to use.
@@ -225,7 +225,7 @@ def deduplicate_threads(threads, board_title=""):
         "total_before": len(threads),
         "total_after": 0,
         "true_duplicates_removed": 0,
-        "renamed_same_title": 0,
+        "merged_same_title": 0,
         "groups_with_dupes": 0,
     }
 
@@ -283,27 +283,42 @@ def deduplicate_threads(threads, board_title=""):
                 stats["true_duplicates_removed"] += removed_count
                 clusters[ci] = [cluster[0]]  # Replace in the actual list
 
-        # Step 4: Assign titles — if multiple clusters exist, they're unique discussions
-        # sharing the same title, so we append suffixes to differentiate.
-        keepers = []
+        # Step 4: If multiple clusters remain, they're unique discussions sharing
+        # the same title — MERGE all their posts into a single combined thread.
         if len(clusters) > 1:
-            suffix_num = 0
+            # Use the title from the first group, and the thread with the most
+            # posts as the base (its first post becomes the topic body)
+            all_remaining = []
             for cluster in clusters:
                 for idx, title, thread in cluster:
-                    suffix_num += 1
-                    if suffix_num == 1:
-                        thread["_deduped_title"] = title  # first one keeps original
-                    else:
-                        thread["_deduped_title"] = f"{title} ({suffix_num})"
-                        stats["renamed_same_title"] += 1
-                    keepers.append(thread)
+                    all_remaining.append((idx, title, thread))
+
+            # Sort by post count descending — richest thread is the base
+            all_remaining.sort(key=lambda x: len(x[2].get("posts") or []), reverse=True)
+
+            base_idx, base_title, base_thread = all_remaining[0]
+            base_posts = list(base_thread.get("posts") or [])
+
+            # Collect posts from all other threads to merge in
+            merged_count = 0
+            for idx, title, thread in all_remaining[1:]:
+                other_posts = thread.get("posts") or []
+                # Add all posts from the other thread as additional replies
+                base_posts.extend(other_posts)
+                merged_count += 1
+
+            stats["merged_same_title"] += merged_count
+
+            # Build the merged thread
+            merged_thread = dict(base_thread)
+            merged_thread["posts"] = base_posts
+            merged_thread["_deduped_title"] = base_title
+            deduped.append(merged_thread)
         else:
             # Single cluster (all were true dupes or just one thread)
             for idx, title, thread in clusters[0]:
                 thread["_deduped_title"] = title
-                keepers.append(thread)
-
-        deduped.extend(keepers)
+                deduped.append(thread)
 
     stats["total_after"] = len(deduped)
     return deduped, stats
@@ -422,14 +437,14 @@ def import_board(filepath, state):
     # ── Deduplication (v5) ──────────────────────────────────────────
     threads, dedup_stats = deduplicate_threads(threads, board_title)
 
-    if dedup_stats["true_duplicates_removed"] > 0 or dedup_stats["renamed_same_title"] > 0:
+    if dedup_stats["true_duplicates_removed"] > 0 or dedup_stats["merged_same_title"] > 0:
         log(f"  [dedup] {board_title[:50]}: "
             f"{dedup_stats['total_before']} → {dedup_stats['total_after']} threads "
             f"({dedup_stats['true_duplicates_removed']} true dupes removed, "
-            f"{dedup_stats['renamed_same_title']} renamed)")
+            f"{dedup_stats['merged_same_title']} merged)")
 
     state["stats"]["skipped_duplicate"] += dedup_stats["true_duplicates_removed"]
-    state["stats"]["renamed_same_title"] += dedup_stats["renamed_same_title"]
+    state["stats"]["merged_same_title"] += dedup_stats["merged_same_title"]
     # ────────────────────────────────────────────────────────────────
 
     # Resume support
@@ -477,8 +492,8 @@ def analyze_duplicates(files):
         "total_threads_before": 0,
         "total_threads_after": 0,
         "total_true_dupes_removed": 0,
-        "total_renamed": 0,
-        "worst_boards": [],  # (board_title, filename, dupes_removed, renamed)
+        "total_merged": 0,
+        "worst_boards": [],  # (board_title, filename, dupes_removed, merged)
     }
 
     print("=" * 70)
@@ -508,15 +523,15 @@ def analyze_duplicates(files):
 
         total_stats["total_threads_after"] += dedup_stats["total_after"]
         total_stats["total_true_dupes_removed"] += dedup_stats["true_duplicates_removed"]
-        total_stats["total_renamed"] += dedup_stats["renamed_same_title"]
+        total_stats["total_merged"] += dedup_stats["merged_same_title"]
 
-        has_dupes = dedup_stats["true_duplicates_removed"] > 0 or dedup_stats["renamed_same_title"] > 0
+        has_dupes = dedup_stats["true_duplicates_removed"] > 0 or dedup_stats["merged_same_title"] > 0
         if has_dupes:
             total_stats["boards_with_dupes"] += 1
             total_stats["worst_boards"].append((
                 board_title, fname,
                 dedup_stats["true_duplicates_removed"],
-                dedup_stats["renamed_same_title"],
+                dedup_stats["merged_same_title"],
                 dedup_stats["total_before"],
                 dedup_stats["total_after"]
             ))
@@ -539,16 +554,16 @@ def analyze_duplicates(files):
     print(f"  Total threads (before):   {total_stats['total_threads_before']:,}")
     print(f"  Total threads (after):    {total_stats['total_threads_after']:,}")
     print(f"  True duplicates removed:  {total_stats['total_true_dupes_removed']:,}")
-    print(f"  Same-title renamed:       {total_stats['total_renamed']:,}")
+    print(f"  Same-title merged:       {total_stats['total_merged']:,}")
     print()
 
     if total_stats["worst_boards"]:
         print("  Top 30 boards by duplicate count:")
         print("  " + "-" * 66)
-        print(f"  {'Board Title':<35} {'Before':>7} {'After':>7} {'Dupes':>6} {'Renamed':>8}")
+        print(f"  {'Board Title':<35} {'Before':>7} {'After':>7} {'Dupes':>6} {'Merged':>8}")
         print("  " + "-" * 66)
-        for title, fname, dupes, renamed, before, after in total_stats["worst_boards"][:30]:
-            print(f"  {title[:35]:<35} {before:>7} {after:>7} {dupes:>6} {renamed:>8}")
+        for title, fname, dupes, merged, before, after in total_stats["worst_boards"][:30]:
+            print(f"  {title[:35]:<35} {before:>7} {after:>7} {dupes:>6} {merged:>8}")
         print()
 
     # Write analysis to file
@@ -562,7 +577,7 @@ def analyze_duplicates(files):
                 "total_threads_before": total_stats["total_threads_before"],
                 "total_threads_after": total_stats["total_threads_after"],
                 "true_duplicates_removed": total_stats["total_true_dupes_removed"],
-                "same_title_renamed": total_stats["total_renamed"],
+                "same_title_merged": total_stats["total_merged"],
             },
             "boards_with_duplicates": [
                 {
@@ -571,9 +586,9 @@ def analyze_duplicates(files):
                     "threads_before": before,
                     "threads_after": after,
                     "true_duplicates_removed": dupes,
-                    "same_title_renamed": renamed,
+                    "same_title_merged": merged,
                 }
-                for title, fname, dupes, renamed, before, after in total_stats["worst_boards"]
+                for title, fname, dupes, merged, before, after in total_stats["worst_boards"]
             ]
         }
         with open(report_path, "w") as f:
@@ -626,8 +641,8 @@ def main():
     # Ensure v5 stats fields exist (upgrade from v4 state)
     if "skipped_duplicate" not in state["stats"]:
         state["stats"]["skipped_duplicate"] = 0
-    if "renamed_same_title" not in state["stats"]:
-        state["stats"]["renamed_same_title"] = 0
+    if "merged_same_title" not in state["stats"]:
+        state["stats"]["merged_same_title"] = 0
 
     log(f"Resuming — completed boards: {len(state['completed_boards'])}")
 
@@ -653,7 +668,7 @@ def main():
                 f"{s['topics_created']} topics, "
                 f"{s['replies_created']} replies, "
                 f"{s['skipped_duplicate']} dupes removed, "
-                f"{s['renamed_same_title']} renamed, "
+                f"{s['merged_same_title']} merged, "
                 f"{s['errors']} errors | "
                 f"~{remaining/3600:.1f}h remaining ---")
 
@@ -665,7 +680,7 @@ def main():
     log(f"Replies created:      {s['replies_created']}")
     log(f"Skipped empty:        {s['skipped_empty']}")
     log(f"Duplicates removed:   {s['skipped_duplicate']}")
-    log(f"Same-title renamed:   {s['renamed_same_title']}")
+    log(f"Same-title merged:   {s['merged_same_title']}")
     log(f"Errors:               {s['errors']}")
 
 
