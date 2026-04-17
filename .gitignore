@@ -52,6 +52,11 @@ scratch/
 # Claude Code — local per-machine state only (settings.json IS committed)
 .claude/settings.local.json
 
+# Supabase CLI local state (migrations/, functions/, config.toml ARE committed)
+supabase/.branches
+supabase/.temp
+supabase/.env
+
 # OS junk
 .DS_Store
 Thumbs.db

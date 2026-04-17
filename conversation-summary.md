@@ -1,5 +1,82 @@
 # Film Glance — Conversation Summary
 
+## Session: April 17, 2026 (continued) — Vercel + Supabase CLI Setup, .gitignore Baseline
+
+### Overview
+
+Completion of deferred Phase 7 work from the earlier Apr 17 transition session. Installed and authenticated Vercel CLI and Supabase CLI, pulled production env vars locally, and created the repo's first-ever `.gitignore`. Verified Claude Opus 4.7 (1M context) as the active model.
+
+### Workstream 1: Vercel CLI
+
+- Installed via `npm install -g vercel` (Vercel CLI 51.6.1, 310 transitive packages, ~48s).
+- Logged in via `vercel login` — new unified device-code OAuth flow (the old `--github` flag is deprecated). Device code `KGQF-XSGT` approved in browser.
+- Linked folder via `vercel link --yes` — auto-detected project from git remote. Linked to `rs-projects-c0025ef0/film-glance`. Created `.vercel/project.json` (gitignored).
+- Pulled env vars via `vercel env pull .env.local` — 13 keys: `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `OMDB_API_KEY`, `RAPIDAPI_KEY`, `TRAKT_CLIENT_ID`, `SIMKL_CLIENT_ID`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, `VERCEL_OIDC_TOKEN`, `YOUTUBE_API_KEY`.
+- Note: `YOUTUBE_API_KEY` is dead code since v5.6 (Mar 3, 2026) per tech-specs §10. Candidate for deletion from Vercel dashboard — zero impact either way.
+
+### Workstream 2: .gitignore Baseline (First Ever)
+
+Repo had no `.gitignore` in its entire history — browser-only workflow never generated local files, so one was never needed. Became critical once Claude Code started writing `.vercel/`, `.env.local`, and `supabase/.temp/` into the working tree.
+
+Initial file covers:
+- Next.js defaults: `node_modules/`, `.next/`, `.env*` variants
+- Vercel CLI state: `.vercel`
+- TypeScript: `*.tsbuildinfo`, `next-env.d.ts`
+- Python: `__pycache__`, `.venv/`, `venv/` (for import scripts)
+- Claude Code: `.claude/settings.local.json` only — `settings.json` IS committed (shared project config like plugin enables)
+- Supabase CLI: `supabase/.branches`, `supabase/.temp`, `supabase/.env`
+- Editor/IDE and OS junk
+
+Vercel CLI auto-appended duplicate `.vercel` and `.env*.local` lines during `vercel link` and `vercel env pull`. Cleaned up — existing entries already covered both.
+
+Committed as `chore: add Next.js .gitignore + Claude Code project settings` (commit e61f641, includes `.claude/settings.json` enabling the `vercel@claude-plugins-official` plugin).
+
+### Workstream 3: Supabase CLI
+
+Supabase explicitly deprecated `npm install -g supabase` in CLI 2.x. Three supported Windows methods: Scoop (requires installing Scoop first), npx (on-demand), npm dev-dependency (per-project).
+
+User chose **npx**. Usage pattern: `npx supabase <command>` for all Supabase CLI work. First-run downloads CLI 2.92.1 (~30s), cached afterward. Trade-off vs. Scoop: must type `npx supabase` instead of `supabase`, but no extra package manager to install.
+
+Generated Supabase Personal Access Token `film-glance-claude-code` with **1-year expiry (April 17, 2027)**. Stored in `.env.local` as `SUPABASE_ACCESS_TOKEN=...`. **Rotation needed before expiry date** or all Supabase CLI commands will fail with "invalid token."
+
+Linking initially failed with "Cannot use automatic login flow inside non-TTY environments" — Supabase CLI requires a TTY for interactive browser login, which Claude Code's Bash tool doesn't provide. Workaround: use PAT + `--project-ref` flag directly. `npx supabase link --project-ref inrwjuwyfaqanyegycwr` succeeded. Verified via `npx supabase projects list` showing green ● LINKED indicator next to FilmGlance.
+
+### Workstream 4: Model Verification
+
+Claude Opus 4.7 (1M context) confirmed active via `/model` slash command. Model ID: `claude-opus-4-7[1m]`. The `[1m]` denotes 1-million-token context window.
+
+### Key Learnings
+
+1. **Vercel CLI's `--github` flag is deprecated** — new unified device-code OAuth flow works for all providers. Don't pass `--github`/`--gitlab`/etc.
+2. **`vercel link --yes` auto-detects the project from the git remote** — no manual project name needed when the Vercel project was created from a GitHub import.
+3. **Supabase `npm install -g supabase` is explicitly deprecated.** Current supported Windows methods: Scoop, npx, or npm dev-dependency.
+4. **Supabase CLI needs a TTY for `supabase login`** — interactive browser flow fails in Claude Code's Bash tool. Use a PAT instead: generate one from dashboard, store in `SUPABASE_ACCESS_TOKEN`, done.
+5. **Vercel CLI aggressively auto-edits .gitignore** on both `link` and `env pull` — appends entries even if they're duplicates. Benign, but worth de-duping for cleanliness.
+6. **Claude Code's `settings.json` vs `settings.local.json`** — `.claude/settings.json` is shared project config (commit it), `.claude/settings.local.json` is per-machine (gitignore it).
+7. **Supabase local folder structure** — `supabase/.temp/`, `supabase/.branches/`, `supabase/.env` are local-only state. `supabase/migrations/`, `supabase/functions/`, `supabase/config.toml` (none exist yet) are project code that SHOULD be committed.
+
+### Files Created This Session
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `.gitignore` | Next.js + Python + Claude Code + Supabase + OS junk exclusions | Committed to staging (e61f641) |
+| `.claude/settings.json` | Enables `vercel@claude-plugins-official` | Committed to staging (e61f641) |
+| `.env.local` | 14 env vars (13 Vercel-pulled + 1 Supabase PAT) | Gitignored, never tracked |
+| `.vercel/project.json` | Vercel project linkage | Gitignored |
+| `supabase/.temp/*` | Supabase CLI local state (project-ref, versions, pooler URL) | Gitignored |
+
+### Next Steps (For Next Chat)
+
+Workflow unchanged from prior Apr 17 entry, but all CLI setup now complete:
+
+1. Monitor forum import progress — `ssh filmglance@147.93.113.39 "sudo tail -5 /root/filmboards-crawl/import.log"`
+2. Continue waiting for import completion (~5-8 more days from Apr 17)
+3. Post-import queue unchanged: GDPR consent removal, mobile testing, full API health check, Discuss links on movie result pages, staging branch cleanup, mobile app conversion (Capacitor, Phase 2)
+4. **Rotate Supabase PAT before April 17, 2027** — set calendar reminder
+5. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6
+
+---
+
 ## Session: April 17, 2026 — Claude Code Transition (Windows / PowerShell)
 
 ### Overview
