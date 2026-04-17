@@ -45,8 +45,8 @@ CRAWL_DIR        = "/root/filmboards-crawl/crawl_data/boards"
 STATE_FILE       = "/root/filmboards-crawl/import_state.json"
 LOG_FILE         = "/root/filmboards-crawl/import.log"
 
-NODEBB_URL       = "http://127.0.0.1:4567"
-API_TOKEN        = "6cd914fc-6730-4fca-9cf1-66ebb841f093"
+NODEBB_URL       = "http://127.0.0.1:4567/discuss"
+API_TOKEN        = os.environ.get("NODEBB_API_TOKEN", "")
 BOT_UID          = 2
 ADMIN_UID        = 1
 
@@ -631,7 +631,8 @@ def main():
 
     # ── Import mode ───────────────────────────────────────────
     if not API_TOKEN or len(API_TOKEN) < 20:
-        print("ERROR: API_TOKEN is missing or invalid.")
+        print('ERROR: NODEBB_API_TOKEN env var is missing or invalid.', file=sys.stderr)
+        print('Set it via: export NODEBB_API_TOKEN=<token>  (or launch via run_import.sh)', file=sys.stderr)
         sys.exit(1)
 
     log(f"Found {len(files)} crawled board files")
