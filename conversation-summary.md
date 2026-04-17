@@ -65,6 +65,26 @@ Claude Opus 4.7 (1M context) confirmed active via `/model` slash command. Model 
 | `.vercel/project.json` | Vercel project linkage | Gitignored |
 | `supabase/.temp/*` | Supabase CLI local state (project-ref, versions, pooler URL) | Gitignored |
 
+### Workstream 5: CLAUDE.md Hardening + Desktop Cleanup
+
+Followed up on a user question about what happens when chat usage runs out in Claude Code (vs. the browser's hard-restart pattern). Clarified that Claude Code auto-compacts mid-session (no restart needed) and that `CLAUDE.md` + memory files auto-re-inject every turn, while Read() tool results get compacted.
+
+To make this explicit and self-correcting, added a new **"Mid-Session Context Refresh"** subsection to `CLAUDE.md` under Mandatory Session Startup:
+
+> Tool-result contents (file reads, command output) are subject to auto-compaction as the conversation fills. `CLAUDE.md` and memory files auto-re-inject every turn and are always current; **bible-doc reads can get stale**. Before any non-trivial change — code edits touching documented architecture, destructive operations on VPS/DB, version bumps, or any decision that cites a specific doc section — re-read the relevant bible doc section rather than relying on a summary from earlier in the session.
+
+Committed as `docs: add mid-session context refresh rule to CLAUDE.md` (commit 6b21c98).
+
+While doing this, discovered that **Claude Code walks UP the directory tree and loads every `CLAUDE.md` it finds.** A duplicate `CLAUDE.md` existed at the parent Desktop level (`Desktop\Film-Glance-Terminal\CLAUDE.md`), a leftover from before bible docs were committed into the repo. Both files were being injected per session — if they drifted, Claude would see conflicting instructions. Deleted the Desktop copy.
+
+Cleaned up 4 additional stale legacy bible docs at the same Desktop level (`README.md`, `tech-specs.md`, `conversation-summary.md`, `claude-code-transition.md`) that predated the April 17 transition. These weren't auto-loaded by Claude Code (only `CLAUDE.md` gets the directory-tree walk), but were drift risks if anyone referenced them by mistake. Single source of truth now: the repo at `Desktop\Film-Glance-Terminal\Film-Glance\`.
+
+### Key Learnings — Claude Code Context Behavior
+
+8. **`CLAUDE.md` walks the directory tree.** Claude Code loads every `CLAUDE.md` it finds from the current working directory up to root. Don't keep duplicate/outdated copies anywhere above the repo root — they WILL get injected into session context and can silently conflict.
+9. **`CLAUDE.md` and memory files auto-re-inject every turn.** They're always current regardless of session length. Bible-doc Read() results are not — they're regular tool results subject to auto-compaction.
+10. **Auto-compaction is a feature, not a failure mode.** The conversation stays continuous even as older messages get summarized. Unlike the browser workflow, no "start a new chat" is needed.
+
 ### Next Steps (For Next Chat)
 
 Workflow unchanged from prior Apr 17 entry, but all CLI setup now complete:
