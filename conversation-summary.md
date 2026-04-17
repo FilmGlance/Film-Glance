@@ -71,14 +71,53 @@ Noticed each log line is now appearing twice in `import.log`. Root cause: the sc
 | `import_filmboards.py` | Same refactor + fix `NODEBB_URL` drift | Staging repo (commit b9a06c8) |
 | `cleanup_test_data.py` | DELETED | Staging repo (commit b9a06c8) |
 
+### Workstream 5: Supabase Security Finding — `plans` Table RLS Gap (Path A)
+
+Email from Supabase (dated Apr 13) flagged "Table publicly accessible — Row-Level Security is not enabled" on project `inrwjuwyfaqanyegycwr` with finding code `rls_disabled_in_public`. Rod forwarded it mid-session and asked to (a) integrate Supabase deeper into terminal so I can control it directly, and (b) resolve the finding.
+
+**Integration already in place** (from earlier Apr 17 session): `npx supabase` CLI linked, PAT `SUPABASE_ACCESS_TOKEN` in `.env.local`, `SUPABASE_SERVICE_ROLE_KEY` available for RLS-bypassing ops. For ad-hoc SQL, used the Supabase Management API directly (`POST https://api.supabase.com/v1/projects/{ref}/database/query` with the PAT) — no new dependencies, works via curl + heredoc.
+
+**Windows curl TLS quirk:** initial curl failed with `CRYPT_E_NO_REVOCATION_CHECK` (schannel can't always reach CRL endpoints). `--ssl-no-revoke` flag fixed it (skips revocation lookup, still validates cert). Use this flag for all Supabase Management API curls on Windows going forward.
+
+**Investigation (Step 1 — read-only):** Queried `pg_tables`, `pg_policies`, `pg_stat_user_tables` for all public-schema tables. Result: **`plans` was the only RLS gap** — all 6 other tables had RLS enabled with matching policies per tech-specs §5.5. `anonymous_searches` has RLS enabled with 0 policies — initially looked suspicious but that is actually the correct service-role-only pattern.
+
+**Drift root cause:** `plans` was never in `sql/migrations/001_initial_schema.sql` (only in the reference `sql/schema.sql`). The `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for it was never run in production. Separate drift also surfaced: tech-specs §10 references `sql/migrations/003_anonymous_searches.sql` (v5.4) by name, but that file is missing from the repo — the migration was applied directly in the SQL editor and never committed. Reconstructing it was deferred per Rod's Path A choice.
+
+**Decision (Path A):** Rod chose to drop `plans` entirely rather than patch RLS, since billing is no longer the monetization path (anon search with daily cap replaced the plan gate in v5.4).
+
+**Pre-flight dependency check before DROP:**
+- `plans` was FK-referenced by `profiles.plan_id` and `subscriptions.plan_id`
+- Stored function `increment_search()` queried `plans` internally
+- Verified `increment_search()` is called only inside `if (PRICING_ENABLED)` block in `app/api/search/route.ts:406`, with `PRICING_ENABLED = false` hardcoded on line 405 — function never reached in production
+
+**Step 2 — execution:** Wrote `sql/migrations/004_drop_plans.sql` (slot 003 reserved for the missing historical migration), executed `DROP TABLE IF EXISTS public.plans CASCADE` via Management API. CASCADE removed the two FK constraints automatically. Verification re-ran the initial audit: `plans` no longer in `pg_tables`, zero FKs to plans remain, all 6 remaining public tables `rowsecurity=true`.
+
+**Residual tech debt (deferred):**
+- Orphaned `profiles.plan_id` and `subscriptions.plan_id` columns (values unchanged, no FK, harmless)
+- `increment_search()` + `reset_monthly_searches()` stored functions (unreachable since PRICING_ENABLED=false)
+- `lib/stripe.ts`, `app/api/webhooks/stripe/route.ts`, pricing UI in `components/film-glance.jsx`
+- Stripe env vars in Vercel, `stripe` + `@stripe/*` npm deps
+
+All gated by `PRICING_ENABLED = false` so production behavior is unchanged.
+
+### Key Learnings (continued)
+
+11. **Supabase Management API + PAT is the fastest path for ad-hoc SQL** from the terminal — no psql config, no connection string. `POST /v1/projects/{ref}/database/query` with `{"query": "..."}` body. Use `--data-binary @-` + heredoc to avoid shell-escaping SQL.
+12. **Windows curl needs `--ssl-no-revoke`** for HTTPS calls where schannel can't reach the CRL endpoint. Harmless — still validates the cert chain.
+13. **`DROP TABLE ... CASCADE` removes dependent FK constraints automatically** but does NOT drop functions whose bodies reference the table. Those functions silently break at next call. Verify the functions are either gated off or also dropped before using CASCADE.
+14. **"RLS enabled + 0 policies" is a valid service-role-only pattern** — don't confuse with "RLS disabled" (`rowsecurity=false`). The Supabase advisory specifically flags `rowsecurity=false` (`rls_disabled_in_public`), not the zero-policy case.
+15. **When a Supabase finding can be resolved by dropping the offending resource entirely, that's often cleaner than patching RLS** — especially for dormant features. Always enumerate live dependencies first.
+
 ### Next Steps (For Next Chat)
 
 1. **Check import progress** — `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed — `filmglance` owns the file).
-2. **Continue waiting for import completion** (~5-8 more days from Apr 17). At 840/3308, progress accelerates from here (remaining boards are mostly small movie boards).
+2. **Continue waiting for import completion** (~5-8 more days from Apr 17). Currently at 842/3308; progress accelerates from here since the biggest boards are done.
 3. **Fix doubled-log cosmetic issue** at next clean stop — swap `>> import.log 2>&1` → `> /dev/null 2>> import.err.log` in `run_import.sh`.
-4. **Post-import queue unchanged:** GDPR consent removal, mobile testing, full API health check, Discuss links on movie result pages, staging branch cleanup, mobile app conversion (Capacitor, Phase 2).
-5. **Rotate Supabase PAT before April 17, 2027.**
-6. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6.
+4. **Full Stripe teardown (optional, low priority):** drop `subscriptions` table, orphaned `plan_id` columns, `increment_search()` + `reset_monthly_searches()` functions, delete Stripe code files, remove Stripe npm deps + env vars. All currently unreachable via `PRICING_ENABLED=false`.
+5. **Reconstruct `003_anonymous_searches.sql`** migration from prod (pg_dump of the table + `check_anonymous_limit` RPC) to close the repo-vs-prod schema drift.
+6. **Post-import queue unchanged:** GDPR consent removal, mobile testing, full API health check, Discuss links on movie result pages, staging branch cleanup, mobile app conversion (Capacitor, Phase 2).
+7. **Rotate Supabase PAT before April 17, 2027.**
+8. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6.
 
 ---
 

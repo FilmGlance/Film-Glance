@@ -335,12 +335,13 @@ This ensures that variations of the same movie all produce cache hits on subsequ
 | Table | Purpose | RLS |
 |-------|---------|-----|
 | `profiles` | User accounts (extends auth.users) | Own record only |
-| `subscriptions` | Stripe billing lifecycle | Own record only |
+| `subscriptions` | Stripe billing lifecycle (dormant) | Own record only |
 | `favorites` | Saved movies per user | Full CRUD, own records |
 | `search_log` | Search analytics | Own records read |
 | `movie_cache` | API response cache | Read by all authenticated |
 | `anonymous_searches` | Daily search limits for unauthenticated users | Service role only (v5.4) |
-| `plans` | Billing tiers (static lookup) | — |
+
+*(Previously included `plans` table — dropped Apr 17, 2026 with billing de-prioritization. Orphaned `profiles.plan_id` and `subscriptions.plan_id` columns remain but are unreachable because `PRICING_ENABLED = false`.)*
 
 **Key Functions & Triggers:**
 - `handle_new_user()` — Auto-creates profile on auth.users INSERT
@@ -712,16 +713,22 @@ Vercel Serverless Functions (Node.js runtime)
 
 ## 8. Dormant Systems
 
-### 8.1 Stripe Billing (Inactive)
+### 8.1 Stripe Billing (Inactive, Partially Dismantled)
 
-The subscription billing system is fully built but dormant. All pricing logic is gated behind `PRICING_ENABLED = false` in the search route. The system includes:
+The subscription billing system was fully built but is no longer the monetization path. **As of Apr 17, 2026 the `plans` table was dropped** (Supabase security finding `rls_disabled_in_public`) — see migration `sql/migrations/004_drop_plans.sql`. Full teardown of the rest of the stack is deferred to a future session.
 
-- Plans table: Free (8 searches/mo), Unlimited, Pro Monthly ($5/mo), Pro Annual ($30/yr)
-- Stripe webhook handler: checkout, payment, subscription lifecycle events
-- Monthly search counter with automatic rollover
-- Frontend pricing UI (disabled)
+Still in the codebase, gated behind `PRICING_ENABLED = false`:
 
-To reactivate: Set `PRICING_ENABLED = true`, configure Stripe price IDs in `lib/stripe.ts`, and update the plans table.
+- `subscriptions` table (0 rows) — Stripe billing lifecycle
+- Orphaned `profiles.plan_id`, `subscriptions.plan_id` columns (FK constraints dropped with `plans`)
+- `increment_search()` and `reset_monthly_searches()` stored functions (will error if called — they aren't)
+- `app/api/webhooks/stripe/route.ts` — Stripe webhook handler
+- `lib/stripe.ts`
+- `components/film-glance.jsx` — pricing UI (disabled)
+- Stripe env vars in Vercel
+- `stripe` + `@stripe/*` npm dependencies
+
+To fully remove: drop the `subscriptions` table, drop the orphaned plan columns from `profiles`, drop `increment_search()`/`reset_monthly_searches()`, delete the code files above, uninstall the Stripe npm deps, and remove Stripe env vars.
 
 ---
 
@@ -753,6 +760,7 @@ To reactivate: Set `PRICING_ENABLED = true`, configure Stripe price IDs in `lib/
 
 | Date | Change | Files Affected | Spec Sections Updated |
 |------|--------|---------------|----------------------|
+| Apr 17, 2026 | **Resolved Supabase security finding `rls_disabled_in_public` on `public.plans` — Path A (minimal).** Supabase emailed Apr 13 flagging the `plans` table as publicly accessible (RLS not enabled, anyone with anon key could read/write/delete). Investigation via Supabase Management API (PAT from `.env.local`) confirmed: `plans` was the only RLS drift — all 6 other public tables had RLS enabled with matching policies. Drift root cause: `plans` was never in `001_initial_schema.sql` (only in the reference `sql/schema.sql`), so the `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` was never run in prod. **Decision:** since billing is no longer the Film Glance monetization path (replaced by anon search with daily cap in v5.4), dropped the `plans` table outright rather than patching RLS. Used `DROP TABLE public.plans CASCADE` — also removed FK constraints `profiles_plan_id_fkey` + `subscriptions_plan_id_fkey`. Safe to drop because `increment_search()` (the only code-path reader) is gated behind `PRICING_ENABLED = false` in `app/api/search/route.ts:405`. Orphaned `plan_id` columns + `increment_search()`/`reset_monthly_searches()` stored functions remain but are unreachable. Full Stripe teardown (subscriptions table, lib/stripe.ts, webhook route, pricing UI, Stripe npm deps, Stripe env vars) deferred to a later session. Post-drop verification: `plans` not in `pg_tables`, zero FKs remain, all 6 remaining tables `rowsecurity=true`. | `sql/migrations/004_drop_plans.sql` (new), `tech-specs.md` §3.7 + §8.1 + §10 | §3.7, §8.1, §10 |
 | Apr 17, 2026 | **📋 NEXT STEPS (UPDATED — post token rotation):** **(1)** Import is running again via `run_import.sh` (PID 54968 at relaunch, resumed from thread 60/99 of `board_20429069.json` Rashida Jones). Monitor: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed — files owned by `filmglance`). **(2)** Continue waiting for import completion (~5-8 more days from Apr 17). **(3)** **Known follow-up — fix doubled log lines:** `run_import.sh` redirects stdout to `import.log` but the script's `log()` already writes to the same file, so each line appears twice in the log. Fix at next clean stop: change wrapper to `> /dev/null 2>> import.err.log`. Cosmetic only — not corrupting anything. **(4)** All post-import tasks from prior Apr 17 handoff still apply (GDPR removal, mobile testing, full API health check, Discuss links, staging cleanup, mobile app conversion). **(5)** **Rotate Supabase PAT before April 17, 2027.** **(6)** Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6. | — | — |
 | Apr 17, 2026 | **✅ CURRENT STATE (UPDATED — post token rotation):** Main app v5.9.1 unchanged in production. **Forum import v5 running again with rotated NodeBB master API token** — token stored in `/root/filmboards-crawl/.env` (chmod 600, owner-only), read by `import_filmboards.py` via `os.environ["NODEBB_API_TOKEN"]`. Launched via new `run_import.sh` wrapper that sources .env and nohups python. Resumed from thread 60/99 of Rashida Jones board (state.json checkpoints every ~10 threads). Stats at relaunch: 840/3308 boards, 119,962 topics, 963,470 replies, 27,078 dupes removed, 2,035 merged, 0 errors. | `/root/filmboards-crawl/import_filmboards.py`, `/root/filmboards-crawl/.env` (new, gitignored pattern), `/root/filmboards-crawl/run_import.sh` (new); staging: `import_filmboards.py`, `cleanup_test_data.py` (deleted) | §10 |
 | Apr 17, 2026 | **NodeBB master API token rotation + env-var refactor.** Old token `6cd914fc-...` was hardcoded in `import_filmboards.py` (line 49) and `cleanup_test_data.py` (line 6) on both VPS and staging repo — visible in public GitHub history. **(1) Clean-shutdown-first ordering (per operational-safety memory):** verified import was already stopped (no orphaned python process, state.json consistent), confirmed before proposing any ACP click. **(2) Code refactor first (preserves safe revert):** replaced hardcoded `API_TOKEN = "..."` with `os.environ.get("NODEBB_API_TOKEN", "")`, improved fail-fast validation to write to stderr with guidance, fixed staging `NODEBB_URL` drift (`http://127.0.0.1:4567` → `.../discuss` to match post-Apr-11 VPS state), syntax-checked, verified empty-env-var fails fast and populated env var flows to `API_TOKEN` at module load. **(3) Token rotated in ACP** (fgadmin / UID 1 row → Regenerate → copy once). New token `991abaa4-...` written to `/root/filmboards-crawl/.env` (chmod 600). **(4) New launcher `run_import.sh`** sources .env and nohups python — keeps token out of shell history. **(5) Pre-flight via curl** to `/api/self` confirmed HTTP 200 with `uid: 1, username: fgadmin, isAdmin: true` before launching full import. **(6) Dead code removed:** `cleanup_test_data.py` deleted from VPS + staging (was flagged for deletion in Apr 16 handoff — the PostgreSQL approach superseded it). **(7) Security note:** old token is still in git history forever; only mitigation is the rotation itself which invalidates it. Commit b9a06c8. | VPS: `/root/filmboards-crawl/import_filmboards.py`, `.env` (new), `run_import.sh` (new), `cleanup_test_data.py` (deleted); staging: `import_filmboards.py`, `cleanup_test_data.py` (deleted) | §10 |
