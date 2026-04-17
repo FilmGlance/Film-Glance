@@ -17,6 +17,10 @@ Before doing anything in this repo, you MUST:
 
 After reading, your first message to the user should state: **current project state + last known next steps + readiness to proceed**. This replicates the "onboarding confirmation" from browser sessions.
 
+### Mid-Session Context Refresh
+
+Tool-result contents (file reads, command output) are subject to auto-compaction as the conversation fills. `CLAUDE.md` and memory files auto-re-inject every turn and are always current; **bible-doc reads can get stale**. Before any non-trivial change — code edits touching documented architecture, destructive operations on VPS/DB, version bumps, or any decision that cites a specific doc section — re-read the relevant bible doc section rather than relying on a summary from earlier in the session.
+
 ---
 
 ## Standing Deliverables — Every Session
