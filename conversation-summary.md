@@ -1,5 +1,87 @@
 # Film Glance — Conversation Summary
 
+## Session: April 17, 2026 (continued 2) — NodeBB Token Rotation + Env-Var Refactor
+
+### Context
+
+Picked up mid-task from a prior session that was interrupted when the terminal window closed. Memory (`feedback_operational_safety.md`) captured the last significant moment: I had proposed clicking "Regenerate" on the ACP token row while the import was still running; user caught that as a dirty-shutdown risk and corrected the ordering to clean-shutdown-first.
+
+### State at session resume
+
+- Import process stopped (no orphaned python, no `import_filmboards` in `ps aux`)
+- `import_state.json` consistent: 840/3308 boards done, `current_board: board_20429069.json` (Rashida Jones), `current_thread_idx: 60`
+- NodeBB still running (needed for ACP token rotation)
+- Token hardcoded in 4 files: `import_filmboards.py` + `cleanup_test_data.py`, both on VPS and in staging repo
+- No `.env` file on VPS yet
+- Files in `/root/filmboards-crawl/` owned by `filmglance:filmglance` — no sudo needed for reads/writes
+
+### Workstream 1: Code Refactor Before Rotation
+
+Rather than swapping one hardcoded token for another, refactored to read from env var. Sequence chosen so we'd always have a revert path while the old token was still valid:
+
+1. Backed up VPS `import_filmboards.py` (→ `.bak`), replaced hardcoded `API_TOKEN = "..."` with `os.environ.get("NODEBB_API_TOKEN", "")` (os was already imported — no new import needed).
+2. Improved the fail-fast validation block at line ~633 to write clear guidance to stderr ("Set it via: export NODEBB_API_TOKEN=<token>  (or launch via run_import.sh)").
+3. Created `/root/filmboards-crawl/.env` (chmod 600, owner-only) — empty placeholder initially.
+4. Created `/root/filmboards-crawl/run_import.sh` — launcher that `set -a; source /root/filmboards-crawl/.env; set +a` then `nohup python3 import_filmboards.py "$@" >> import.log 2>&1 &`. Keeps the token out of shell history. Includes an early-fail guard if `NODEBB_API_TOKEN` isn't set.
+5. Mirrored changes in staging repo (`import_filmboards.py`) + also fixed a long-standing `NODEBB_URL` drift: staging had `http://127.0.0.1:4567` (pre-Apr-11), VPS had `http://127.0.0.1:4567/discuss` (post-sed-fix). Tech-specs §10 had flagged this drift months ago.
+6. Deleted `cleanup_test_data.py` from VPS + staging — dead code since Apr 11 (PostgreSQL cleanup superseded it), flagged for deletion in the Apr 16 handoff.
+
+Sanity tested the refactored script:
+- `python3 -c 'import ast; ast.parse(...)'` → syntax OK
+- `unset NODEBB_API_TOKEN; python3 import_filmboards.py` → clean fail-fast with stderr message
+- `NODEBB_API_TOKEN=fake-20-char-token python3 ...` → confirmed env var reaches `API_TOKEN` at module load
+
+### Workstream 2: Token Rotation
+
+Rod rotated the `fgadmin` (UID 1) master token in NodeBB ACP at `https://filmglance.com/discuss/admin/settings/api`. New token: `991abaa4-...` pasted to chat, written to `/root/filmboards-crawl/.env` via `printf` → chmod 600 verified. Old token `6cd914fc-...` immediately invalidated (NodeBB only displays newly-generated tokens in clear once; refreshing the ACP page hides it permanently).
+
+### Workstream 3: Pre-Flight + Launch
+
+Before running the full import with the new token, verified authentication via direct curl:
+
+- `curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4567/discuss/api/self` → HTTP 200, `uid: 1, username: fgadmin, isAdmin: true`
+- Initial probe of `/discuss/api/user` returned 404 (wrong endpoint) — NOT a token issue. Switched to `/api/self` which is the correct endpoint for the authenticated user.
+
+Launched via `./run_import.sh`. Process PID 54968. Log showed resume from thread 60/99 of board_20429069.json (Rashida Jones). No 401 errors. Import picked up cleanly.
+
+### Workstream 4: Known Follow-Up (Cosmetic)
+
+Noticed each log line is now appearing twice in `import.log`. Root cause: the script's `log()` function both writes to `LOG_FILE` directly AND prints to stdout — and `run_import.sh` appends stdout to the same `import.log` via `>>`. So every log line lands in the file from two paths.
+
+**Not fixing mid-run** — another kill would be another dirty mid-board shutdown. Fix deferred to the next clean stop: change wrapper redirect to `> /dev/null 2>> import.err.log` so only the in-script `log()` writes to `import.log`.
+
+### Key Learnings
+
+1. **Pre-flight curl beats launching the full script** — a single `/api/self` call with `-H Authorization: Bearer` returns 200 or 401 in <100ms and proves the token before committing to a long-running process.
+2. **HTTP 404 ≠ HTTP 401** on NodeBB — 404 means the endpoint path is wrong, not that auth failed. `/api/self` and `/api/config` are reliable test endpoints.
+3. **`os.environ.get("VAR", "")` + length check is sufficient fail-fast** — no need for python-dotenv dependency when a shell wrapper already sources the .env.
+4. **`set -a; source .env; set +a` is the idiomatic shell way to load .env files** — every assignment between `set -a` and `set +a` is auto-exported.
+5. **Rotating a hardcoded token in a public repo does NOT remove the old token from git history** — it only invalidates it. Moving to an env var doesn't retroactively scrub history either, but it prevents future leaks.
+6. **Dirty-kill does not mean data loss with this import script** — the dedup logic on restart catches anything that was already posted mid-board before the checkpoint file updated. Rashida Jones's threads 50-59 may have been double-created but will get merged/deduped on any future pass.
+
+### Files Created / Modified
+
+| File | Change | Location |
+|------|--------|----------|
+| `/root/filmboards-crawl/import_filmboards.py` | Token line → env var, improved validation | VPS |
+| `/root/filmboards-crawl/.env` | NEW — holds `NODEBB_API_TOKEN`, chmod 600 | VPS |
+| `/root/filmboards-crawl/run_import.sh` | NEW — launcher that sources .env | VPS |
+| `/root/filmboards-crawl/cleanup_test_data.py` | DELETED — dead code | VPS |
+| `/root/filmboards-crawl/import_filmboards.py.bak` | backup of pre-refactor script | VPS |
+| `import_filmboards.py` | Same refactor + fix `NODEBB_URL` drift | Staging repo (commit b9a06c8) |
+| `cleanup_test_data.py` | DELETED | Staging repo (commit b9a06c8) |
+
+### Next Steps (For Next Chat)
+
+1. **Check import progress** — `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed — `filmglance` owns the file).
+2. **Continue waiting for import completion** (~5-8 more days from Apr 17). At 840/3308, progress accelerates from here (remaining boards are mostly small movie boards).
+3. **Fix doubled-log cosmetic issue** at next clean stop — swap `>> import.log 2>&1` → `> /dev/null 2>> import.err.log` in `run_import.sh`.
+4. **Post-import queue unchanged:** GDPR consent removal, mobile testing, full API health check, Discuss links on movie result pages, staging branch cleanup, mobile app conversion (Capacitor, Phase 2).
+5. **Rotate Supabase PAT before April 17, 2027.**
+6. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6.
+
+---
+
 ## Session: April 17, 2026 (continued) — Vercel + Supabase CLI Setup, .gitignore Baseline
 
 ### Overview
