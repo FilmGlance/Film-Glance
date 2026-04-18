@@ -1277,7 +1277,7 @@ export default function FilmGlance() {
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>—/10</span>
                       </div>
                       <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 10, lineHeight: 1.5, fontStyle: "italic" }}>
-                        Scores from 9 major review sites will appear here after this film is released.
+                        Scores from every major review site will appear here after this film is released.
                       </p>
                     </div>
 

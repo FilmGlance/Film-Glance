@@ -1,5 +1,96 @@
 # Film Glance — Conversation Summary
 
+## Session: April 18, 2026 — Preview Landing Build + Source-Count Scrub
+
+### Context
+
+Built a full redesigned landing page iteratively on a `/preview-landing` route on staging (with `noindex` metadata so Google can't index it and SEO is unaffected) while the live `/` page remains untouched at v5.9.1. Work was entirely screenshot-driven: user ran local dev (`npm run dev`), sent annotated screenshots + targeted feedback, I iterated, repeat. ~15 meaningful iteration passes across the session.
+
+### Aesthetic direction
+
+User picked **Direction B — Cinema Spotlight** (atmospheric, theatrical, moody) with **Direction A's editorial authority tone** infused. Anchored to the existing Film Glance palette (`#FFD700` / `#E8A000` / `#050505`, Playfair Display + Syne + JetBrains Mono) per `tech-specs.md §4.4`.
+
+### Final landing structure (top to bottom)
+
+1. Sticky header (logo + **Discussion Forum** button + Sign In; condenses on scroll)
+2. Hero (Playfair Display h1 "Every Film." + italic gold gradient "One True Rating Score." + search bar with 5-layer conic-gradient aura). Minimalist — no eyebrow, no subtitle, no micro-badge.
+3. ◆ Ornament
+4. Ticker ("Review Sites Included" Playfair italic 22 px label + 7 auto-scrolling source glyphs at 40×40 / 44×30)
+5. ◆ Ornament
+6. How It Works (3-card centered grid: Search · Glance · Discuss, icon + title + gold hairline + Playfair roman 17 px body)
+7. ◆ Ornament
+8. What You'll Find (35mm film strip: sprocket holes top + bottom, 9 feature frames auto-scrolling 56 s with hover-pause)
+9. ◆ Ornament
+10. Footer (4 icon-linked items, `support@filmglance.com` for contact)
+
+### Debugging narrative — two CSS rendering bugs resolved
+
+1. **Gradient text rendering failures (2 root causes fixed in sequence)**:
+   - First blur: `haloBreathe` animation applied `filter: drop-shadow` to an element with `background-clip: text`. In Chromium, `filter` on a gradient-clipped element collapses the fill. **Fixed** by swapping to `text-shadow` (composites outside the fill pipeline).
+   - Persistent blur: Per-letter `<span>`s with inline animations inside a `.hero-accent` parent still broke gradient rendering because child compositing contexts don't inherit parent's text-clip gradient. **Fixed** by collapsing the accent line to a single `<span>` with whole-line opacity fade (no per-letter split).
+
+2. **React hydration error** on `<style>{css}</style>` — server HTML-escapes `'` → `&#x27;`, `<` → `&lt;`, `&` → `&amp;` in text nodes, but client reconciliation expects raw. CSS content with apostrophes (`'Playfair Display'`), ampersands (Google Fonts `&family=`), and SVG data-URL angle brackets triggered byte-mismatch. **Fixed** by switching to `<style dangerouslySetInnerHTML={{ __html: css }} />` which bypasses escaping on both sides.
+
+### Typography progression
+
+Body text iterated: Syne (original, user called "dull and boring") → Playfair italic (user rejected — "don't like the italics") → **Playfair roman** (approved). Landed on Playfair Display roman 17 px / weight 400 / warm cream `rgba(255, 242, 220, 0.88)` / line-height 1.7 / letter-spacing 0.1. Gold hairline divider added between title and body, gradient flipped to symmetric (fade-in → peak → fade-out) when cards were centered.
+
+### Three.js integration
+
+Added `FloatingParticles` component (user supplied source via `prompt2.txt`). Adapted from the original:
+- Tailwind `w-full h-full` → inline `width/height: 100%` (this codebase is inline-styled, no Tailwind)
+- Default colors flipped to brand gold (`#FFD700` + `#FFE4A0`) instead of yellow/mint
+- `prefers-reduced-motion` early-return guard — skips WebGL context creation entirely if user has "reduce motion" set
+- `window.innerWidth/Height` fallbacks when `container.clientWidth/Height` return 0 at mount
+- Integrated as full-viewport fixed backdrop (z-index 3, under vignette/grain/content)
+- `npm install three` wasn't enough — production build failed on TypeScript at `import * as THREE from "three"` because Three.js ships runtime but no TS types. Had to add `@types/three` as a dev dep.
+
+### Source-count scrub (tiered)
+
+User's rule: count references ("9 sources", "nine sources", etc.) OK in technical internal docs, NOT in external communication. Scrubbed across:
+- `app/layout.tsx` — 3 SEO / OG / Twitter description variants
+- `components/film-glance.jsx` — unreleased-movie placeholder message (production code)
+- `components/preview-landing.jsx` — FEATURES copy, HOW copy, tagline, frame numbers (01–09 labels removed since they implicitly revealed count)
+
+Retained:
+- `README.md`, `tech-specs.md` — internal bible docs
+- `lib/ratings.ts` — dev-only code comments
+- Movie title data containing "Nine Queens" / "The Whole Nine Yards" — proper nouns, not marketing
+
+### Files created / modified
+
+| File | Status | Purpose |
+|------|--------|---------|
+| `app/preview-landing/page.tsx` | NEW | Server component, `noindex` metadata, renders `<PreviewLanding />` |
+| `components/preview-landing.jsx` | NEW | ~900-line client component — full landing shell, all CSS inline via `dangerouslySetInnerHTML` |
+| `components/ui/floating-particles.tsx` | NEW | Three.js WebGL particle system, adapted from `prompt2.txt` |
+| `app/layout.tsx` | MODIFIED | SEO / OG / Twitter descriptions scrubbed of "9" |
+| `components/film-glance.jsx` | MODIFIED | Unreleased-movie message scrubbed of "9" |
+| `package.json` / `package-lock.json` | MODIFIED | Added `three` + `@types/three` |
+| `tsconfig.json` | AUTO-EDIT | Next.js first-run added `.next/types/**/*.ts` to `include` |
+
+Nothing in production `/` route behavior changed. VPS untouched. Supabase untouched. Production only affected when/if main-branch merge happens (two small copy changes in production files: `layout.tsx` metadata + `film-glance.jsx` unreleased message).
+
+### Key learnings
+
+1. **`<style>{css}</style>` is hydration-unsafe** when CSS contains `'`, `"`, `<`, `>`, or `&`. React escapes these in SSR text nodes but not client reconciliation. Use `dangerouslySetInnerHTML` for inline CSS in Next.js App Router.
+2. **`filter` and `transform` on children of a `background-clip: text` element** will silently break the parent's gradient fill in Chromium. Child compositing contexts don't participate in the parent's text-clip. Animate the whole line as one `<span>`, not per-letter, when the parent uses gradient text.
+3. **Three.js TypeScript types are not bundled** — `npm install three` alone won't compile under `next build`. Install `@types/three` as a dev dep. Discovered at `npm run build` sanity-check BEFORE pushing — good reason to always local-build before pushing a prod-touching commit.
+4. **`text-align: center` on a card parent** centers inline/inline-block children (including SVGs) automatically. Fixed-width block elements (like the hairline divider) need `margin: 0 auto`. When centering a directional gradient hairline, flip to symmetric so it reads balanced.
+5. **Playfair Display roman at body sizes (14–17 px)** renders delicately on dark backgrounds due to its display-optimized thin strokes. Compensate with larger size and warmer, higher-alpha color than a sans body would need.
+6. **Approval-gated iteration with screenshot feedback is extremely efficient** for visual work — user caught issues I would have missed (the text blur root cause was two layers deep, only visible at runtime).
+
+### Next Steps (For Next Chat)
+
+1. Review `/preview-landing` on the Vercel preview deploy that auto-triggers on staging push.
+2. Decide when to promote preview → `/` — probably after forum import completes so the Discussion Forum CTA in the new header lands cleanly.
+3. Continue monitoring forum import — 976/3,308 boards as of session start; ETA ~1.7 days per script log (much faster than prior 5-8 day guidance since remaining boards are small).
+4. Post-import queue unchanged: GDPR consent removal, mobile responsiveness audit, API health check, Discuss links on movie result pages, mobile app conversion.
+5. Rotate Supabase PAT before April 17, 2027.
+6. 5 Dependabot vulnerabilities on main branch (2 high, 3 moderate) — worth a dedicated security-patch session.
+
+---
+
 ## Session: April 17, 2026 (continued 2) — NodeBB Token Rotation + Env-Var Refactor
 
 ### Context
