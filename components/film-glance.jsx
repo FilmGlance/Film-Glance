@@ -667,6 +667,27 @@ export default function FilmGlance() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Handle URL entry: ?q=<query> auto-triggers search, #signin auto-opens auth modal.
+  // Runs once per mount via the ref guard. Used by /preview-landing (and anywhere
+  // else) to deep-link into the app without reimplementing the search/auth flows.
+  const autoHandledRef = useRef(false);
+  useEffect(() => {
+    if (autoHandledRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const urlQuery = params.get("q")?.trim();
+    if (urlQuery) {
+      autoHandledRef.current = true;
+      setQuery(urlQuery);
+      doSearch(urlQuery);
+    }
+    if (window.location.hash === "#signin") {
+      autoHandledRef.current = true;
+      setShowAuth(true);
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, [doSearch]);
+
   // Scroll tracking for gold scrollbar (window scroll)
   useEffect(() => {
     const onScroll = () => {

@@ -18,8 +18,14 @@ import {
   DollarSign,
   Tv,
   Sparkles,
+  Lock,
+  Eye,
+  EyeOff,
+  X,
+  User,
 } from "lucide-react";
 import { FloatingParticles } from "@/components/ui/floating-particles";
+import { supabase } from "@/lib/supabase-browser";
 
 /* ─────────────────────────────────────────────────────────────
    SOURCES — shown in the ticker (glyph + name only).
@@ -182,11 +188,84 @@ export default function PreviewLanding() {
   const [scrolled, setScrolled] = useState(false);
   const inputRef = useRef(null);
 
+  /* ─── Auth state (identical pattern to the production FilmGlance
+         component so behavior + styling stay consistent). ─── */
+  const [authUser, setAuthUser] = useState(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPw, setAuthPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [authErr, setAuthErr] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  /* ─── Supabase session: load on mount + subscribe to changes. ─── */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthUser({ email: session.user.email, id: session.user.id });
+      }
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setAuthUser({ email: session.user.email, id: session.user.id });
+        setShowAuth(false);
+        setAuthEmail("");
+        setAuthPw("");
+        setAuthErr(null);
+        if (event === "SIGNED_IN") {
+          setAuthNotice("You're signed in! Welcome back to Film Glance.");
+          setTimeout(() => setAuthNotice(null), 4000);
+        }
+      } else {
+        setAuthUser(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  /* ─── Auth handlers — mirror FilmGlance exactly. ─── */
+  const loginWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + window.location.pathname },
+    });
+  };
+  const loginWithEmail = async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthErr(error.message);
+  };
+  const signUpWithEmail = async (email, password) => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setAuthErr(error.message);
+      return;
+    }
+    setShowAuth(false);
+    setAuthEmail("");
+    setAuthPw("");
+    setAuthErr(null);
+    setAuthNotice("Check your email for a verification link to activate your account.");
+    setTimeout(() => setAuthNotice(null), 8000);
+  };
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Logout error:", e);
+    }
+    setAuthUser(null);
+    setShowAccountMenu(false);
+  };
 
   const tickerSources = [...SOURCES, ...SOURCES];
   const filmFrames = [...FEATURES, ...FEATURES];
@@ -220,6 +299,7 @@ export default function PreviewLanding() {
 
   return (
     <div
+      onClick={() => showAccountMenu && setShowAccountMenu(false)}
       style={{
         minHeight: "100vh",
         background: "#050505",
@@ -662,21 +742,70 @@ export default function PreviewLanding() {
             <span className="nav-forum-label">Discussion Forum</span>
             <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
           </Link>
-          <Link
-            href="/"
-            className="nav-btn"
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 7,
-              padding: "7px 16px", borderRadius: 9,
-              border: "1px solid rgba(255, 215, 0, 0.18)",
-              background: "rgba(255, 215, 0, 0.03)",
-              color: "#FFD700", fontSize: 12, fontWeight: 600,
-              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
-            }}
-          >
-            <LogIn size={12} />
-            Sign In
-          </Link>
+          {authUser ? (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowAccountMenu(!showAccountMenu); }}
+                className="nav-btn"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "7px 16px", borderRadius: 9,
+                  border: "1px solid rgba(255, 215, 0, 0.18)",
+                  background: "rgba(255, 215, 0, 0.03)",
+                  color: "#FFD700", fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+                }}
+              >
+                <User size={12} /> My Account
+              </button>
+              {showAccountMenu && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: "absolute", top: 42, right: 0,
+                    background: "#0a0a0a",
+                    border: "1px solid rgba(255, 215, 0, 0.12)",
+                    borderRadius: 12, padding: "10px 0", minWidth: 220,
+                    zIndex: 100, animation: "softFade 0.2s ease-out",
+                  }}
+                >
+                  <div style={{ padding: "6px 16px 10px", borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}>
+                    <p style={{ fontSize: 10.5, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {authUser.email}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setShowAccountMenu(false); logout(); }}
+                    style={{
+                      width: "100%", padding: "10px 16px",
+                      background: "none", border: "none",
+                      color: "#ef4444", fontSize: 12, fontWeight: 600,
+                      cursor: "pointer", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}
+                  >
+                    <X size={12} /> Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuth(true)}
+              className="nav-btn"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 16px", borderRadius: 9,
+                border: "1px solid rgba(255, 215, 0, 0.18)",
+                background: "rgba(255, 215, 0, 0.03)",
+                color: "#FFD700", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+              }}
+            >
+              <LogIn size={12} />
+              Sign In
+            </button>
+          )}
         </nav>
       </header>
 
@@ -1065,6 +1194,198 @@ export default function PreviewLanding() {
           </div>
         </footer>
       </main>
+
+      {/* ─────────────── Auth Modal ─────────────── */}
+      {showAuth && (
+        <div
+          onClick={() => setShowAuth(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0, 0, 0, 0.88)",
+            backdropFilter: "blur(22px)",
+            WebkitBackdropFilter: "blur(22px)",
+            animation: "softFade 0.25s ease-out",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 390,
+              background: "#070707",
+              borderRadius: 20,
+              border: "1px solid rgba(255, 215, 0, 0.07)",
+              padding: "36px 30px",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setShowAuth(false)}
+              aria-label="Close"
+              style={{
+                position: "absolute", top: 14, right: 14,
+                background: "none", border: "none",
+                color: "#444", cursor: "pointer",
+              }}
+            >
+              <X size={17} />
+            </button>
+
+            <div style={{ textAlign: "center", marginBottom: 26 }}>
+              <div
+                style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  margin: "0 auto 12px",
+                  background: "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06))",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  border: "1px solid rgba(255, 215, 0, 0.1)",
+                }}
+              >
+                <Film size={20} style={{ color: "#FFD700" }} />
+              </div>
+              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: "#fff", margin: 0 }}>
+                {authMode === "signup" ? "Create Account" : "Welcome Back"}
+              </h2>
+              <p style={{ color: "#444", fontSize: 12, marginTop: 6 }}>
+                {authMode === "signup" ? "Sign up to start rating" : "Sign in to continue"}
+              </p>
+            </div>
+
+            <button
+              onClick={loginWithGoogle}
+              style={{
+                width: "100%", padding: "10px", borderRadius: 11,
+                border: "1px solid #1e1e1e", background: "#0c0c0c",
+                color: "#ccc", fontSize: 12.5, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 9, marginBottom: 16,
+              }}
+            >
+              Continue with Google
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1, height: 1, background: "#1a1a1a" }} />
+              <span style={{ color: "#333", fontSize: 11 }}>or</span>
+              <div style={{ flex: 1, height: 1, background: "#1a1a1a" }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+              <div style={{ position: "relative" }}>
+                <Mail size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#333" }} />
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  style={{
+                    width: "100%", padding: "10px 12px 10px 36px",
+                    borderRadius: 10, border: "1px solid #1a1a1a",
+                    background: "#0a0a0a", color: "#fff", fontSize: 13,
+                    fontFamily: "system-ui, -apple-system, sans-serif",
+                  }}
+                />
+              </div>
+              <div style={{ position: "relative" }}>
+                <Lock size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#333" }} />
+                <input
+                  type={showPw ? "text" : "password"}
+                  placeholder="Password"
+                  value={authPw}
+                  onChange={(e) => setAuthPw(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      authMode === "signup"
+                        ? signUpWithEmail(authEmail, authPw)
+                        : loginWithEmail(authEmail, authPw);
+                    }
+                  }}
+                  style={{
+                    width: "100%", padding: "10px 36px 10px 36px",
+                    borderRadius: 10, border: "1px solid #1a1a1a",
+                    background: "#0a0a0a", color: "#fff", fontSize: 13,
+                    fontFamily: "system-ui, -apple-system, sans-serif",
+                  }}
+                />
+                <button
+                  onClick={() => setShowPw(!showPw)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute", right: 10, top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none", border: "none",
+                    color: "#333", cursor: "pointer",
+                  }}
+                >
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+
+            {authErr && (
+              <p style={{ color: "#ef4444", fontSize: 11, marginBottom: 10, textAlign: "center" }}>
+                {authErr}
+              </p>
+            )}
+
+            <button
+              onClick={() => {
+                authMode === "signup"
+                  ? signUpWithEmail(authEmail, authPw)
+                  : loginWithEmail(authEmail, authPw);
+              }}
+              style={{
+                width: "100%", padding: "12px",
+                borderRadius: 11, border: "none",
+                background: "linear-gradient(135deg, #FFD700, #E8A000)",
+                color: "#050505", fontSize: 13.5, fontWeight: 700,
+                cursor: "pointer", marginBottom: 14,
+              }}
+            >
+              {authMode === "signup" ? "Create Account" : "Sign In"}
+            </button>
+
+            <p style={{ textAlign: "center", fontSize: 11.5, color: "#444" }}>
+              {authMode === "signup" ? "Already have an account?" : "Don't have an account?"}{" "}
+              <span
+                onClick={() => {
+                  setAuthMode(authMode === "signup" ? "signin" : "signup");
+                  setAuthErr(null);
+                }}
+                style={{ color: "#FFD700", cursor: "pointer", fontWeight: 600 }}
+              >
+                {authMode === "signup" ? "Sign In" : "Sign Up"}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────── Auth Notice Toast ─────────────── */}
+      {authNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed", top: 24, left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1100,
+            padding: "12px 22px",
+            background: "rgba(10, 10, 10, 0.92)",
+            border: "1px solid rgba(255, 215, 0, 0.25)",
+            borderRadius: 12,
+            color: "#fff",
+            fontFamily: "'Syne', sans-serif",
+            fontSize: 13, fontWeight: 500,
+            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 215, 0, 0.15)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            animation: "softFade 0.3s ease-out",
+          }}
+        >
+          {authNotice}
+        </div>
+      )}
     </div>
   );
 }
