@@ -645,6 +645,17 @@ export default function FilmGlance() {
       if (session?.user) {
         setUser({ email: session.user.email, id: session.user.id, _session: session });
         loadUserData(session);
+        // Deep-link: /#favourites opens the favourites view (requires sign-in,
+        // hence handled here once the session is confirmed).
+        if (typeof window !== "undefined" && window.location.hash === "#favourites") {
+          setShowFavs(true);
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      } else if (typeof window !== "undefined" && window.location.hash === "#favourites") {
+        // No session yet — prompt sign-in; after sign-in, user can click the
+        // Favourites tab on this page to reach the view.
+        setShowAuth(true);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
       }
     });
 
@@ -667,9 +678,13 @@ export default function FilmGlance() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Handle URL entry: ?q=<query> auto-triggers search, #signin auto-opens auth modal.
+  // Handle URL entry: ?q=<query> auto-triggers search, #signin auto-opens auth
+  // modal, #favourites auto-opens the favourites view (when signed in).
   // Runs once per mount via the ref guard. Used by /preview-landing (and anywhere
-  // else) to deep-link into the app without reimplementing the search/auth flows.
+  // else) to deep-link into the app without reimplementing the flows.
+  // Deps are intentionally empty ([]) — doSearch/setShowAuth/etc. are referenced
+  // through the callback closure at effect-run time (post-mount), which avoids
+  // the TDZ crash that would occur if this ran before const doSearch is bound.
   const autoHandledRef = useRef(false);
   useEffect(() => {
     if (autoHandledRef.current) return;
@@ -680,13 +695,17 @@ export default function FilmGlance() {
       autoHandledRef.current = true;
       setQuery(urlQuery);
       doSearch(urlQuery);
+      return;
     }
     if (window.location.hash === "#signin") {
       autoHandledRef.current = true;
       setShowAuth(true);
       history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-  }, [doSearch]);
+    // #favourites handled inside the auth listener once the session loads,
+    // because opening the favourites view requires a signed-in user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Scroll tracking for gold scrollbar (window scroll)
   useEffect(() => {

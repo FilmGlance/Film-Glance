@@ -23,6 +23,7 @@ import {
   EyeOff,
   X,
   User,
+  Heart,
 } from "lucide-react";
 import { FloatingParticles } from "@/components/ui/floating-particles";
 import { supabase } from "@/lib/supabase-browser";
@@ -742,6 +743,24 @@ export default function PreviewLanding() {
             <span className="nav-forum-label">Discussion Forum</span>
             <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
           </Link>
+          {authUser && (
+            <Link
+              href="/#favourites"
+              className="nav-btn"
+              aria-label="Open your favourites"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 15px", borderRadius: 9,
+                border: "1px solid rgba(255, 215, 0, 0.18)",
+                background: "rgba(255, 215, 0, 0.03)",
+                color: "#FFD700", fontSize: 12, fontWeight: 600,
+                textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+              }}
+            >
+              <Heart size={13} />
+              <span className="nav-forum-label">Favourites</span>
+            </Link>
+          )}
           {authUser ? (
             <div style={{ position: "relative" }}>
               <button
