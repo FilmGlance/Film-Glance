@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import Link from "next/link";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
-  Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2
+  Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
+  MessageSquare, ArrowRight, LogIn
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 const FG_VERSION = "5.9";
@@ -604,6 +606,7 @@ export default function FilmGlance() {
   const scrollTrackRef = useRef(null);
   const [scrollPct, setScrollPct] = useState(0);
   const [isDraggingScroll, setIsDraggingScroll] = useState(false);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
@@ -645,6 +648,17 @@ export default function FilmGlance() {
       if (session?.user) {
         setUser({ email: session.user.email, id: session.user.id, _session: session });
         loadUserData(session);
+        // Deep-link: /#favourites opens the favourites view (requires sign-in,
+        // hence handled here once the session is confirmed).
+        if (typeof window !== "undefined" && window.location.hash === "#favourites") {
+          setShowFavs(true);
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      } else if (typeof window !== "undefined" && window.location.hash === "#favourites") {
+        // No session yet — prompt sign-in; after sign-in, user can click the
+        // Favourites tab on this page to reach the view.
+        setShowAuth(true);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
       }
     });
 
@@ -667,11 +681,41 @@ export default function FilmGlance() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Handle URL entry: ?q=<query> auto-triggers search, #signin auto-opens auth
+  // modal, #favourites auto-opens the favourites view (when signed in).
+  // Runs once per mount via the ref guard. Used by /preview-landing (and anywhere
+  // else) to deep-link into the app without reimplementing the flows.
+  // Deps are intentionally empty ([]) — doSearch/setShowAuth/etc. are referenced
+  // through the callback closure at effect-run time (post-mount), which avoids
+  // the TDZ crash that would occur if this ran before const doSearch is bound.
+  const autoHandledRef = useRef(false);
+  useEffect(() => {
+    if (autoHandledRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const urlQuery = params.get("q")?.trim();
+    if (urlQuery) {
+      autoHandledRef.current = true;
+      setQuery(urlQuery);
+      doSearch(urlQuery);
+      return;
+    }
+    if (window.location.hash === "#signin") {
+      autoHandledRef.current = true;
+      setShowAuth(true);
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+    // #favourites handled inside the auth listener once the session loads,
+    // because opening the favourites view requires a signed-in user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Scroll tracking for gold scrollbar (window scroll)
   useEffect(() => {
     const onScroll = () => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       setScrollPct(max > 0 ? Math.min(window.scrollY / max, 1) : 0);
+      setHeaderScrolled(window.scrollY > 8);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -931,52 +975,155 @@ export default function FilmGlance() {
         .glow-wrap:focus-within .glow-5::before { transform: translate(-50%, -50%) rotate(430deg); transition-duration: 4s; }
         .glow-mask { position: absolute; width: 30px; height: 20px; background: #E8A000; top: 10px; left: 8px; filter: blur(24px); opacity: 0.6; transition: opacity 2s; pointer-events: none; z-index: 3; }
         .glow-wrap:hover .glow-mask { opacity: 0; }
+
+        /* Unified header nav — matches /preview-landing */
+        .nav-btn { transition: border-color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease; }
+        .nav-btn:hover {
+          border-color: rgba(255, 215, 0, 0.55) !important;
+          background: rgba(255, 215, 0, 0.08) !important;
+          box-shadow: 0 0 22px rgba(255, 215, 0, 0.22), 0 0 48px rgba(255, 215, 0, 0.08);
+        }
+        .nav-btn .arrow { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .nav-btn:hover .arrow { transform: translateX(3px); }
+        @media (max-width: 520px) {
+          .nav-forum-label { display: none !important; }
+        }
       `}</style>
 
-      {/* Header */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.03)", position: "sticky", top: 0, zIndex: 50, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px) saturate(1.3)", WebkitBackdropFilter: "blur(24px) saturate(1.3)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={resetHome}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.05))", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,215,0,0.08)" }}>
-            <Film size={14} style={{ color: "#FFD700" }} />
+      {/* Header — matches /preview-landing for cross-page consistency */}
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: headerScrolled ? "13px 32px" : "18px 32px",
+          borderBottom: headerScrolled
+            ? "1px solid rgba(255, 215, 0, 0.14)"
+            : "1px solid rgba(255, 255, 255, 0.04)",
+          background: headerScrolled ? "rgba(5, 5, 5, 0.78)" : "rgba(5, 5, 5, 0.55)",
+          backdropFilter: "blur(24px) saturate(1.4)",
+          WebkitBackdropFilter: "blur(24px) saturate(1.4)",
+          boxShadow: headerScrolled
+            ? "0 1px 0 rgba(255, 215, 0, 0.06), 0 8px 32px rgba(0, 0, 0, 0.35)"
+            : "none",
+          transition: "padding 0.35s ease, border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease",
+        }}
+      >
+        <Link href="/preview-landing" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, rgba(255,215,0,0.20), rgba(255,165,0,0.06))", border: "1px solid rgba(255, 215, 0, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 18px rgba(255, 215, 0, 0.10)" }}>
+            <Film size={15} style={{ color: "#FFD700" }} />
           </div>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 19, fontWeight: 700, letterSpacing: -0.4 }}>
             Film <span style={{ color: "#FFD700" }}>Glance</span>
           </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        </Link>
+
+        <nav aria-label="Primary" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link
+            href="/discuss"
+            className="nav-btn"
+            aria-label="Open Film Glance Discussion Forum"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 15px", borderRadius: 9,
+              border: "1px solid rgba(255, 215, 0, 0.18)",
+              background: "rgba(255, 215, 0, 0.03)",
+              color: "#FFD700", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+            }}
+          >
+            <MessageSquare size={13} />
+            <span className="nav-forum-label">Discussion Forum</span>
+            <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
+          </Link>
           {user && (
-            <button onClick={() => { setShowFavs(!showFavs); setShowPrice(false); setResult(null); setLoading(false); }}
-              style={{ background: "none", border: "none", color: showFavs ? "#FFD700" : "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              Favourites
-              {favorites.length > 0 && <span style={{ fontSize: 9, background: "rgba(255,215,0,0.12)", color: "#FFD700", padding: "1px 5px", borderRadius: 6, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>{favorites.length}</span>}
+            <button
+              onClick={() => { setShowFavs(!showFavs); setShowPrice(false); setResult(null); setLoading(false); }}
+              className="nav-btn"
+              aria-label="Open your favourites"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 15px", borderRadius: 9,
+                border: "1px solid rgba(255, 215, 0, 0.18)",
+                background: showFavs ? "rgba(255, 215, 0, 0.08)" : "rgba(255, 215, 0, 0.03)",
+                color: "#FFD700", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+              }}
+            >
+              <Heart size={13} />
+              <span className="nav-forum-label">Favourites</span>
+              {favorites.length > 0 && (
+                <span style={{ fontSize: 9, background: "rgba(255,215,0,0.14)", color: "#FFD700", padding: "1px 5px", borderRadius: 6, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>
+                  {favorites.length}
+                </span>
+              )}
             </button>
           )}
           {user ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 7, position: "relative" }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowAccountMenu(!showAccountMenu); }}
-                style={{ padding: "6px 14px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowAccountMenu(!showAccountMenu); }}
+                className="nav-btn"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "7px 16px", borderRadius: 9,
+                  border: "1px solid rgba(255, 215, 0, 0.18)",
+                  background: "rgba(255, 215, 0, 0.03)",
+                  color: "#FFD700", fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+                }}
+              >
                 <User size={12} /> My Account
               </button>
               {showAccountMenu && (
-                <div style={{ position: "absolute", top: 38, right: 0, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.1)", borderRadius: 12, padding: "12px 0", minWidth: 220, zIndex: 100, animation: "fadeIn 0.2s" }}
-                  onClick={e => e.stopPropagation()}>
-                  <div style={{ padding: "6px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: "absolute", top: 42, right: 0,
+                    background: "#0a0a0a", border: "1px solid rgba(255, 215, 0, 0.12)",
+                    borderRadius: 12, padding: "10px 0", minWidth: 220, zIndex: 100,
+                    animation: "fadeIn 0.2s",
+                  }}
+                >
+                  <div style={{ padding: "6px 16px 10px", borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}>
                     <p style={{ fontSize: 10.5, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
                   </div>
-                  <button onClick={() => { setShowAccountMenu(false); logout(); }}
-                    style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    onClick={() => { setShowAccountMenu(false); logout(); }}
+                    style={{
+                      width: "100%", padding: "10px 16px",
+                      background: "none", border: "none",
+                      color: "#ef4444", fontSize: 12, fontWeight: 600,
+                      cursor: "pointer", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}
+                  >
                     <X size={12} /> Sign Out
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <button onClick={() => setShowAuth(true)} style={{ padding: "6px 16px", borderRadius: 9, border: "1px solid rgba(255,215,0,0.18)", background: "rgba(255,215,0,0.03)", color: "#FFD700", fontSize: 11.5, fontWeight: 600, cursor: "pointer", transition: "all 0.3s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.18)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; e.currentTarget.style.boxShadow = "none"; }}
-            >Sign In</button>
+            <button
+              onClick={() => setShowAuth(true)}
+              className="nav-btn"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 16px", borderRadius: 9,
+                border: "1px solid rgba(255, 215, 0, 0.18)",
+                background: "rgba(255, 215, 0, 0.03)",
+                color: "#FFD700", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+              }}
+            >
+              <LogIn size={12} />
+              Sign In
+            </button>
           )}
-        </div>
+        </nav>
       </header>
 
       {/* Video Modal */}
@@ -1277,7 +1424,7 @@ export default function FilmGlance() {
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>—/10</span>
                       </div>
                       <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 10, lineHeight: 1.5, fontStyle: "italic" }}>
-                        Scores from 9 major review sites will appear here after this film is released.
+                        Scores from every major review site will appear here after this film is released.
                       </p>
                     </div>
 

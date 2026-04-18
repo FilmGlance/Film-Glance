@@ -1,0 +1,427 @@
+/* Film Glance Forum Theme v4.2 */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap');
+
+/* === FORCE BLACK BACKGROUND EVERYWHERE === */
+:root,
+[data-theme="dark"],
+[data-theme="light"] {
+  --bs-body-bg: #050505 !important;
+  --bs-body-bg-rgb: 5,5,5 !important;
+  --bs-body-color: #e0e0e0 !important;
+  --bs-body-color-rgb: 224,224,224 !important;
+  --bs-primary: #FFD700 !important;
+  --bs-primary-rgb: 255,215,0 !important;
+  --bs-secondary-bg: #050505 !important;
+  --bs-tertiary-bg: #050505 !important;
+  --bs-light: #050505 !important;
+  --bs-light-rgb: 5,5,5 !important;
+  --bs-dark: #050505 !important;
+  --bs-dark-rgb: 5,5,5 !important;
+  --bs-border-color: rgba(255,255,255,0.06) !important;
+  --bs-card-bg: #0a0a0a !important;
+  --bs-link-color: #FFD700 !important;
+  --bs-link-hover-color: #E8A000 !important;
+  --bs-nav-link-color: rgba(255,255,255,0.5) !important;
+  --bs-emphasis-color: #f0f0f0 !important;
+  --bs-secondary-color: rgba(255,255,255,0.5) !important;
+  --bs-tertiary-color: rgba(255,255,255,0.35) !important;
+}
+
+html, body, #wrapper, #content, .wrapper, main,
+body.skin-darkly, body.skin-default, body.skin-noskin {
+  background-color: #050505 !important;
+  color: #e0e0e0 !important;
+  font-family: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+body { background-image: none !important; }
+
+/* === EXACT NODEBB SIDEBAR OVERRIDES === */
+.skin-noskin nav.sidebar,
+.skin-noskin .sidebar,
+body.skin-noskin nav.sidebar,
+body nav.sidebar,
+nav.sidebar,
+nav[component="sidebar/left"],
+nav[component="sidebar/right"],
+.sidebar-left, .sidebar-right,
+.bottombar-nav,
+.skin-noskin .bottombar-nav,
+body .bottombar-nav {
+  background-color: #050505 !important;
+  background: #050505 !important;
+  color: #e0e0e0 !important;
+}
+
+/* bg-light class used extensively by Harmony */
+.bg-light, .bg-white, .bg-body,
+body .bg-light, body .bg-white, body .bg-body,
+.skin-noskin .bg-light {
+  background-color: #050505 !important;
+  background: #050505 !important;
+}
+
+/* === KILL ALL LIGHT BACKGROUNDS === */
+.container-fluid, .container-lg, .container-md, .container-sm,
+.page, #panel, .panel-default, .panel-body,
+aside, section, div[class*="sidebar"],
+div[class*="panel"], div[class*="wrapper"],
+.off-canvas-bg, .off-canvas,
+#main-nav, .bottom-sheet,
+.col-auto, .sticky-sidebar,
+.content, .container, .row,
+main, #content, [component="content"],
+.col, [class*="col-"],
+.layout-container, .d-flex,
+.flex-column, .border-start {
+  background-color: #050505 !important;
+  background: #050505 !important;
+}
+
+/* Re-apply card backgrounds (they sit on top) */
+[component="categories/category"],
+.category-item, .topic-list-item,
+[component="post"], .card,
+.card-body, .card-header {
+  background: rgba(12,12,12,0.9) !important;
+}
+
+/* === SIDEBAR NAV LINKS === */
+.sidebar .nav-link, nav.sidebar .nav-link,
+.sidebar-left .nav-link,
+[component="sidebar/left"] a, .off-canvas a,
+.sidebar .nav-item a, nav.sidebar a {
+  color: rgba(255,255,255,0.35) !important;
+  background: transparent !important;
+}
+
+.sidebar .nav-link:hover, nav.sidebar .nav-link:hover,
+.sidebar-left .nav-link:hover,
+.sidebar .nav-link.active, nav.sidebar .nav-link.active,
+[component="sidebar/left"] a:hover {
+  color: #FFD700 !important;
+  background: rgba(255,215,0,0.04) !important;
+}
+
+/* === HEADER / NAVBAR === */
+.header, header, nav.navbar, .navbar,
+[component="header"], #header-menu,
+.sticky-header, .navbar-fixed-top {
+  background: rgba(5,5,5,0.92) !important;
+  backdrop-filter: blur(24px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
+  border-bottom: 1px solid rgba(255,215,0,0.08) !important;
+}
+
+.navbar-brand, .forum-title, [component="header/brand"] {
+  color: #FFD700 !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+/* === CATEGORY ICON BOXES — GOLD === */
+.category-icon, [component="category/icon"],
+.category-item .icon, .category-header .icon,
+.rounded-1,
+[component="categories/category"] .rounded-1,
+[component="categories/category"] [style*="background-color"],
+.category-item [style*="background-color"],
+.category-header [style*="background-color"] {
+  background-color: rgba(255,215,0,0.12) !important;
+  background-image: linear-gradient(135deg, rgba(255,215,0,0.18), rgba(232,160,0,0.08)) !important;
+  border: 1px solid rgba(255,215,0,0.22) !important;
+  border-radius: 8px !important;
+}
+
+.category-item i, .category-item .fa,
+.category-item .fas, .category-item .far,
+.category-item .fab, .category-item svg,
+[component="categories/category"] i,
+[component="categories/category"] .fa {
+  color: #FFD700 !important;
+}
+
+/* === CATEGORY LIST CARDS === */
+[component="categories/category"],
+.category-item, .category-header {
+  background: rgba(12,12,12,0.9) !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+  border-radius: 12px !important;
+  margin-bottom: 8px !important;
+}
+
+[component="categories/category"]:hover,
+.category-item:hover {
+  border-color: rgba(255,215,0,0.15) !important;
+  background: rgba(255,215,0,0.02) !important;
+}
+
+.category-item h3, .category-item .title,
+[component="category/name"], .category-name,
+.category-item h3 a, [component="category/name"] a {
+  color: #fff !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 600 !important;
+}
+.category-item h3 a:hover, [component="category/name"] a:hover {
+  color: #FFD700 !important;
+}
+
+.category-item .description,
+[component="category/description"] {
+  color: rgba(255,255,255,0.45) !important;
+}
+
+/* === POST PREVIEW LINE — GOLD === */
+.category-item .border-start,
+[component="categories/category"] .border-start,
+.border-start, .border-left,
+[style*="border-left"],
+[component="categories/category"] [style*="border-color"] {
+  border-left-color: #FFD700 !important;
+  border-color: #FFD700 !important;
+}
+
+/* === STATS === */
+.category-stat, .stat, .human-readable-number,
+.category-item span, [component="categories/category"] span {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+.category-stat .human-readable-number,
+.stat .human-readable-number,
+.category-item b, .category-item strong {
+  color: rgba(255,255,255,0.75) !important;
+  font-weight: 600 !important;
+}
+
+.category-stat small, .stat small {
+  color: rgba(255,255,255,0.35) !important;
+}
+
+.text-muted { color: rgba(255,255,255,0.35) !important; }
+
+.teaser-content, [component="category/lastpost"],
+.recent-reply { color: rgba(255,255,255,0.5) !important; }
+
+.teaser-timestamp, .timeago, time {
+  color: rgba(255,255,255,0.3) !important;
+}
+
+/* === ACTION BAR — BLACK === */
+.action-bar, .category-tools, .topic-actions,
+.nav-pills, .nav-tabs, .toolbar,
+ul.nav.nav-pills, .category-filter,
+[class*="bg-light"], [class*="bg-white"] {
+  background: #0a0a0a !important;
+  background-color: #0a0a0a !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 10px !important;
+}
+
+.nav-pills .nav-link, .nav-tabs .nav-link,
+.action-bar a, .category-tools a,
+.toolbar a, .nav-item a {
+  color: rgba(255,255,255,0.6) !important;
+  background: transparent !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 500 !important;
+  border: none !important;
+}
+
+.nav-pills .nav-link:hover, .nav-tabs .nav-link:hover {
+  color: #FFD700 !important;
+  background: rgba(255,215,0,0.04) !important;
+}
+
+.nav-pills .nav-link.active, .nav-tabs .nav-link.active {
+  background: rgba(255,215,0,0.08) !important;
+  color: #FFD700 !important;
+}
+
+/* === TOPIC LIST === */
+.topic-list-item, [component="category/topic"] {
+  border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+}
+
+.topic-list-item:hover, [component="category/topic"]:hover {
+  background: rgba(255,215,0,0.02) !important;
+}
+
+.topic-title, [component="topic/header"] a {
+  color: #e8e8e8 !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 500 !important;
+}
+
+.topic-title:hover, [component="topic/header"] a:hover {
+  color: #FFD700 !important;
+}
+
+/* === POSTS === */
+[component="post"], .post-container {
+  background: rgba(10,10,10,0.5) !important;
+  border: 1px solid rgba(255,255,255,0.035) !important;
+  border-radius: 12px !important;
+}
+
+.post-content, [component="post/content"] {
+  color: #d0d0d0 !important;
+  line-height: 1.7 !important;
+}
+
+/* === LINKS === */
+a { color: #FFD700 !important; text-decoration: none !important; }
+a:hover { color: #E8A000 !important; }
+
+/* === BUTTONS === */
+.btn-primary, .btn-warning {
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  border: none !important;
+  color: #050505 !important;
+  font-weight: 700 !important;
+  font-family: 'Syne', sans-serif !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 12px rgba(255,215,0,0.15) !important;
+}
+
+.btn-primary:hover, .btn-warning:hover {
+  background: linear-gradient(135deg, #E8A000, #d4940a) !important;
+  box-shadow: 0 4px 20px rgba(255,215,0,0.3) !important;
+}
+
+.btn-outline-primary {
+  border: 1px solid rgba(255,215,0,0.18) !important;
+  background: rgba(255,215,0,0.03) !important;
+  color: #FFD700 !important;
+  border-radius: 10px !important;
+}
+
+.btn-secondary, .btn-default, .btn-outline-secondary,
+.btn-light, .btn-outline-light {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: #bbb !important;
+  border-radius: 10px !important;
+}
+
+/* === FORMS === */
+input, textarea, select, .form-control, .form-select {
+  background-color: #0a0a0a !important;
+  color: #e0e0e0 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 10px !important;
+}
+
+input:focus, textarea:focus, .form-control:focus {
+  border-color: rgba(255,215,0,0.3) !important;
+  box-shadow: 0 0 0 3px rgba(255,215,0,0.06) !important;
+}
+
+/* === DROPDOWNS === */
+.dropdown-menu {
+  background-color: #0a0a0a !important;
+  border: 1px solid rgba(255,215,0,0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+}
+.dropdown-item { color: #d0d0d0 !important; }
+.dropdown-item:hover { background-color: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+
+/* === MODALS === */
+.modal-content {
+  background-color: #0a0a0a !important;
+  border: 1px solid rgba(255,215,0,0.12) !important;
+  border-radius: 16px !important;
+}
+.modal-header { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+.modal-footer { border-top: 1px solid rgba(255,255,255,0.05) !important; }
+.modal-title { color: #f0f0f0 !important; }
+
+/* === CARDS === */
+.card, .card-body, .card-header, .card-footer {
+  background-color: #0a0a0a !important;
+  border-color: rgba(255,255,255,0.04) !important;
+  color: #e0e0e0 !important;
+}
+
+/* === BREADCRUMBS === */
+.breadcrumb { background: transparent !important; }
+.breadcrumb-item a { color: #FFD700 !important; }
+.breadcrumb-item.active { color: rgba(255,255,255,0.5) !important; }
+
+/* === PAGINATION === */
+.page-link { background-color: #0a0a0a !important; border-color: rgba(255,255,255,0.06) !important; color: #bbb !important; }
+.page-link:hover { background-color: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+.page-item.active .page-link { background: #FFD700 !important; border-color: #FFD700 !important; color: #050505 !important; }
+
+/* === HEADINGS === */
+h1, h2, h3, h4, h5, h6 {
+  color: #f0f0f0 !important;
+  font-family: 'Syne', sans-serif !important;
+}
+
+/* === TEXT CONTRAST === */
+p, li, td, th, dt, dd, span, label, small,
+figcaption, .form-text, .help-block {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+/* === ALERTS === */
+.alert-info { background: rgba(255,215,0,0.05) !important; border-color: rgba(255,215,0,0.12) !important; color: #FFD700 !important; }
+.alert-success { background: rgba(40,167,69,0.08) !important; color: #6fcf7f !important; }
+.alert-danger { background: rgba(220,53,69,0.08) !important; color: #e88 !important; }
+
+/* === AVATARS === */
+.avatar, [component="user/picture"] { border: 2px solid rgba(255,215,0,0.1) !important; }
+
+/* === FOOTER === */
+footer, .footer { background: #050505 !important; border-top: 1px solid rgba(255,255,255,0.03) !important; }
+
+/* === BOTTOMBAR === */
+.bottombar, [component="bottombar"],
+div.bottombar, .bottom-sheet {
+  background-color: #050505 !important;
+  background: #050505 !important;
+  border-top: 1px solid rgba(255,255,255,0.04) !important;
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar-track { background: #050505; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #FFD700, #E8A000); border-radius: 4px; }
+* { scrollbar-width: thin; scrollbar-color: #FFD700 #050505; }
+
+::selection { background: rgba(255,215,0,0.2); color: #fff; }
+
+/* === MISC === */
+hr { border-color: rgba(255,255,255,0.04) !important; }
+blockquote { border-left: 3px solid rgba(255,215,0,0.3) !important; background: rgba(255,215,0,0.02) !important; }
+code { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+pre { background: #0a0a0a !important; border: 1px solid rgba(255,255,255,0.06) !important; }
+.list-group-item { background-color: #0a0a0a !important; border-color: rgba(255,255,255,0.04) !important; color: #d0d0d0 !important; }
+.badge { color: #e0e0e0 !important; }
+.badge.bg-primary { background: rgba(255,215,0,0.12) !important; color: #FFD700 !important; }
+.tag, .label { background: rgba(255,215,0,0.06) !important; color: #FFD700 !important; }
+
+/* === BRANDING BAR === */
+.fg-brand-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; background: #050505;
+  border-bottom: 1px solid rgba(255,215,0,0.08);
+  font-family: 'Syne', sans-serif;
+}
+.fg-brand-bar .fg-logo {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,165,0,0.05));
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,215,0,0.08); font-size: 14px;
+}
+.fg-brand-bar .fg-title { font-size: 15px; font-weight: 700; color: #FFD700 !important; }
+.fg-brand-bar .fg-sep { color: rgba(255,255,255,0.15); font-size: 18px; }
+.fg-brand-bar .fg-forum-label { font-size: 13px; color: rgba(255,255,255,0.5) !important; }
+.fg-brand-bar .fg-back-link {
+  margin-left: auto; font-size: 11px;
+  color: rgba(255,255,255,0.3) !important;
+}
+.fg-brand-bar .fg-back-link:hover { color: #FFD700 !important; }

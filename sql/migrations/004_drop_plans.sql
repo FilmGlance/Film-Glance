@@ -1,0 +1,21 @@
+-- 004_drop_plans.sql
+--
+-- Resolves Supabase security finding `rls_disabled_in_public` on public.plans
+-- by dropping the table outright. Billing is no longer the Film Glance
+-- monetization path (anonymous search with daily cap replaced the Stripe plan
+-- gate in v5.4). The rest of the Stripe infrastructure (profiles.plan_id,
+-- subscriptions, lib/stripe.ts, webhook route, dormant pricing UI) remains in
+-- place gated behind PRICING_ENABLED = false and will be removed in a later
+-- full-teardown session.
+--
+-- CASCADE drops the two foreign-key constraints pointing at plans.id:
+--   - profiles_plan_id_fkey
+--   - subscriptions_plan_id_fkey
+-- The plan_id columns on profiles and subscriptions remain with their
+-- existing values (harmless — PRICING_ENABLED = false).
+--
+-- Note: slot 003 is reserved for a missing historical migration
+-- (003_anonymous_searches.sql — v5.4, applied in prod but never committed).
+-- Reconstructing it is scheduled for a later session.
+
+DROP TABLE IF EXISTS public.plans CASCADE;

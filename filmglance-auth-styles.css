@@ -1,0 +1,137 @@
+/* ================================================================
+   FILM GLANCE FORUM — AUTH UI + POST FIXES (append to theme)
+   ================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+/* === CRITICAL: Override theme span color for branding elements === */
+.fg-text-white,
+.fg-banner .fg-text-white,
+.fg-banner-wrap .fg-text-white {
+  color: #ffffff !important;
+}
+.fg-text-gold,
+.fg-banner .fg-text-gold,
+.fg-banner-wrap .fg-text-gold {
+  color: #FFD700 !important;
+}
+
+/* === HIDE NODEBB DEFAULT NAVBAR === */
+#header-menu,
+nav.navbar,
+.navbar,
+[component="brand/wrapper"],
+.navbar-brand,
+a.navbar-brand {
+  display: none !important;
+}
+
+/* === POST / BLOCKQUOTE FIXES — remove gold tint === */
+[component="post"], .post-container {
+  background: #050505 !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+  border-radius: 12px !important;
+}
+
+.post-content, [component="post/content"] {
+  color: #e0e0e0 !important;
+}
+
+blockquote {
+  border-left: 3px solid rgba(255,255,255,0.15) !important;
+  background: rgba(255,255,255,0.02) !important;
+  color: #d0d0d0 !important;
+  padding: 10px 16px !important;
+  margin: 8px 0 !important;
+}
+
+/* Topic list items */
+.topic-list-item {
+  background: #050505 !important;
+  border-color: rgba(255,255,255,0.04) !important;
+}
+
+/* === REGISTRATION + LOGIN FORM CONTRAST === */
+
+.register h1, .register h2, .register h3,
+.login h1, .login h2, .login h3,
+[component="register"] h1, [component="register"] h2 {
+  color: #ffffff !important;
+  font-family: 'Playfair Display', serif !important;
+}
+
+.register label, .login label,
+.register .form-label, .login .form-label,
+[component="register"] label,
+[component="register/local"] label {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+
+.register input, .register textarea, .register .form-control, .register select,
+.login input, .login textarea, .login .form-control,
+[component="register"] input, [component="register"] .form-control,
+[component="register/local"] input {
+  background-color: #0a0a0a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  font-size: 14px !important;
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+}
+.register input:focus, .register .form-control:focus,
+.login input:focus, .login .form-control:focus,
+[component="register"] input:focus {
+  border-color: rgba(255,215,0,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(255,215,0,0.08) !important;
+  outline: none !important;
+}
+
+.register input::placeholder, .login input::placeholder,
+.register .form-control::placeholder, .login .form-control::placeholder {
+  color: rgba(255,255,255,0.3) !important;
+  opacity: 1 !important;
+}
+
+.register .form-text, .register .help-block, .register small,
+.login .form-text, .login small,
+[component="register"] .form-text {
+  color: rgba(255,255,255,0.4) !important;
+  font-size: 12px !important;
+}
+
+.register p, .login p {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+.register .btn-primary, .login .btn-primary,
+[component="register"] .btn-primary,
+[component="register/local"] .btn-primary,
+#login .btn-primary {
+  background: linear-gradient(135deg, #FFD700, #E8A000) !important;
+  border: none !important;
+  color: #050505 !important;
+  font-weight: 700 !important;
+  font-size: 13.5px !important;
+  padding: 12px 24px !important;
+  border-radius: 11px !important;
+}
+.register .btn-primary:hover, .login .btn-primary:hover {
+  box-shadow: 0 0 20px rgba(255,215,0,0.3) !important;
+}
+
+.register .input-group-text, .login .input-group-text {
+  background-color: #0a0a0a !important;
+  border-color: rgba(255,255,255,0.12) !important;
+  color: #FFD700 !important;
+}
+
+.register .is-invalid { border-color: #ef4444 !important; }
+.register .is-valid { border-color: #22c55e !important; }
+.register .invalid-feedback { color: #ef4444 !important; font-size: 12px !important; }
+.register .valid-feedback { color: #22c55e !important; font-size: 12px !important; }
+
+.register .form-check-label { color: rgba(255,255,255,0.5) !important; }
+.register .form-check-label a { color: #FFD700 !important; }
+.register a, .login a { color: #FFD700 !important; }
