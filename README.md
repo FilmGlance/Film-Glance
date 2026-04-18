@@ -10,12 +10,14 @@ This is the **onboarding document** for any new Claude chat session working on F
 
 **⚠️ STOP. Before making ANY changes, writing ANY code, or responding to ANY request about Film Glance, you MUST read these documents IN ORDER. This is non-negotiable.**
 
-1. **tech-specs.md** — Start with the **Change Log (§10)** at the bottom. Read the **CURRENT STATE** and **NEXT STEPS** entries first — these tell you exactly where things stand and what to do next. Then skim the rest of the spec for architecture context.
-2. **conversation-summary.md** — Read the **latest entries** and the **Next Session** section at the bottom. This tells you what happened in recent sessions, what broke, what was learned, and what's pending.
-3. **README.md** (this document) — Workflow rules, standing deliverables, known gotchas.
-4. **Uploaded Repo** (Film-Glance GitHub codebase) — Read relevant source files before modifying them.
+1. **CLAUDE.md** — **Auto-loaded every session by Claude Code** (you're already reading it — that's the point). Contains hard rules, standing deliverables, VPS safety, workflow patterns. Non-negotiable.
+2. **tech-specs.md** — Start with the **Change Log (§10)** at the bottom. Read the **CURRENT STATE** and **NEXT STEPS** entries first — these tell you exactly where things stand and what to do next. Then skim the rest of the spec for architecture context.
+3. **conversation-summary.md** — Read the **latest session entry** and the **Next Steps** section at the bottom. This tells you what happened recently, what broke, what was learned, and what's pending.
+4. **README.md** (this document) — Workflow rules, standing deliverables, known gotchas, VPS quick reference.
+5. **`claude-code-transition.md`** — Workflow safety rails + emergency procedures for the terminal workflow.
+6. **The repo itself** — Read relevant source files before modifying them. No upload needed in Claude Code — files are directly accessible.
 
-These four documents together are the **bible**. If there is a conflict between your training knowledge and what these documents say about Film Glance, the documents are correct.
+These documents together are the **bible**. If there is a conflict between your training knowledge and what these documents say about Film Glance, the documents are correct.
 
 **The tech-specs change log and conversation summary are the two most critical documents. They contain the current state of the project, active issues, and exact next steps. Reading them first prevents you from repeating solved problems or missing context.**
 
@@ -63,23 +65,17 @@ Every entry in the Change Log (tech-specs.md §10) MUST include:
 - **Current state** — at the end of each session, document where things stand
 - **Next steps** — what the next session should do first
 
-### 3. GitHub Workflow — Browser-Based
+### 3. GitHub Workflow — Claude Code Terminal (as of Apr 17, 2026)
 
-The user manages the GitHub repo **entirely through the browser** at github.com. When advising on repo updates:
+The user now works in Claude Code terminal on Windows 10 / PowerShell. The old browser-based GitHub-editor workflow is retired. When making code changes:
 
-- **State the file name** and the **full GitHub repo directory path** (e.g., `app/api/search/route.ts`)
-- **Give step-by-step browser instructions** (navigate to file → pencil icon → edit → commit)
-- **Always provide the commit message** to use
-- **Always provide the PR title** when merging staging → main
-- **Branch workflow:** Changes go to `staging` first → test on Vercel preview → PR to `main` → merge to production
-- Never give terminal/CLI commands unless the user specifically asks for them
-
-### 4. Code Changes — Always Provide Files
-
-When making code changes:
-- Create the complete file and provide it for download
-- The user will copy-paste the contents into GitHub's browser editor
-- Always specify exactly which file to edit and where it lives in the repo
+- **Edit files directly** via the Edit/Write tools in the repo at `C:\Users\User\Desktop\Film-Glance-Terminal\Film-Glance\`
+- **Show the diff before committing** — user reviews, approves, then commit
+- **Branch workflow:** Changes go to `staging` first → Vercel auto-builds preview → PR to `main` → merge to production
+- **Commit message format:** `v5.X.Y brief description`, `fix: brief description`, `chore: ...`, or `docs: ...` — see `CLAUDE.md` for full convention
+- **PR creation:** `gh pr create --base main --head staging --title "v5.X.Y — summary"`
+- **Never push directly to `main`** — enforced mechanically via the deny list in `.claude/settings.json` (added Apr 17, 2026)
+- **Never force-push or hard-reset on pushed branches** — also enforced mechanically now
 
 ### 5. PR Title Format
 
@@ -123,6 +119,10 @@ These are recurring technical issues discovered through development. Be aware of
 | **GitHub raw CDN caching** | `raw.githubusercontent.com` can cache files for several minutes after a push. If `wget` downloads a stale version, use the GitHub API instead: `curl -H "Accept: application/vnd.github.v3.raw" -L -o FILE "https://api.github.com/repos/FilmGlance/Film-Glance/contents/FILE?ref=staging"` |
 | **Hostinger CPU throttling** | When CPU hits 85%+, Hostinger activates CPU limitations that cripple performance. The import script's `REQUEST_DELAY` setting controls this — too aggressive and CPU spikes, too conservative and import takes forever. Sweet spot is **0.15s** at KVM 2. Click "Remove limitations" in Hostinger VPS panel after fixing. |
 | **Hostinger browser terminal paste issues** | Large pastes freeze the terminal. All script deployments must use GitHub staging as intermediary with `curl`/`wget`. Never paste scripts directly. |
+| **Windows curl `CRYPT_E_NO_REVOCATION_CHECK`** | When calling the Supabase Management API (or any HTTPS endpoint) from Windows curl via Git Bash, schannel can fail to reach CRL endpoints. Add `--ssl-no-revoke` — skips revocation check, still validates the cert chain. |
+| **npm global update of Claude Code leaves EPERM temp dir** | `npm i -g @anthropic-ai/claude-code` while Claude Code is running produces a benign `EPERM: operation not permitted, unlink 'claude.exe'` warning because the binary is locked. New version IS installed correctly. Restart Claude Code (`/exit` then `claude`) to activate. Leftover temp dir cleans up on next npm op or exit. |
+| **Claude Code settings schema is strict** | Validator on Edit rejects invalid `.claude/settings.json` or `settings.local.json` before write. Common gotcha: `:*` in a `Bash(...)` pattern must be at the END of the pattern (e.g. `Bash(npm run:*)` valid, `Bash(scp foo:* bar)` invalid). |
+| **Supabase `rls_disabled_in_public` on `plans`** | Fixed Apr 17 by dropping the `plans` table entirely (billing is not the monetization path). See `sql/migrations/004_drop_plans.sql` and `tech-specs.md` §8.1 for the remaining orphaned Stripe-infra surface that's safe because `PRICING_ENABLED = false`. |
 
 ---
 
@@ -148,7 +148,7 @@ The cache maintains itself with zero manual intervention:
 - **Categories:** 21 total (6 parents + 15 subcategories), all with FontAwesome icons set via PostgreSQL. "The IMDb Archives" is read-only.
 - **Data source:** FilmBoards crawl COMPLETE — 3,308 files, 309,201 threads, ~2.93M posts, 1.1 GB
 - **Import (v5 — RUNNING April 11):** Deduplication merges same-title threads, removes true duplicates. 309,201 → 263,021 threads after dedup (43,625 true dupes removed, 2,555 same-title threads merged into parent threads). Movie boards (1,419 with IMDb ID) → The Cinema. Non-movie (1,889) → The IMDb Archives.
-- **Import progress (as of Apr 16):** 450/3,308 boards complete, 99,308 topics, 852,777 replies, 0 errors. Running at 0.15s REQUEST_DELAY to avoid Hostinger CPU throttling. Estimated completion: ~7-10 more days.
+- **Import progress (as of Apr 17 end-of-session):** 842/3,308 boards complete, 120,093 topics, 964,102 replies, 0 errors. Running via `run_import.sh` + `.env`-sourced token (rotated Apr 17). REQUEST_DELAY = 0.15s. ~5-8 more days estimated.
 - **Remaining post-import work:** Remove GDPR consent checkboxes, post formatting polish, mobile testing, NodeBB API health check, staging branch cleanup.
 
 ### Priority 2: Discuss Link Integration (Queued — After Import)
@@ -198,15 +198,18 @@ ssh filmglance@147.93.113.39 "<command>"
 | PostgreSQL (NodeBB) | localhost | 5432 | Running |
 | Nginx | `/etc/nginx/` | 80/443 | Running (reverse proxy + SSL + 3 static files) |
 | SSL Certificate | `/etc/letsencrypt/live/discuss.filmglance.com/` | — | Valid until Jul 5, 2026 |
-| Import Script v5 | `/root/filmboards-crawl/import_filmboards.py` | — | Running via nohup (450/3308 boards as of Apr 16) |
+| Import Script v5 | `/root/filmboards-crawl/import_filmboards.py` | — | Running via `run_import.sh` (842/3308 boards as of Apr 17 session end) |
+| NodeBB API token | `/root/filmboards-crawl/.env` (chmod 600, owner only) | — | Rotated Apr 17 — env var `NODEBB_API_TOKEN` |
+| Import launcher | `/root/filmboards-crawl/run_import.sh` | — | Sources `.env`, nohups python — keeps token out of shell history |
 
 | Action | Command |
 |--------|---------|
-| Check import progress | `sudo tail -5 /root/filmboards-crawl/import.log` |
-| Check import stats | `cp /root/filmboards-crawl/import_state.json /tmp/s.json && python3 -c "import json; d=json.load(open('/tmp/s.json')); print(d['stats']); print('Boards:',len(d['completed_boards']),'/ 3308')"` |
-| Kill import (for restart) | `kill $(pgrep -f import_filmboards)` |
-| Restart import | `cd /root/filmboards-crawl && nohup python3 import_filmboards.py > import.log 2>&1 &` |
-| Adjust import speed | `sed -i 's/REQUEST_DELAY    = 0.15/REQUEST_DELAY    = 0.10/' /root/filmboards-crawl/import_filmboards.py` (then restart) |
+| Check import progress | `tail -5 /root/filmboards-crawl/import.log` (no sudo needed — `filmglance` owns the file since Apr 17) |
+| Check import stats | Inline python one-liner reading `/root/filmboards-crawl/import_state.json` — see conversation-summary Apr 17 entry for the pattern |
+| Kill import (for clean restart) | `kill $(pgrep -f import_filmboards)` |
+| Restart import | `cd /root/filmboards-crawl && ./run_import.sh` (sources `.env` automatically) |
+| Rotate NodeBB token | ACP → `https://filmglance.com/discuss/admin/settings/api` → Regenerate on `fgadmin` / UID 1 row → paste new value into `/root/filmboards-crawl/.env` → relaunch via `./run_import.sh` |
+| Adjust import speed | `sed -i 's/REQUEST_DELAY    = 0.15/REQUEST_DELAY    = 0.10/' /root/filmboards-crawl/import_filmboards.py` (then kill + restart via `run_import.sh`) |
 | Check NodeBB status | `cd /root/nodebb && ./nodebb status` |
 | Start NodeBB | `./nodebb start` |
 | Rebuild NodeBB | `cd /root/nodebb && ./nodebb stop && ./nodebb build && ./nodebb start` |
@@ -260,10 +263,11 @@ location /filmglance-brand.js   → /var/www/html/filmglance-brand.js
 - **Strategy:** Each original thread → individual NodeBB topic. Each original post → NodeBB reply. First post = topic body with archive attribution.
 - **Routing:** Movie boards (1,419 with IMDb ID) → The Cinema (cid 6). Non-movie boards (1,889) → The IMDb Archives (cid 25).
 - **Bot account:** "The IMDb Forum Archives" (UID 2). All posts currently attributed via the master API token to UID 1 (fgadmin), not UID 2, due to NodeBB master token behavior. Original author/date preserved in post body.
-- **API token:** Master token stored in script. Generated at NodeBB admin → Settings → API.
+- **API token (Apr 17 refactor):** Master token stored in `/root/filmboards-crawl/.env` (chmod 600, owner-only). Script reads via `os.environ.get("NODEBB_API_TOKEN", "")` with fail-fast validation. Launcher `/root/filmboards-crawl/run_import.sh` sources the `.env` and nohups python. Rotating the token = ACP regenerate → edit `.env` → relaunch via `./run_import.sh`. Old pattern (hardcoded in script) retired.
 - **API base URL:** `http://127.0.0.1:4567/discuss` — the `/discuss` prefix is mandatory due to NodeBB config.
 - **Request delay:** Currently 0.15s between API calls to avoid Hostinger CPU throttling.
 - **Resume:** State saved in `import_state.json` — tracks completed boards + position within current board. Re-running skips completed boards.
+- **Known issue (cosmetic):** `run_import.sh` redirects stdout to `import.log` while the script's `log()` also writes to that file directly — each log line appears twice. Fix at next clean stop: change wrapper to `> /dev/null 2>> import.err.log`.
 - **Bad title handling:** Detects relative timestamps, bare numbers, "post deleted" etc. and substitutes first line of first post content.
 - **Analyze mode:** `python3 import_filmboards.py --analyze` scans all boards and reports dedup stats without importing. Outputs full report to `/root/filmboards-crawl/dedup_analysis.json`.
 

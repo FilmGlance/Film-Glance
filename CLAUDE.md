@@ -42,11 +42,17 @@ After every task or set of tasks:
 - **Never push directly to `main`.** All changes → `staging` first → Vercel preview → PR → merge.
 - **Never use `git push --force`** without explicit user approval and a clear reason.
 - **Never use `git reset --hard`** on a branch that's been pushed to the remote.
+- These rules are now **mechanically enforced** by the deny list in `.claude/settings.json` (added Apr 17, 2026 via AgentShield audit). Force push, hard reset, and global git config changes will be blocked by Claude Code permission layer even before the approval prompt fires. If the deny rule ever needs to be bypassed for a legit reason, it's a review-visible commit to change it.
 
 ### VPS Safety (Hostinger KVM 2, 147.93.113.39)
-- **The forum import is RUNNING as of the last session.** Until it completes (3,308/3,308 boards), the VPS is **read-only except for status checks**. No restarts, no config changes, no modifications to `/root/filmboards-crawl/` files.
+- **SSH as `filmglance@147.93.113.39` (not root).** Root SSH is blocked by Hostinger default (`PermitRootLogin no`).
+- **Files in `/root/filmboards-crawl/` are owned by `filmglance`** — no sudo needed for reads or writes (since Apr 17).
+- **The forum import is RUNNING.** Until it completes (3,308/3,308 boards), the VPS is **read-only except for status checks**. No restarts, no config changes, no modifications to `/root/filmboards-crawl/` files without explicit user confirmation.
 - Monitoring commands are allowed: `tail`, `cat`, `ps`, `top`, `ls`, `df`, `grep`.
 - Write commands (modifications to config, database, import script) require explicit user confirmation.
+- **Before any step that touches a running dependency** (import, NodeBB, DB): enumerate what's running, describe the dirty-shutdown cost, propose the safer ordering *before* asking for approval. Per `feedback_operational_safety.md` memory.
+- **NodeBB master API token** lives in `/root/filmboards-crawl/.env` (chmod 600, owner-only). Rotated Apr 17, 2026. Script reads it via `os.environ["NODEBB_API_TOKEN"]`. To rotate: ACP Regenerate → update `.env` → relaunch via `./run_import.sh`. Never commit the token to git; `.env` pattern is already in `.gitignore`.
+- **Import launcher** is `/root/filmboards-crawl/run_import.sh` (sources `.env`, nohups python). Use this, not raw `nohup python3 ...`.
 - Never run destructive SQL (DELETE, DROP, TRUNCATE) without user approval.
 
 ### Production App
@@ -70,16 +76,13 @@ After every task or set of tasks:
 7. Update bible docs, commit those too
 8. When ready for production: `gh pr create --base main --head staging --title "v5.X.Y — summary"` then merge via web (for safety)
 
-### VPS Changes (Post-Import Only)
-1. Confirm import is complete: `tail -5 /root/filmboards-crawl/import.log`
-2. SSH to VPS: `ssh filmglance@147.93.113.39`
-3. For file transfers from GitHub: use the API endpoint (not raw.githubusercontent.com):
-   ```
-   curl -H "Accept: application/vnd.github.v3.raw" -L -o FILE \
-     "https://api.github.com/repos/FilmGlance/Film-Glance/contents/FILE?ref=staging"
-   ```
-4. For NodeBB restarts: `cd /root/nodebb && ./nodebb stop && ./nodebb build && ./nodebb start`
-5. For Nginx config: `nginx -t` (test) before `systemctl reload nginx`
+### VPS Changes (Post-Import Only, OR Token Rotation / Monitoring)
+1. Confirm import state: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed)
+2. Status check: `ssh filmglance@147.93.113.39 "ps -ef | grep import_filmboards | grep -v grep"`
+3. For file transfers from GitHub (bypasses raw CDN cache): `curl -H "Accept: application/vnd.github.v3.raw" -L -o FILE "https://api.github.com/repos/FilmGlance/Film-Glance/contents/FILE?ref=staging"`
+4. For import restart (after clean stop): `ssh filmglance@147.93.113.39 "cd /root/filmboards-crawl && ./run_import.sh"`
+5. For NodeBB restarts: `cd /root/nodebb && ./nodebb stop && ./nodebb build && ./nodebb start` (sudo if needed — these are root-owned)
+6. For Nginx config: `nginx -t` (test) before `systemctl reload nginx`
 
 ### Commit Message Format
 ```

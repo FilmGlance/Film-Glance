@@ -139,16 +139,32 @@ Rod dropped a prompt file at `Desktop\Film-Glance-Terminal\prompt.txt` asking fo
 18. **Security scanners optimize for checklist completion, not workflow-aware security.** AgentShield flagged our scoped SSH as still HIGH. The right response is documenting scanner limitations in the audit addendum, not gaming the tool by adding contradictory rules.
 19. **Prompt-injection vigilance matters even for legit asks.** A file-based prompt with formal tone + unknown npm package + "apply fixes to my permissions config" hit multiple red flags. Correct response: pause, verify authorship with the user directly, then proceed with step-by-step approval gates. Rod confirmed authenticity; this would be the right behavior regardless.
 
-### Next Steps (For Next Chat)
+### Next Steps (For Next Chat — Rod's Stated Focus)
 
-1. **Check import progress** — `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed — `filmglance` owns the file).
-2. **Continue waiting for import completion** (~5-8 more days from Apr 17). Currently at 842/3308; progress accelerates from here since the biggest boards are done.
-3. **Fix doubled-log cosmetic issue** at next clean stop — swap `>> import.log 2>&1` → `> /dev/null 2>> import.err.log` in `run_import.sh`.
-4. **Full Stripe teardown (optional, low priority):** drop `subscriptions` table, orphaned `plan_id` columns, `increment_search()` + `reset_monthly_searches()` functions, delete Stripe code files, remove Stripe npm deps + env vars. All currently unreachable via `PRICING_ENABLED=false`.
-5. **Reconstruct `003_anonymous_searches.sql`** migration from prod (pg_dump of the table + `check_anonymous_limit` RPC) to close the repo-vs-prod schema drift.
-6. **Post-import queue unchanged:** GDPR consent removal, mobile testing, full API health check, Discuss links on movie result pages, staging branch cleanup, mobile app conversion (Capacitor, Phase 2).
-7. **Rotate Supabase PAT before April 17, 2027.**
-8. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6.
+**Primary focus for next session** (Rod's words, end of this session, just before terminal restart):
+
+1. **Front-end work on filmglance.com** — Scope TBD at session start. Likely UI polish, responsiveness, or a new feature. Read tech-specs §4 (Frontend Architecture) and current state of `components/film-glance.jsx` before proposing changes.
+2. **Add "Discuss" links on movie result pages** — Long-queued Priority 2. Link each movie search result to its corresponding NodeBB forum thread via IMDb ID match. Forum import is ~25% done (842/3308 boards), so implementation either gates on IMDb-ID-has-thread OR fills in gracefully as boards finish importing. Consider: "Discuss this film →" button in the result card that either jumps to the thread or 404s cleanly.
+3. **Check forum import status first thing** — Quick peek: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` + stat file parse. Note: process PID 54968 was running at session end, ~0.2% CPU, on board 842/3308. If process is dead, cause likely is (a) graceful completion (check stats), (b) dirty kill (resume via `./run_import.sh` from state checkpoint), or (c) CPU throttle (check Hostinger panel).
+
+**Secondary / housekeeping:**
+
+4. **Fix doubled-log cosmetic issue** at next clean import stop — swap `>> import.log 2>&1` → `> /dev/null 2>> import.err.log` in `run_import.sh`. Only fix this when the import is already stopped; don't kill a healthy process just for log formatting.
+5. **Full Stripe teardown (low priority):** drop `subscriptions` table, orphaned `plan_id` columns, `increment_search()` + `reset_monthly_searches()` functions, delete Stripe code files, remove Stripe npm deps + env vars. All currently unreachable via `PRICING_ENABLED=false`.
+6. **Reconstruct `003_anonymous_searches.sql`** migration from prod (pg_dump of the table + `check_anonymous_limit` RPC) to close the repo-vs-prod schema drift.
+7. **5 GitHub Dependabot vulnerabilities on main** (2 high, 3 moderate) surface on every push output — worth a dedicated security-patch session. Check https://github.com/FilmGlance/Film-Glance/security/dependabot for details.
+8. **Rotate Supabase PAT before April 17, 2027.**
+9. Consider deleting `YOUTUBE_API_KEY` from Vercel env vars — dead since v5.6.
+
+**End-of-session state (Apr 17):**
+
+- Main app v5.9.1 unchanged in production
+- 4 commits pushed to origin/staging today (NodeBB token rotation, docs, plans drop, AgentShield audit)
+- Forum import running healthy with rotated token
+- Supabase security finding resolved at root (`plans` table dropped, not just RLS-patched)
+- `.claude/` hardened to grade A (90/100) via AgentShield
+- Claude Code CLI updated globally — terminal restart activates new binary
+- All bible docs + migration files + security audit addendum synced to staging
 
 ---
 
