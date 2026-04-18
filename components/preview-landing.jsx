@@ -708,7 +708,7 @@ export default function PreviewLanding() {
           transition: "padding 0.35s ease, border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease",
         }}
       >
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
+        <Link href="/preview-landing" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
           <div
             style={{
               width: 32, height: 32, borderRadius: 8,
