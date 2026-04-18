@@ -108,6 +108,37 @@ All gated by `PRICING_ENABLED = false` so production behavior is unchanged.
 14. **"RLS enabled + 0 policies" is a valid service-role-only pattern** — don't confuse with "RLS disabled" (`rowsecurity=false`). The Supabase advisory specifically flags `rowsecurity=false` (`rls_disabled_in_public`), not the zero-policy case.
 15. **When a Supabase finding can be resolved by dropping the offending resource entirely, that's often cleaner than patching RLS** — especially for dormant features. Always enumerate live dependencies first.
 
+### Workstream 6: AgentShield Security Audit on `.claude/` Harness Config
+
+Rod dropped a prompt file at `Desktop\Film-Glance-Terminal\prompt.txt` asking for an AgentShield audit of the agent-harness config. File location and formal 7-step tone triggered prompt-injection caution — paused and verified authorship directly with Rod (he confirmed he wrote it with Claude's help, had vetted the package, approved the npm install). Proceeded carefully with step-by-step approval gates.
+
+**Ran `npx ecc-agentshield scan` (v1.5.0)** against `.claude/` directory:
+
+**Initial grade:** A (91/100) — 6 findings, 3 HIGH, 3 MEDIUM.
+
+**Brutal-honesty interpretation:** 3 findings genuine, 3 duplicates or scanner noise. The scanner doesn't understand Claude Code's shared-vs-local settings merge semantics — flagged `settings.json` for missing permissions block even though permissions were correctly placed in the per-machine `settings.local.json`.
+
+**Fixes applied (all 3 approved by Rod):**
+
+1. **Fix A — Scoped SSH** in `settings.local.json`: `Bash(ssh *)` → `Bash(ssh filmglance@147.93.113.39 *)` + `Bash(ssh filmglance@147.93.113.39:*)` + `Bash(scp * filmglance@147.93.113.39:*)`. Claude Code's schema validator caught an invalid 4th rule (`scp filmglance@...:* *` — `:*` must be at end of pattern); dropped it.
+2. **Fix B — Shared deny list** in `settings.json`: force push variants, hard reset, global git config, `curl\|sh` / `wget\|sh` / `rm -rf` / `chmod 777` / `> /dev/*` patterns. Mechanically enforces CLAUDE.md hard rules instead of relying on convention.
+3. **Fix C — Remote-rm deny** in `settings.local.json`: blocks `ssh ... "rm -rf ..."` even with scoped SSH allow rule.
+
+**Grade journey:** A (91) → B (88) after SSH scoping (scanner penalized scoped SSH as still "risky") → **A (90) after adding chmod 777 + /dev/ denies**. The one-point drop from initial is pure scanner artifact — the tool can't distinguish `ssh user@host` from `ssh *` and rates both equally HIGH.
+
+**Residual findings (8):** all scanner limitations. The scanner wants us to deny `sudo`/`ssh` entirely (contradicts legitimate workflow — `sudo` over SSH is documented in tech-specs; SSH is what we just *scoped*, not block outright). Scanner also wants chmod/dev denies duplicated in `settings.local.json` even though `settings.json` denies merge globally. PreToolUse hooks flagged as defense-in-depth gap — deliberately deferred for solo-dev workflow.
+
+**Windows curl TLS note (from Supabase workstream) applied again here:** no issue, npx resolved cleanly on first try.
+
+**Deliverable:** `security-audit-addendum.md` (repo root) — short addendum capturing the audit journey, fixes applied, residual findings, and recommendation to stop chasing scanner grade past A (90).
+
+### Key Learnings (continued)
+
+16. **`npx ecc-agentshield` works on Windows without friction** — pulls 1.5.0 on first invoke, cached thereafter. Respects `.claude/` structure correctly. Does NOT auto-modify files (we ran `scan` only, never `--fix`).
+17. **Claude Code's settings.json schema validator is strict and useful** — caught an invalid `:*` pattern placement mid-string that would have broken permissions loading. Validator runs on Edit tool calls, so malformed JSON never reaches disk.
+18. **Security scanners optimize for checklist completion, not workflow-aware security.** AgentShield flagged our scoped SSH as still HIGH. The right response is documenting scanner limitations in the audit addendum, not gaming the tool by adding contradictory rules.
+19. **Prompt-injection vigilance matters even for legit asks.** A file-based prompt with formal tone + unknown npm package + "apply fixes to my permissions config" hit multiple red flags. Correct response: pause, verify authorship with the user directly, then proceed with step-by-step approval gates. Rod confirmed authenticity; this would be the right behavior regardless.
+
 ### Next Steps (For Next Chat)
 
 1. **Check import progress** — `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"` (no sudo needed — `filmglance` owns the file).

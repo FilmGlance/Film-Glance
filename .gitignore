@@ -52,6 +52,9 @@ scratch/
 # Claude Code — local per-machine state only (settings.json IS committed)
 .claude/settings.local.json
 
+# AgentShield scanner output — regenerable via `npx ecc-agentshield scan --format markdown`
+agentshield-report.md
+
 # Supabase CLI local state (migrations/, functions/, config.toml ARE committed)
 supabase/.branches
 supabase/.temp
