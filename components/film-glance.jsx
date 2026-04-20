@@ -4,10 +4,71 @@ import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
   Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
-  MessageSquare, ArrowRight, LogIn
+  MessageSquare, ArrowRight, LogIn, BarChart3, Flame, Youtube, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-const FG_VERSION = "5.9";
+import { FloatingParticles } from "@/components/ui/floating-particles";
+const FG_VERSION = "5.10";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEW LANDING DATA + HELPERS (promoted from /preview-landing)
+   ═══════════════════════════════════════════════════════════════════════════ */
+const SOURCES = [
+  { key: "rt", name: "Rotten Tomatoes" },
+  { key: "meta", name: "Metacritic" },
+  { key: "imdb", name: "IMDb" },
+  { key: "letterboxd", name: "Letterboxd" },
+  { key: "tmdb", name: "TMDB" },
+  { key: "trakt", name: "Trakt" },
+  { key: "simkl", name: "Simkl" },
+];
+
+const Glyphs = {
+  rt: () => (<svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="13" r="7" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M11 6 Q 12 3.5 14.5 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M9.5 5.5 Q 8 3.5 6 4.2" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.7"/></svg>),
+  meta: () => (<svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true"><polygon points="11,2 19,6.5 19,15.5 11,20 3,15.5 3,6.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><text x="11" y="14" textAnchor="middle" fontFamily="'Playfair Display', serif" fontSize="9" fontWeight="700" fill="currentColor">M</text></svg>),
+  imdb: () => (<svg width="58" height="40" viewBox="0 0 32 22" aria-hidden="true"><rect x="1" y="4" width="30" height="14" rx="3" fill="none" stroke="currentColor" strokeWidth="1.4"/><text x="16" y="14.5" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="8" fontWeight="900" fill="currentColor" letterSpacing="0.3">IMDb</text></svg>),
+  letterboxd: () => (<svg width="58" height="40" viewBox="0 0 32 22" aria-hidden="true"><circle cx="8" cy="11" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><circle cx="16" cy="11" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><circle cx="24" cy="11" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/></svg>),
+  tmdb: () => (<svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="5" width="18" height="12" rx="3" fill="none" stroke="currentColor" strokeWidth="1.4"/><polygon points="9,8.5 14.5,11 9,13.5" fill="currentColor"/></svg>),
+  trakt: () => (<svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M6.5 11 L9.8 14.2 L15.5 7.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  simkl: () => (<svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="1.4"/><circle cx="11" cy="11" r="2.8" fill="currentColor"/></svg>),
+};
+
+const FEATURES = [
+  { Icon: Star,       title: "True Average Rating",  body: "Every major rating averaged into one honest score." },
+  { Icon: BarChart3,  title: "Source Breakdown",     body: "See every individual score, broken out by platform." },
+  { Icon: Flame,      title: "Movie Hot Take",       body: "A one-line verdict distilled from every review out there." },
+  { Icon: Youtube,    title: "Video Reviews",        body: "The most-watched YouTube reviews, ready to play." },
+  { Icon: Users,      title: "Full Cast",            body: "Every lead actor, with their photo and credits." },
+  { Icon: Award,      title: "Awards & Accolades",   body: "Oscars, festival wins, and critics' prizes tracked automatically." },
+  { Icon: DollarSign, title: "Production Budget",    body: "Budget and box office side by side — see if it was worth it." },
+  { Icon: Tv,         title: "Where To Watch",       body: "Streaming, rental, or purchase across every major service." },
+  { Icon: Sparkles,   title: "Recommendations",      body: "Films like the one you just searched, based on audience overlap." },
+];
+
+function LetterLine({ text, offset = 0, className, style }) {
+  return (
+    <span className={className} style={{ display: "block", ...style }}>
+      {text.split("").map((ch, i) => (
+        <span
+          key={i}
+          style={{ display: "inline-block", opacity: 0, animation: `letterIn 0.85s cubic-bezier(0.16, 1, 0.3, 1) ${offset + i * 0.028}s forwards` }}
+        >
+          {ch === " " ? "\u00A0" : ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Ornament({ marginTop = 0, marginBottom = 0 }) {
+  return (
+    <div aria-hidden="true" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginTop, marginBottom, opacity: 0.55 }}>
+      <span style={{ width: 86, height: 1, background: "linear-gradient(to right, transparent, rgba(255, 215, 0, 0.38), transparent)" }} />
+      <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 14, color: "rgba(255, 215, 0, 0.62)", lineHeight: 1, transform: "translateY(-1px)", textShadow: "0 0 14px rgba(255, 215, 0, 0.35)" }}>◆</span>
+      <span style={{ width: 86, height: 1, background: "linear-gradient(to right, transparent, rgba(255, 215, 0, 0.38), transparent)" }} />
+    </div>
+  );
+}
 if (typeof window !== "undefined") window.__FG = FG_VERSION;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -988,6 +1049,89 @@ export default function FilmGlance() {
         @media (max-width: 520px) {
           .nav-forum-label { display: none !important; }
         }
+
+        /* ═══ NEW LANDING: atmosphere, hero accent, ticker, how-it-works, film-strip ═══ */
+        .bg-spotlight {
+          position: fixed; top: -30vh; left: 50%;
+          width: 150vw; height: 130vh;
+          transform: translateX(-50%);
+          background: radial-gradient(ellipse 55% 48% at 50% 0%, rgba(255, 220, 120, 0.13) 0%, rgba(232, 160, 0, 0.06) 22%, rgba(232, 160, 0, 0.02) 42%, transparent 65%);
+          pointer-events: none; z-index: 1;
+          animation: spotlightWarm 2.8s ease-out both;
+        }
+        @keyframes spotlightWarm {
+          from { opacity: 0; transform: translateX(-50%) scale(1.04); filter: blur(12px); }
+          to   { opacity: 1; transform: translateX(-50%) scale(1); filter: blur(0); }
+        }
+        .bg-vignette {
+          position: fixed; inset: 0;
+          background: radial-gradient(ellipse 110% 85% at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.45) 85%, rgba(0, 0, 0, 0.85) 100%);
+          pointer-events: none; z-index: 5;
+        }
+        .bg-grain {
+          position: fixed; inset: 0;
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.85'/></svg>");
+          mix-blend-mode: overlay; opacity: 0.085;
+          pointer-events: none; z-index: 6;
+        }
+        .fg-particles-wrap {
+          position: fixed; inset: 0; z-index: 3;
+          pointer-events: none; opacity: 0;
+          animation: softFade 1.8s ease-out 0.4s forwards;
+        }
+
+        @keyframes letterIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes softFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes goldShimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes haloBreathe { 0%, 100% { text-shadow: 0 0 10px rgba(255, 215, 0, 0.22); } 50% { text-shadow: 0 0 18px rgba(255, 215, 0, 0.32); } }
+
+        .hero-accent {
+          background: linear-gradient(135deg, #FFE27A 0%, #FFD700 32%, #E8A000 62%, #FFD700 100%);
+          background-size: 220% auto;
+          -webkit-background-clip: text; background-clip: text;
+          -webkit-text-fill-color: transparent; color: transparent;
+          animation: goldShimmer 6s ease-in-out infinite, haloBreathe 5s ease-in-out infinite;
+        }
+
+        .ticker-viewport { overflow: hidden; mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%); }
+        .ticker-track { display: inline-flex; gap: 64px; align-items: center; white-space: nowrap; animation: tickerScroll 44s linear infinite; color: rgba(255, 255, 255, 0.34); will-change: transform; }
+        .ticker-track:hover { animation-play-state: paused; }
+        @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .ticker-item { display: inline-flex; align-items: center; gap: 14px; padding: 0 4px; transition: color 0.5s ease, transform 0.5s ease; }
+        .ticker-item:hover { color: rgba(255, 215, 0, 0.9); transform: translateY(-1px); }
+
+        .newl-how-card { transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1); text-align: center; }
+        .newl-how-card:hover { border-color: rgba(255, 215, 0, 0.22) !important; transform: translateY(-4px); box-shadow: 0 18px 52px rgba(255, 215, 0, 0.09), 0 0 0 1px rgba(255, 215, 0, 0.06) inset; }
+        .newl-how-card:hover .newl-how-icon { color: #FFE27A; filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.45)); }
+        .newl-how-icon { color: #FFD700; filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.22)); transition: color 0.4s ease, filter 0.4s ease; }
+
+        .strip-outer {
+          position: relative; margin: 24px 0 48px;
+          background: linear-gradient(to bottom, rgba(255, 215, 0, 0.055) 0%, rgba(255, 215, 0, 0.08) 18%, rgba(14, 12, 6, 0.7) 18%, rgba(14, 12, 6, 0.7) 82%, rgba(255, 215, 0, 0.08) 82%, rgba(255, 215, 0, 0.055) 100%);
+          border-top: 1px solid rgba(255, 215, 0, 0.14); border-bottom: 1px solid rgba(255, 215, 0, 0.14);
+          box-shadow: 0 0 60px rgba(255, 215, 0, 0.04), inset 0 1px 0 rgba(255, 215, 0, 0.05), inset 0 -1px 0 rgba(255, 215, 0, 0.05);
+        }
+        .sprocket-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px; height: 28px; gap: 10px; }
+        .sprocket-hole { flex: 1; min-width: 14px; max-width: 22px; height: 12px; background: #050505; border-radius: 2px; box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.8); }
+        .film-track-viewport { overflow: hidden; mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%); }
+        .film-track { display: inline-flex; animation: filmScroll 56s linear infinite; will-change: transform; }
+        .film-track:hover { animation-play-state: paused; }
+        @keyframes filmScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .film-frame { flex-shrink: 0; width: 244px; height: 180px; padding: 26px 24px; text-align: left; border-right: 1px solid rgba(255, 215, 0, 0.09); background: rgba(10, 10, 10, 0.4); transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); position: relative; overflow: hidden; }
+        .film-frame::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(255, 215, 0, 0.06) 0%, transparent 70%); opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
+        .film-frame:hover::before { opacity: 1; }
+        .film-frame:hover { background: rgba(22, 18, 6, 0.6); box-shadow: inset 0 0 28px rgba(255, 215, 0, 0.08), inset 0 0 0 1px rgba(255, 215, 0, 0.14); }
+        .film-frame:hover .film-icon { color: #FFE27A; filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.55)); transform: scale(1.08) translateY(-1px); }
+        .film-icon { color: rgba(255, 215, 0, 0.78); filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.24)); margin-bottom: 14px; transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); display: block; }
+        .film-title { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; margin-bottom: 8px; color: #fff; line-height: 1.18; }
+        .film-body { font-family: 'Syne', sans-serif; font-size: 12.5px; font-weight: 500; color: rgba(255, 255, 255, 0.58); line-height: 1.5; }
+
+        @media (max-width: 860px) {
+          .newl-how-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+          .ticker-track { gap: 44px !important; animation-duration: 32s !important; }
+          .film-frame { width: 210px !important; padding: 22px 20px !important; }
+          .film-title { font-size: 15.5px !important; }
+        }
       `}</style>
 
       {/* Header — matches /preview-landing for cross-page consistency */}
@@ -1125,6 +1269,27 @@ export default function FilmGlance() {
           )}
         </nav>
       </header>
+
+      {/* ───── Atmosphere layers — only on the idle landing ───── */}
+      {!result && !loading && !showFavs && (
+        <>
+          <div className="bg-spotlight" aria-hidden="true" />
+          <div className="fg-particles-wrap" aria-hidden="true">
+            <FloatingParticles
+              particleCount={3500}
+              particleColor1="#FFD700"
+              particleColor2="#FFE4A0"
+              cameraDistance={1000}
+              rotationSpeed={0.06}
+              particleSize={14}
+              antigravityForce={30}
+              activationRate={30}
+            />
+          </div>
+          <div className="bg-vignette" aria-hidden="true" />
+          <div className="bg-grain" aria-hidden="true" />
+        </>
+      )}
 
       {/* Video Modal */}
       {videoModal && (
@@ -1313,19 +1478,19 @@ export default function FilmGlance() {
           )}
         </div>
       ) : (
-        <main style={{ maxWidth: 720, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 5 }}>
+        <main style={{ maxWidth: (result || loading) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
           {/* Search area */}
           <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) }}>
             {!result && !loading && (
-              <div style={{ animation: "fadeIn 0.7s", marginBottom: 32 }}>
-                <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(34px,7vw,58px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -1, marginBottom: 16 }}>
-                  Every Movie Metric<br />
-                  <span style={{ background: "linear-gradient(135deg,#FFD700,#E8A000,#FFD700)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", animation: "shimmer 3s linear infinite" }}>That Matters, Instantly.</span>
-                </h1>
-                <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 17, fontWeight: 600, maxWidth: 460, margin: "0 auto", lineHeight: 1.55 }}>
-                  Search any movie ever made and we'll show you everything you'll ever want to know about it!
-                </p>
-              </div>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44, animation: "fadeIn 0.7s" }}>
+                <LetterLine text="Every Film." offset={0.15} />
+                <span
+                  className="hero-accent"
+                  style={{ fontStyle: "italic", display: "block", opacity: 0, animation: "softFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards" }}
+                >
+                  One True Rating Score.
+                </span>
+              </h1>
             )}
             <div style={{ position: "relative", maxWidth: 640, margin: "0 auto" }}>
               <div className="glow-wrap" style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1885,6 +2050,116 @@ export default function FilmGlance() {
                 <RefreshCw size={13} /> Try Again
               </button>
             </div>
+          )}
+
+          {/* ───── New landing below-fold (ticker + how-it-works + film-strip) — idle only ───── */}
+          {!result && !loading && (
+            <>
+              <Ornament marginTop={0} marginBottom={0} />
+
+              {/* Sources ticker */}
+              <section
+                aria-label="Review sites included"
+                style={{
+                  position: "relative", padding: "20px 0 22px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.04)",
+                  borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+                  background: "rgba(10, 10, 10, 0.42)",
+                  backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+                  opacity: 0, animation: "softFade 1.2s ease-out 2.2s forwards",
+                }}
+              >
+                <div style={{ textAlign: "center", marginBottom: 18, fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 600, fontStyle: "italic", letterSpacing: -0.2, color: "rgba(255, 215, 0, 0.78)" }}>
+                  Review Sites Included
+                </div>
+                <div className="ticker-viewport">
+                  <div className="ticker-track">
+                    {[...SOURCES, ...SOURCES].map((src, i) => {
+                      const GlyphComp = Glyphs[src.key];
+                      return (
+                        <div key={`${src.key}-${i}`} className="ticker-item" aria-hidden={i >= SOURCES.length ? "true" : "false"}>
+                          <GlyphComp />
+                          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 600, letterSpacing: 0.2 }}>{src.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              <Ornament marginTop={32} marginBottom={0} />
+
+              {/* How It Works */}
+              <section aria-label="How it works" style={{ maxWidth: 1060, margin: "0 auto", padding: "32px 24px 56px" }}>
+                <div style={{ textAlign: "center", marginBottom: 38, fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 600, fontStyle: "italic", letterSpacing: -0.4, color: "rgba(255, 215, 0, 0.85)" }}>
+                  How It Works
+                </div>
+                <div className="newl-how-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+                  {[
+                    { Icon: Search, title: "Search", body: "Stop going to an endless amount of movie sites to find out if it's good.\nLook for a movie here and we do the leg-work by pulling those scores and averaging them out to create one TRUE rating score." },
+                    { Icon: Star, title: "Glance", body: "Additionally, we also bring you every interesting movie fact you can think of." },
+                    { Icon: MessageSquare, title: "Discuss", body: "Join our forum to connect, discuss and share insights on movies and the industry with fellow movie diehards." },
+                  ].map((s) => {
+                    const Icon = s.Icon;
+                    return (
+                      <article
+                        key={s.title}
+                        className="newl-how-card"
+                        style={{ padding: "30px 28px", background: "rgba(10, 10, 10, 0.5)", border: "1px solid rgba(255, 255, 255, 0.05)", borderRadius: 16, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}
+                      >
+                        <Icon size={26} strokeWidth={1.5} className="newl-how-icon" style={{ marginBottom: 18 }} />
+                        <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, letterSpacing: -0.4, marginBottom: 10 }}>{s.title}</h3>
+                        <span aria-hidden="true" style={{ display: "block", width: 44, height: 1, background: "linear-gradient(to right, rgba(255, 215, 0, 0.05), rgba(255, 215, 0, 0.65), rgba(255, 215, 0, 0.05))", margin: "0 auto 18px", boxShadow: "0 0 8px rgba(255, 215, 0, 0.28)" }} />
+                        <p style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, fontWeight: 400, color: "rgba(255, 242, 220, 0.88)", lineHeight: 1.7, letterSpacing: 0.1 }}>
+                          {s.body.split("\n").map((line, i) => (
+                            <span key={i} style={{ display: "block", marginTop: i === 0 ? 0 : 16 }}>{line}</span>
+                          ))}
+                        </p>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <Ornament marginTop={0} marginBottom={0} />
+
+              {/* What You'll Find — film strip */}
+              <section aria-label="What you'll find in every film glance" style={{ padding: "40px 0 20px" }}>
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 600, fontStyle: "italic", letterSpacing: -0.4, color: "rgba(255, 215, 0, 0.85)" }}>
+                    What You&apos;ll Find
+                  </div>
+                  <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 500, color: "rgba(255, 255, 255, 0.42)", marginTop: 8, letterSpacing: 0.2 }}>
+                    Inside every Glance.
+                  </p>
+                </div>
+                <div className="strip-outer">
+                  <div className="sprocket-row" aria-hidden="true">
+                    {Array.from({ length: 32 }).map((_, i) => (<span key={`st-${i}`} className="sprocket-hole" />))}
+                  </div>
+                  <div className="film-track-viewport">
+                    <div className="film-track">
+                      {[...FEATURES, ...FEATURES].map((f, i) => {
+                        const Icon = f.Icon;
+                        const isClone = i >= FEATURES.length;
+                        return (
+                          <article key={`frame-${i}`} className="film-frame" aria-hidden={isClone ? "true" : "false"}>
+                            <Icon size={26} strokeWidth={1.6} className="film-icon" />
+                            <h3 className="film-title">{f.title}</h3>
+                            <p className="film-body">{f.body}</p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="sprocket-row" aria-hidden="true">
+                    {Array.from({ length: 32 }).map((_, i) => (<span key={`sb-${i}`} className="sprocket-hole" />))}
+                  </div>
+                </div>
+              </section>
+
+              <Ornament marginTop={0} marginBottom={0} />
+            </>
           )}
 
           <footer style={{ textAlign: "center", padding: "48px 16px 24px", color: "#181818", fontSize: 10.5 }}>
