@@ -2183,8 +2183,8 @@ export default function FilmGlance() {
         </main>
       )}
 
-      {/* Gold scroll indicator — only on results */}
-      {(result && !result.notFound) && (
+      {/* Gold scroll indicator — on the landing and on result pages (hidden on favourites) */}
+      {!showFavs && ((result && !result.notFound) || (!result && !loading)) && (
         <>
           <div ref={scrollTrackRef} onClick={(e) => {
             const track = scrollTrackRef.current;
