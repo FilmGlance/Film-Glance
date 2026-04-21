@@ -3,6 +3,11 @@
 // Returns up to 5 close movie title matches for misspelled queries.
 // No auth required — free TMDB lookup, no Anthropic cost.
 
+// Opt out of static rendering: reads nextUrl.searchParams on every request.
+// Always dynamic at runtime anyway; this silences the DYNAMIC_SERVER_USAGE
+// notice in the build log without changing behavior.
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";

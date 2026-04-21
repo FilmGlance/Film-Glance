@@ -49,13 +49,12 @@ export function FloatingParticles({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Respect user's motion preference — skip the animation entirely.
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
+    // Note: we deliberately do NOT early-return on prefers-reduced-motion here.
+    // Many Android devices report that media query as "reduce" whenever Battery
+    // Saver, Data Saver, or any system animation-dampening mode is active —
+    // which collapses our core atmospheric effect for a large swath of users
+    // who never explicitly opted out of motion. The particle field is slow and
+    // GPU-composited; the cost is minimal even on modest devices.
 
     const container = containerRef.current;
     const width = container.clientWidth || window.innerWidth;
@@ -106,6 +105,9 @@ export function FloatingParticles({
     }
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // Cap DPR at 2 — crisp particles on high-DPR mobile screens (Pixel/Samsung
+    // report DPR 2.5–3) without paying a 9× raster cost at DPR 3.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
     renderer.setClearColor(0x000000, 0);
     container.appendChild(renderer.domElement);
