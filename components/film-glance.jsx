@@ -1083,6 +1083,42 @@ export default function FilmGlance() {
           mix-blend-mode: overlay; opacity: 0.085;
           pointer-events: none; z-index: 6;
         }
+        /* Mobile CSS mote field — replaces WebGL on <768px. Three variant
+           drift paths so motes don't move as a cohort. */
+        .mobile-motes {
+          position: fixed; inset: 0; z-index: 3;
+          pointer-events: none;
+        }
+        .mobile-mote {
+          position: absolute;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(255, 220, 140, 0.9) 0%, rgba(255, 215, 0, 0.35) 45%, transparent 75%);
+          filter: blur(0.6px);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+        .mm-v0 { animation: moteDriftA var(--d, 18s) ease-in-out infinite both; }
+        .mm-v1 { animation: moteDriftB var(--d, 22s) ease-in-out infinite both; }
+        .mm-v2 { animation: moteDriftC var(--d, 20s) ease-in-out infinite both; }
+        @keyframes moteDriftA {
+          0%, 100% { opacity: 0; transform: translate(0, 0); }
+          15%      { opacity: 0.85; }
+          50%      { opacity: 0.6; transform: translate(34px, -42px); }
+          85%      { opacity: 0.4; }
+        }
+        @keyframes moteDriftB {
+          0%, 100% { opacity: 0; transform: translate(0, 0); }
+          20%      { opacity: 0.65; }
+          50%      { opacity: 0.95; transform: translate(-38px, -24px); }
+          80%      { opacity: 0.35; }
+        }
+        @keyframes moteDriftC {
+          0%, 100% { opacity: 0; transform: translate(0, 0); }
+          25%      { opacity: 0.55; }
+          50%      { opacity: 0.8; transform: translate(22px, 30px); }
+          75%      { opacity: 0.3; }
+        }
+
         .fg-particles-wrap {
           position: fixed; inset: 0; z-index: 3;
           pointer-events: none;
@@ -1286,20 +1322,47 @@ export default function FilmGlance() {
       {!result && !loading && !showFavs && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
-          <div className="fg-particles-wrap" aria-hidden="true">
-            <FloatingParticles
-              particleCount={isMobile ? 500 : 3500}
-              particleColor1="#FFD700"
-              particleColor2="#FFE4A0"
-              cameraDistance={isMobile ? 650 : 1000}
-              cameraFov={isMobile ? 65 : 35}
-              rotationSpeed={isMobile ? 0.04 : 0.06}
-              particleSize={isMobile ? 22 : 14}
-              antigravityForce={isMobile ? 6 : 30}
-              activationRate={isMobile ? 20 : 30}
-              distributed={isMobile}
-            />
-          </div>
+          {isMobile ? (
+            /* Mobile: CSS mote field. The Three.js Mover class has
+               updatePosition() { position.copy(velocity) } which forces
+               particles onto straight vertical trajectories — no way to
+               produce a distributed cloud with that physics. CSS gives
+               per-mote independent drift paths, so it reads as scattered. */
+            <div className="mobile-motes" aria-hidden="true">
+              {Array.from({ length: 24 }).map((_, i) => {
+                const variant = i % 3;
+                const sizes = [3, 4, 5, 6];
+                return (
+                  <span
+                    key={i}
+                    className={`mobile-mote mm-v${variant}`}
+                    style={{
+                      left: `${(i * 37 + 7) % 100}%`,
+                      top: `${(i * 53 + 11) % 100}%`,
+                      width: `${sizes[i % 4]}px`,
+                      height: `${sizes[i % 4]}px`,
+                      animationDelay: `${(i * 0.7) % 18}s`,
+                      animationDuration: `${16 + (i % 5) * 3}s`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="fg-particles-wrap" aria-hidden="true">
+              <FloatingParticles
+                particleCount={3500}
+                particleColor1="#FFD700"
+                particleColor2="#FFE4A0"
+                cameraDistance={1000}
+                cameraFov={35}
+                rotationSpeed={0.06}
+                particleSize={14}
+                antigravityForce={30}
+                activationRate={30}
+              />
+            </div>
+          )}
           <div className="bg-vignette" aria-hidden="true" />
           <div className="bg-grain" aria-hidden="true" />
         </>
