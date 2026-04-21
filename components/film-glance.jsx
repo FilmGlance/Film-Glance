@@ -1288,15 +1288,16 @@ export default function FilmGlance() {
           <div className="bg-spotlight" aria-hidden="true" />
           <div className="fg-particles-wrap" aria-hidden="true">
             <FloatingParticles
-              particleCount={isMobile ? 1500 : 3500}
+              particleCount={isMobile ? 500 : 3500}
               particleColor1="#FFD700"
               particleColor2="#FFE4A0"
               cameraDistance={isMobile ? 650 : 1000}
               cameraFov={isMobile ? 65 : 35}
               rotationSpeed={isMobile ? 0.04 : 0.06}
               particleSize={isMobile ? 22 : 14}
-              antigravityForce={isMobile ? 18 : 30}
+              antigravityForce={isMobile ? 6 : 30}
               activationRate={isMobile ? 20 : 30}
+              distributed={isMobile}
             />
           </div>
           <div className="bg-vignette" aria-hidden="true" />
