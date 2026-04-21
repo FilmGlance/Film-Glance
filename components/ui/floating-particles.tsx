@@ -13,6 +13,10 @@ interface FloatingParticlesProps {
   particleSize?: number;
   antigravityForce?: number;
   activationRate?: number;
+  /** When true, spawn particles at random Y positions throughout the scene
+   *  (cloud distribution) instead of the default top-down rain-and-respawn
+   *  pattern. Recommended for mobile portrait viewports. */
+  distributed?: boolean;
   className?: string;
 }
 
@@ -35,6 +39,7 @@ export function FloatingParticles({
   particleSize = 14,
   antigravityForce = 30,
   activationRate = 30,
+  distributed = false,
   className = "",
 }: FloatingParticlesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -189,18 +194,27 @@ export function FloatingParticles({
       const rad = getRadian(getRandomInt(0, 360));
       const x = Math.cos(rad) * range;
       const z = Math.sin(rad) * range;
-
-      mover.init(new THREE.Vector3(x, 1000, z));
+      // Distributed mode: spawn at random Y throughout the scene so particles
+      // are visible at every height from the first frame, and PRE-ACTIVATE
+      // them with random upward velocity so they drift organically instead of
+      // streaming upward as a cohort. Default mode spawns at y=1000 (top) and
+      // activates sequentially — produces the desktop's rain-then-drift look.
+      const startY = distributed ? getRandomInt(-500, 900) : 1000;
+      mover.init(new THREE.Vector3(x, startY, z));
+      if (distributed) {
+        mover.is_active = true;
+        mover.velocity.y = getRandomInt(-200, 200);
+      }
       mover.mass = getRandomInt(200, 500) / 100;
       movers.push(mover);
 
       if (i % 2 === 0) {
         positions[i * 3] = x;
-        positions[i * 3 + 1] = 1000;
+        positions[i * 3 + 1] = startY;
         positions[i * 3 + 2] = z;
       } else {
         positions2[i * 3] = x;
-        positions2[i * 3 + 1] = 1000;
+        positions2[i * 3 + 1] = startY;
         positions2[i * 3 + 2] = z;
       }
     }
@@ -245,7 +259,15 @@ export function FloatingParticles({
             const rad = getRadian(getRandomInt(0, 360));
             const x = Math.cos(rad) * range;
             const z = Math.sin(rad) * range;
-            mover.init(new THREE.Vector3(x, -300, z));
+            // In distributed mode, respawn anywhere in the lower half of the
+            // scene so we never see a visible "stream" of particles entering
+            // from the bottom; they just appear at varied heights.
+            const respawnY = distributed ? getRandomInt(-500, 200) : -300;
+            mover.init(new THREE.Vector3(x, respawnY, z));
+            if (distributed) {
+              mover.is_active = true;
+              mover.velocity.y = getRandomInt(-150, 150);
+            }
             mover.mass = getRandomInt(200, 500) / 100;
           }
         }
@@ -326,6 +348,7 @@ export function FloatingParticles({
     particleColor2,
     cameraDistance,
     cameraFov,
+    distributed,
     rotationSpeed,
     particleSize,
     antigravityForce,
