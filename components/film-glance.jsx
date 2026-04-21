@@ -668,11 +668,16 @@ export default function FilmGlance() {
   const [scrollPct, setScrollPct] = useState(0);
   const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
-  // Viewport-aware particle tuning — fewer but larger particles on mobile
-  // so the atmosphere stays visible without thrashing battery/GPU.
+  // Mobile detection — narrow viewport OR coarse pointer (touch-only).
+  // Either signal flips mobile mode so WebGL is replaced by CSS motes.
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth < 768);
+    const check = () => {
+      if (typeof window === "undefined") return;
+      const narrow = window.innerWidth < 768;
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      setIsMobile(narrow || coarse);
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -1083,8 +1088,9 @@ export default function FilmGlance() {
           mix-blend-mode: overlay; opacity: 0.085;
           pointer-events: none; z-index: 6;
         }
-        /* Mobile CSS mote field — replaces WebGL on <768px. Three variant
-           drift paths so motes don't move as a cohort. */
+        /* Mobile CSS mote field — replaces WebGL on narrow/touch devices.
+           Each mote has a unique --tx/--ty drift (set inline) so no two
+           motes move in the same direction. Small amplitude, sparse count. */
         .mobile-motes {
           position: fixed; inset: 0; z-index: 3;
           pointer-events: none;
@@ -1092,31 +1098,25 @@ export default function FilmGlance() {
         .mobile-mote {
           position: absolute;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(255, 220, 140, 0.9) 0%, rgba(255, 215, 0, 0.35) 45%, transparent 75%);
-          filter: blur(0.6px);
+          background: radial-gradient(circle, rgba(255, 220, 140, 0.85) 0%, rgba(255, 215, 0, 0.3) 50%, transparent 78%);
+          filter: blur(0.5px);
           opacity: 0;
+          animation-name: moteDrift;
+          animation-iteration-count: infinite;
+          animation-timing-function: ease-in-out;
+          animation-fill-mode: both;
           will-change: transform, opacity;
         }
-        .mm-v0 { animation: moteDriftA var(--d, 18s) ease-in-out infinite both; }
-        .mm-v1 { animation: moteDriftB var(--d, 22s) ease-in-out infinite both; }
-        .mm-v2 { animation: moteDriftC var(--d, 20s) ease-in-out infinite both; }
-        @keyframes moteDriftA {
+        @keyframes moteDrift {
           0%, 100% { opacity: 0; transform: translate(0, 0); }
-          15%      { opacity: 0.85; }
-          50%      { opacity: 0.6; transform: translate(34px, -42px); }
-          85%      { opacity: 0.4; }
-        }
-        @keyframes moteDriftB {
-          0%, 100% { opacity: 0; transform: translate(0, 0); }
-          20%      { opacity: 0.65; }
-          50%      { opacity: 0.95; transform: translate(-38px, -24px); }
+          20%      { opacity: 0.7; }
+          50%      { opacity: 0.55; transform: translate(var(--tx, 0), var(--ty, 0)); }
           80%      { opacity: 0.35; }
         }
-        @keyframes moteDriftC {
-          0%, 100% { opacity: 0; transform: translate(0, 0); }
-          25%      { opacity: 0.55; }
-          50%      { opacity: 0.8; transform: translate(22px, 30px); }
-          75%      { opacity: 0.3; }
+        /* Defense-in-depth: if isMobile detection somehow misses and the
+           WebGL wrapper renders on a narrow viewport, hide it via CSS. */
+        @media (max-width: 767px), (pointer: coarse) {
+          .fg-particles-wrap { display: none !important; }
         }
 
         .fg-particles-wrap {
@@ -1323,33 +1323,38 @@ export default function FilmGlance() {
         <>
           <div className="bg-spotlight" aria-hidden="true" />
           {isMobile ? (
-            /* Mobile: CSS mote field. The Three.js Mover class has
-               updatePosition() { position.copy(velocity) } which forces
-               particles onto straight vertical trajectories — no way to
-               produce a distributed cloud with that physics. CSS gives
-               per-mote independent drift paths, so it reads as scattered. */
-            <div className="mobile-motes" aria-hidden="true">
-              {Array.from({ length: 24 }).map((_, i) => {
-                const variant = i % 3;
-                const sizes = [3, 4, 5, 6];
+            /* Mobile: CSS mote field. Each mote has a UNIQUE random drift
+               direction via --tx/--ty CSS variables — no variant grouping,
+               no cohort bias, truly scattered. Small amplitude (±22px) so
+               motes feel like they're floating in place, not streaming.
+               Explicit React key ensures clean unmount of the desktop WebGL
+               tree when isMobile flips, so Three.js can't persist. */
+            <div key="mobile-motes" className="mobile-motes" aria-hidden="true">
+              {Array.from({ length: 14 }).map((_, i) => {
+                // Deterministic-but-scattered pseudo-random per mote.
+                const sizes = [3, 4, 5, 6, 4];
+                const tx = ((i * 91) % 45) - 22;   // -22..22 px
+                const ty = ((i * 149) % 45) - 22;  // -22..22 px — independent of tx
                 return (
                   <span
                     key={i}
-                    className={`mobile-mote mm-v${variant}`}
+                    className="mobile-mote"
                     style={{
                       left: `${(i * 37 + 7) % 100}%`,
-                      top: `${(i * 53 + 11) % 100}%`,
-                      width: `${sizes[i % 4]}px`,
-                      height: `${sizes[i % 4]}px`,
-                      animationDelay: `${(i * 0.7) % 18}s`,
-                      animationDuration: `${16 + (i % 5) * 3}s`,
+                      top: `${(i * 59 + 11) % 100}%`,
+                      width: `${sizes[i % 5]}px`,
+                      height: `${sizes[i % 5]}px`,
+                      animationDelay: `${(i * 1.3) % 20}s`,
+                      animationDuration: `${18 + (i % 6) * 3}s`,
+                      "--tx": `${tx}px`,
+                      "--ty": `${ty}px`,
                     }}
                   />
                 );
               })}
             </div>
           ) : (
-            <div className="fg-particles-wrap" aria-hidden="true">
+            <div key="desktop-webgl" className="fg-particles-wrap" aria-hidden="true">
               <FloatingParticles
                 particleCount={3500}
                 particleColor1="#FFD700"
