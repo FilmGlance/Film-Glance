@@ -1085,8 +1085,11 @@ export default function FilmGlance() {
         }
         .fg-particles-wrap {
           position: fixed; inset: 0; z-index: 3;
-          pointer-events: none; opacity: 0;
-          animation: softFade 1.8s ease-out 0.4s forwards;
+          pointer-events: none;
+          /* Default opacity: 1 (visible). No fade-in animation — we previously
+             had opacity:0 + softFade, which left the container invisible forever
+             on devices reporting prefers-reduced-motion (Android battery saver,
+             Samsung OneUI, etc.). Always visible is the correct default. */
         }
 
         @keyframes letterIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
