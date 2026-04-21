@@ -668,6 +668,15 @@ export default function FilmGlance() {
   const [scrollPct, setScrollPct] = useState(0);
   const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  // Viewport-aware particle tuning — fewer but larger particles on mobile
+  // so the atmosphere stays visible without thrashing battery/GPU.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
@@ -1276,14 +1285,14 @@ export default function FilmGlance() {
           <div className="bg-spotlight" aria-hidden="true" />
           <div className="fg-particles-wrap" aria-hidden="true">
             <FloatingParticles
-              particleCount={3500}
+              particleCount={isMobile ? 1500 : 3500}
               particleColor1="#FFD700"
               particleColor2="#FFE4A0"
               cameraDistance={1000}
-              rotationSpeed={0.06}
-              particleSize={14}
+              rotationSpeed={isMobile ? 0.04 : 0.06}
+              particleSize={isMobile ? 24 : 14}
               antigravityForce={30}
-              activationRate={30}
+              activationRate={isMobile ? 20 : 30}
             />
           </div>
           <div className="bg-vignette" aria-hidden="true" />
