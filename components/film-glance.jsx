@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { FloatingParticles } from "@/components/ui/floating-particles";
+import { MobileParticles } from "@/components/ui/mobile-particles";
 const FG_VERSION = "5.10";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1088,40 +1089,6 @@ export default function FilmGlance() {
           mix-blend-mode: overlay; opacity: 0.085;
           pointer-events: none; z-index: 6;
         }
-        /* Mobile CSS mote field — replaces WebGL on narrow/touch devices.
-           Each mote has a unique --tx/--ty drift (set inline) so no two
-           motes move in the same direction. Small amplitude, sparse count. */
-        .mobile-motes {
-          position: fixed; inset: 0; z-index: 3;
-          pointer-events: none;
-        }
-        .mobile-mote {
-          position: absolute;
-          border-radius: 50%;
-          /* Solid-gold fallback for any browser that misses the gradient. */
-          background: #FFD700;
-          background: radial-gradient(circle, rgba(255, 220, 140, 0.95) 0%, rgba(255, 215, 0, 0.4) 50%, transparent 78%);
-          filter: blur(0.4px);
-          /* Default visible (opacity 0.3) so motes are NEVER invisible-by-CSS.
-             The twinkle animation drives it up to 0.9 and back. */
-          opacity: 0.35;
-          animation-name: moteTwinkle;
-          animation-iteration-count: infinite;
-          animation-timing-function: ease-in-out;
-          animation-fill-mode: both;
-          will-change: transform, opacity;
-        }
-        @keyframes moteTwinkle {
-          0%   { opacity: 0.35; transform: translate(0, 0); }
-          50%  { opacity: 0.9;  transform: translate(var(--tx, 0), var(--ty, 0)); }
-          100% { opacity: 0.35; transform: translate(0, 0); }
-        }
-        /* Defense-in-depth: if isMobile detection somehow misses and the
-           WebGL wrapper renders on a narrow viewport, hide it via CSS. */
-        @media (max-width: 767px), (pointer: coarse) {
-          .fg-particles-wrap { display: none !important; }
-        }
-
         .fg-particles-wrap {
           position: fixed; inset: 0; z-index: 3;
           pointer-events: none;
@@ -1326,38 +1293,16 @@ export default function FilmGlance() {
         <>
           <div className="bg-spotlight" aria-hidden="true" />
           {isMobile ? (
-            /* Mobile: CSS mote field. Each mote has a UNIQUE random drift
-               direction via --tx/--ty CSS variables — no variant grouping,
-               no cohort bias, truly scattered. Small amplitude (±22px) so
-               motes feel like they're floating in place, not streaming.
-               Explicit React key ensures clean unmount of the desktop WebGL
-               tree when isMobile flips, so Three.js can't persist. */
-            <div key="mobile-motes" className="mobile-motes" aria-hidden="true">
-              {Array.from({ length: 16 }).map((_, i) => {
-                const sizes = [3, 4, 5, 6, 4];
-                const tx = ((i * 71) % 21) - 10;   // -10..10 (subtle drift)
-                const ty = ((i * 103) % 21) - 10;  // -10..10 (independent)
-                return (
-                  <span
-                    key={i}
-                    className="mobile-mote"
-                    style={{
-                      left: `${(i * 37 + 7) % 100}%`,
-                      top: `${(i * 59 + 11) % 100}%`,
-                      width: `${sizes[i % 5]}px`,
-                      height: `${sizes[i % 5]}px`,
-                      // NEGATIVE delay: mote starts already mid-animation,
-                      // so on first paint every mote is visible at a
-                      // different point in its cycle — no synchronized
-                      // blank state while delays tick down.
-                      animationDelay: `-${(i * 0.6) % 8}s`,
-                      animationDuration: `${5 + (i % 4)}s`,
-                      "--tx": `${tx}px`,
-                      "--ty": `${ty}px`,
-                    }}
-                  />
-                );
-              })}
+            /* Mobile: dedicated WebGL spark field with proper physics
+               (position += velocity, not position = velocity), uniformly
+               distributed in a sphere, random per-particle drift, and an
+               orbital camera that creates depth parallax. No upward bias. */
+            <div key="mobile-particles" className="fg-particles-wrap" aria-hidden="true">
+              <MobileParticles
+                particleCount={450}
+                particleColor="#FFD700"
+                particleSize={10}
+              />
             </div>
           ) : (
             <div key="desktop-webgl" className="fg-particles-wrap" aria-hidden="true">
