@@ -1098,20 +1098,23 @@ export default function FilmGlance() {
         .mobile-mote {
           position: absolute;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(255, 220, 140, 0.85) 0%, rgba(255, 215, 0, 0.3) 50%, transparent 78%);
-          filter: blur(0.5px);
-          opacity: 0;
-          animation-name: moteDrift;
+          /* Solid-gold fallback for any browser that misses the gradient. */
+          background: #FFD700;
+          background: radial-gradient(circle, rgba(255, 220, 140, 0.95) 0%, rgba(255, 215, 0, 0.4) 50%, transparent 78%);
+          filter: blur(0.4px);
+          /* Default visible (opacity 0.3) so motes are NEVER invisible-by-CSS.
+             The twinkle animation drives it up to 0.9 and back. */
+          opacity: 0.35;
+          animation-name: moteTwinkle;
           animation-iteration-count: infinite;
           animation-timing-function: ease-in-out;
           animation-fill-mode: both;
           will-change: transform, opacity;
         }
-        @keyframes moteDrift {
-          0%, 100% { opacity: 0; transform: translate(0, 0); }
-          20%      { opacity: 0.7; }
-          50%      { opacity: 0.55; transform: translate(var(--tx, 0), var(--ty, 0)); }
-          80%      { opacity: 0.35; }
+        @keyframes moteTwinkle {
+          0%   { opacity: 0.35; transform: translate(0, 0); }
+          50%  { opacity: 0.9;  transform: translate(var(--tx, 0), var(--ty, 0)); }
+          100% { opacity: 0.35; transform: translate(0, 0); }
         }
         /* Defense-in-depth: if isMobile detection somehow misses and the
            WebGL wrapper renders on a narrow viewport, hide it via CSS. */
@@ -1330,11 +1333,10 @@ export default function FilmGlance() {
                Explicit React key ensures clean unmount of the desktop WebGL
                tree when isMobile flips, so Three.js can't persist. */
             <div key="mobile-motes" className="mobile-motes" aria-hidden="true">
-              {Array.from({ length: 14 }).map((_, i) => {
-                // Deterministic-but-scattered pseudo-random per mote.
+              {Array.from({ length: 16 }).map((_, i) => {
                 const sizes = [3, 4, 5, 6, 4];
-                const tx = ((i * 91) % 45) - 22;   // -22..22 px
-                const ty = ((i * 149) % 45) - 22;  // -22..22 px — independent of tx
+                const tx = ((i * 71) % 21) - 10;   // -10..10 (subtle drift)
+                const ty = ((i * 103) % 21) - 10;  // -10..10 (independent)
                 return (
                   <span
                     key={i}
@@ -1344,8 +1346,12 @@ export default function FilmGlance() {
                       top: `${(i * 59 + 11) % 100}%`,
                       width: `${sizes[i % 5]}px`,
                       height: `${sizes[i % 5]}px`,
-                      animationDelay: `${(i * 1.3) % 20}s`,
-                      animationDuration: `${18 + (i % 6) * 3}s`,
+                      // NEGATIVE delay: mote starts already mid-animation,
+                      // so on first paint every mote is visible at a
+                      // different point in its cycle — no synchronized
+                      // blank state while delays tick down.
+                      animationDelay: `-${(i * 0.6) % 8}s`,
+                      animationDuration: `${5 + (i % 4)}s`,
                       "--tx": `${tx}px`,
                       "--ty": `${ty}px`,
                     }}
