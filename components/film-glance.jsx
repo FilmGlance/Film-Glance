@@ -1291,10 +1291,11 @@ export default function FilmGlance() {
               particleCount={isMobile ? 1500 : 3500}
               particleColor1="#FFD700"
               particleColor2="#FFE4A0"
-              cameraDistance={1000}
+              cameraDistance={isMobile ? 650 : 1000}
+              cameraFov={isMobile ? 65 : 35}
               rotationSpeed={isMobile ? 0.04 : 0.06}
-              particleSize={isMobile ? 24 : 14}
-              antigravityForce={30}
+              particleSize={isMobile ? 22 : 14}
+              antigravityForce={isMobile ? 18 : 30}
               activationRate={isMobile ? 20 : 30}
             />
           </div>

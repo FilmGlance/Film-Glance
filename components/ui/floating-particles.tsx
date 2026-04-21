@@ -8,6 +8,7 @@ interface FloatingParticlesProps {
   particleColor1?: string;
   particleColor2?: string;
   cameraDistance?: number;
+  cameraFov?: number;
   rotationSpeed?: number;
   particleSize?: number;
   antigravityForce?: number;
@@ -29,6 +30,7 @@ export function FloatingParticles({
   particleColor1 = "#FFD700",
   particleColor2 = "#FFE4A0",
   cameraDistance = 1000,
+  cameraFov = 35,
   rotationSpeed = 0.06,
   particleSize = 14,
   antigravityForce = 30,
@@ -115,7 +117,7 @@ export function FloatingParticles({
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x000000, 800, 1600);
 
-    const camera = new THREE.PerspectiveCamera(35, width / height, 1, 10000);
+    const camera = new THREE.PerspectiveCamera(cameraFov, width / height, 1, 10000);
     camera.up.set(0, 1, 0);
     const cameraRad1 = getRadian(90);
     let cameraRad2 = getRadian(0);
@@ -323,6 +325,7 @@ export function FloatingParticles({
     particleColor1,
     particleColor2,
     cameraDistance,
+    cameraFov,
     rotationSpeed,
     particleSize,
     antigravityForce,
