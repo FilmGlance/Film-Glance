@@ -1584,7 +1584,13 @@ export default function FilmGlance() {
                   width: "min(440px, 80vw)",
                   height: "auto",
                   display: "block",
-                  mixBlendMode: "screen",
+                  // Radial mask fades the video's edges to transparent so the
+                  // black background of the mp4 doesn't show as a hard square.
+                  // Unlike mix-blend-mode, masks don't get trapped by parent
+                  // stacking contexts (slideUp animation on the wrapper uses
+                  // transform, which creates one).
+                  WebkitMaskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
+                  maskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
                 }}
               />
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
