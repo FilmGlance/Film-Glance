@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { FloatingParticles } from "@/components/ui/floating-particles";
-import { MobileParticles } from "@/components/ui/mobile-particles";
 const FG_VERSION = "5.10";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -669,20 +668,6 @@ export default function FilmGlance() {
   const [scrollPct, setScrollPct] = useState(0);
   const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
-  // Mobile detection — narrow viewport OR coarse pointer (touch-only).
-  // Either signal flips mobile mode so WebGL is replaced by CSS motes.
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => {
-      if (typeof window === "undefined") return;
-      const narrow = window.innerWidth < 768;
-      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-      setIsMobile(narrow || coarse);
-    };
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
@@ -1292,33 +1277,19 @@ export default function FilmGlance() {
       {!result && !loading && !showFavs && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
-          {isMobile ? (
-            /* Mobile: dedicated WebGL spark field with proper physics
-               (position += velocity, not position = velocity), uniformly
-               distributed in a sphere, random per-particle drift, and an
-               orbital camera that creates depth parallax. No upward bias. */
-            <div key="mobile-particles" className="fg-particles-wrap" aria-hidden="true">
-              <MobileParticles
-                particleCount={450}
-                particleColor="#FFD700"
-                particleSize={14}
-              />
-            </div>
-          ) : (
-            <div key="desktop-webgl" className="fg-particles-wrap" aria-hidden="true">
-              <FloatingParticles
-                particleCount={3500}
-                particleColor1="#FFD700"
-                particleColor2="#FFE4A0"
-                cameraDistance={1000}
-                cameraFov={35}
-                rotationSpeed={0.06}
-                particleSize={14}
-                antigravityForce={30}
-                activationRate={30}
-              />
-            </div>
-          )}
+          <div className="fg-particles-wrap" aria-hidden="true">
+            <FloatingParticles
+              particleCount={3500}
+              particleColor1="#FFD700"
+              particleColor2="#FFE4A0"
+              cameraDistance={1000}
+              cameraFov={35}
+              rotationSpeed={0.06}
+              particleSize={14}
+              antigravityForce={30}
+              activationRate={30}
+            />
+          </div>
           <div className="bg-vignette" aria-hidden="true" />
           <div className="bg-grain" aria-hidden="true" />
         </>
