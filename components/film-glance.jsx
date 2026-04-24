@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { FloatingParticles } from "@/components/ui/floating-particles";
+import { StarfieldFlythrough } from "@/components/ui/starfield-flythrough";
 const FG_VERSION = "5.10";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -668,6 +669,26 @@ export default function FilmGlance() {
   const [scrollPct, setScrollPct] = useState(0);
   const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  // Portrait viewports (or touch-only devices) get the flythrough starfield
+  // because the orbital FloatingParticles' antigravity motion reads as a
+  // dominant "upward stream" on tall narrow viewports. Landscape keeps the
+  // orbital drift that works when the horizontal span is wide.
+  const [isPortrait, setIsPortrait] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      if (typeof window === "undefined") return;
+      const portrait = window.innerHeight >= window.innerWidth;
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      setIsPortrait(portrait || coarse);
+    };
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+    };
+  }, []);
   const remain = FREE_LIMIT - searches;
   // [ARCHIVED — PRICING DORMANT] To re-enable: const atLimit = plan === "free" && remain <= 0;
   const atLimit = false;
@@ -1277,19 +1298,31 @@ export default function FilmGlance() {
       {!result && !loading && !showFavs && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
-          <div className="fg-particles-wrap" aria-hidden="true">
-            <FloatingParticles
-              particleCount={3500}
-              particleColor1="#FFD700"
-              particleColor2="#FFE4A0"
-              cameraDistance={1000}
-              cameraFov={35}
-              rotationSpeed={0.06}
-              particleSize={14}
-              antigravityForce={30}
-              activationRate={30}
-            />
-          </div>
+          {isPortrait ? (
+            <div key="portrait-flythrough" className="fg-particles-wrap" aria-hidden="true">
+              <StarfieldFlythrough
+                particleCount={3500}
+                particleColor1="#FFD700"
+                particleColor2="#FFE4A0"
+                particleSize={14}
+                flythroughSpeed={1.4}
+              />
+            </div>
+          ) : (
+            <div key="landscape-orbital" className="fg-particles-wrap" aria-hidden="true">
+              <FloatingParticles
+                particleCount={3500}
+                particleColor1="#FFD700"
+                particleColor2="#FFE4A0"
+                cameraDistance={1000}
+                cameraFov={35}
+                rotationSpeed={0.06}
+                particleSize={14}
+                antigravityForce={30}
+                activationRate={30}
+              />
+            </div>
+          )}
           <div className="bg-vignette" aria-hidden="true" />
           <div className="bg-grain" aria-hidden="true" />
         </>
