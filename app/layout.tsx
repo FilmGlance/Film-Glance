@@ -33,8 +33,8 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, padding: 0, background: "#050505" }}>
+    <html lang="en" style={{ overflowX: "hidden" }}>
+      <body style={{ margin: 0, padding: 0, background: "#050505", overflowX: "hidden", maxWidth: "100vw" }}>
         {children}
         <Analytics />
         <SpeedInsights />
