@@ -1558,13 +1558,37 @@ export default function FilmGlance() {
             </div>
           </div>
 
-          {/* Loading */}
+          {/* Loading — custom muted looping video + status text. Video caps at
+              280px desktop, 65vw on narrow viewports so it never dominates the
+              screen. aria-hidden keeps it decorative; loadMsg carries the
+              actual status for screen readers. */}
           {loading && (
-            <div style={{ animation: "slideUp 0.4s" }}>
-              <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden" }}>
-                <Skeleton />
-              </div>
-              <div style={{ textAlign: "center", marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <div style={{
+              animation: "slideUp 0.4s",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "32px 20px",
+              gap: 14,
+            }}>
+              <video
+                src="/loading-screen.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                aria-hidden="true"
+                style={{
+                  width: "min(280px, 65vw)",
+                  height: "auto",
+                  borderRadius: 16,
+                  display: "block",
+                  background: "#050505",
+                }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Loader2 size={13} style={{ color: "#FFD700", animation: "spin 1s linear infinite" }} />
                 <span style={{ fontSize: 11.5, color: "#888" }}>{loadMsg}</span>
               </div>
