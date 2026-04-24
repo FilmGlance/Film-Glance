@@ -1,5 +1,100 @@
 # Film Glance — Conversation Summary
 
+## Session: April 19-24, 2026 — v5.10 Release + Mobile Particle Odyssey + Vercel Pro
+
+### Context
+
+Multi-day arc spanning the v5.10 release to production, a Vercel Pro upgrade, and several days of mobile particle debugging. PRs #32–#36 all merged to `main` over this period. Session picks up from the Apr 18 preview-landing handoff; user's computer restart on Apr 23 dropped in-context memory, so the early part of this session was a reconstruction from git log + bible docs.
+
+### Workstream 1: v5.10 Released to Production (PR #32)
+
+Staging → main merge shipping the new landing to `/` along with 15+ commits of pre-release work (Apr 19-20 sprint):
+
+- `/preview-landing` promoted to `/` (commit `f5a3975`) — ready on staging since Apr 18
+- Unified header across `/` and `/preview-landing`
+- Gold scroll indicator extended from main site to landing
+- TDZ crash fix on `/?q=` (search deep-link) + favourites deep-link restoration
+- Real search + auth wiring into preview landing
+- Source-count copy scrub across SEO metadata + unreleased-movie message
+- Mobile particle scaling + reduce-motion fix (the heuristic was hiding particles on Android Battery Saver / Samsung OneUI)
+- `/api/suggest` force-dynamic annotation to silence build warning
+- New `MobileParticles` bespoke WebGL component (450 particles, single gold color, orbital camera tuned for portrait) — **later abandoned** in PR #33
+
+Version bumped from v5.9.1 → **5.10**. FG_VERSION constant updated. Vercel auto-deployed to production on merge.
+
+### Workstream 2: Vercel Pro Upgrade (Apr 23)
+
+Vercel emailed "approaching your limits" warning when team `rs-projects-c0025ef0` hit 100% of free-tier Edge Requests (1M/month cap). Upgraded to Pro. The 1M requests in <1 month was attributed to the new landing + Three.js client-side work + possible bot traffic. Pro has higher included quota + pay-on-demand billing.
+
+Memory saved: `project_vercel_pro_upgrade.md`. Project tier is Pro going forward — don't propose cost-cutting perf work as if still on Free tier.
+
+### Workstream 3: The Mobile Particle Odyssey (Apr 23-24, PRs #33-#36)
+
+Painful four-PR debugging cycle. User reported that mobile particles didn't match desktop's starfield feel. Iterations:
+
+**Iteration 1 (PR #33, merged):** Deleted `MobileParticles`, unified on `FloatingParticles` with same params on both viewports. Fixed the "isolated orbs covering screen" look, but exposed a new issue — orbital mode's antigravity upward motion read as a dominant vertical stream on portrait (horizontal span didn't dilute it like on landscape).
+
+**Iteration 2 (PR #34, merged):** Built new `StarfieldFlythrough` component — a different motion paradigm where the camera moves forward through a static starfield tube. Matched desktop's visual palette (dual gold, additive blending, fog, radial sprite). Version 1 respawned particles at fog far plane, so they were invisible for most of cycle.
+
+**Iteration 3 (PR #35, merged):** Bug fixes. Identified the **zombie points bug** — the shared-indexing pattern between two color geometries (`if i%2===0 write to geoA; else write to geoB`) left half of each geometry's slots uninitialized, rendering 1,750+ "phantom" points at world origin per color. Those fogged out as camera moved away, producing the "particles disappear after 30-60 seconds" symptom. Fixed with per-color tightly-packed buffers, tighter fog range (200-2000), wider FOV (65→75°).
+
+**Iteration 4 (PR #36, merged — FINAL):** User reported particles STILL disappearing (now in ~3 seconds) + horizontal overflow on mobile + "huge blurry orbs" instead of starfield. Rather than debug the flythrough further, **abandoned the bespoke component entirely**. Switched portrait to use the desktop `FloatingParticles` component with `distributed={true}` — a prop that had been built into `FloatingParticles` from day one specifically for portrait viewports (documented on line 18 of the component's JSDoc). Also added `overflowX: hidden` + `maxWidth: 100vw` on `<html>` and `<body>` in `app/layout.tsx` to kill horizontal overflow at the document level. Net change: **+16 / −245 lines**. User confirmed: "that did the trick. looks great!"
+
+### Diagnostics — Import slowdown root cause (Apr 23)
+
+While waiting on user's mobile particle decisions, ran read-only VPS diagnostics to understand why the forum import had slowed (174 boards/day now vs 200+/day earlier). Ruled out: PostgreSQL bloat, memory pressure, disk I/O saturation. **Identified root cause: Hostinger hypervisor CPU steal.** `iostat` measured `%steal` at 53-74% during active samples (healthy <5%). The VPS is on a shared host where the hypervisor is giving CPU cycles to other tenants. A reboot would NOT help (steal is set by host contention, not VPS state). Recommendation: wait it out.
+
+### Key Learnings
+
+1. **Reuse proven code before building bespoke.** `FloatingParticles` had `distributed={true}` mode documented as "Recommended for mobile portrait viewports." I built two bespoke sibling components before discovering this — cost 70k tokens and multiple failed deploys. Memory saved: `feedback_reuse_proven_code.md`. Grep for existing components and read their prop APIs before writing new ones.
+2. **PointsMaterial + `sizeAttenuation=true`**: a size-14 point at distance 50 renders as 300+ pixels on screen. The flythrough's "huge blurry orbs" was this. Desktop avoids the issue by keeping particles at fixed ~1000-unit camera distance.
+3. **Portrait vs landscape particle physics**: the same particle effect can feel atmospheric on 16:9 landscape and feel like a cohort stream on 9:19.5 portrait. The horizontal span on landscape dilutes vertical motion; portrait does not. Fix: randomize spawn distribution (`distributed={true}`).
+4. **Horizontal overflow root causes**: `position: fixed` elements don't cause document overflow even at `width: 150vw`, but ticker `white-space: nowrap`, film-strip `translateX`, and other in-flow wide elements do. Page-level `overflowX: hidden` on html+body is the belt-and-braces fix.
+5. **Hostinger CPU steal is the real throttle**, not NodeBB or PostgreSQL internals. `iostat` `%steal` reveals it. Reboots and KVM upgrades have limited effect.
+
+### VPS / Forum Import Status (Apr 24 end of session)
+
+PID 54968 still running (uptime 7+ days on rotated token). Last snapshot:
+- Boards: 1,844 / 3,308 (55.7%)
+- Topics: 171,854
+- Replies: 1,276,057
+- Errors: 0
+- Currently processing `board_96.json` at thread 1,400/1,439
+
+Pace since Apr 18: ~8,817 topics/day, ~174 boards/day. Projected completion: **May 3, 2026 (±2 days)**.
+
+### Files Created / Modified / Deleted
+
+| File | Status | Purpose |
+|------|--------|---------|
+| `components/film-glance.jsx` | MODIFIED repeatedly | Mobile particle branching logic; FG_VERSION bump to 5.10 |
+| `components/ui/floating-particles.tsx` | UNCHANGED | Desktop particle component (proven — reused on mobile via `distributed={true}`) |
+| `components/ui/mobile-particles.tsx` | NEW then DELETED (PR #33) | Bespoke mobile component — abandoned |
+| `components/ui/starfield-flythrough.tsx` | NEW then DELETED (PR #36) | Flythrough attempt — abandoned |
+| `app/layout.tsx` | MODIFIED (PR #36) | `overflowX: hidden` + `maxWidth: 100vw` on html/body |
+| `app/api/suggest/route.ts` | MODIFIED | `force-dynamic` annotation |
+| `components/preview-landing.jsx` | (stale, but not removed) | Original preview component — promoted to `/` via `f5a3975` |
+
+### Next Steps (For Next Chat)
+
+1. **Forum import ETA May 3, 2026.** Monitor daily: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"`. Don't touch the VPS (import, NodeBB, Postgres) until complete.
+2. **Fix doubled-log cosmetic issue** on next clean import stop — swap `run_import.sh` redirect from `>> import.log 2>&1` to `> /dev/null 2>> import.err.log`.
+3. **Post-import queue (unchanged from prior handoffs):**
+   - Remove GDPR consent checkboxes (disable NodeBB GDPR plugin)
+   - Full mobile responsiveness audit now that portrait particles work
+   - Full Film Glance API health check across all rating sources
+   - Add Discuss links on movie result pages (IMDb ID match → forum thread)
+   - Staging cleanup: delete orphaned `filmboards_crawler.py`, any residual dead files
+   - Mobile app conversion via Capacitor (Phase 2)
+4. **5 Dependabot vulnerabilities on main** (3 high, 3 moderate as of Apr 24 push) — dedicated security-patch session.
+5. **Rotate Supabase PAT before April 17, 2027** (token `film-glance-claude-code` expires then).
+6. **Delete dead `YOUTUBE_API_KEY`** from Vercel env vars — unused since v5.6 (Mar 3).
+7. **Reconstruct missing `003_anonymous_searches.sql` migration** from prod schema to close repo-vs-prod drift.
+8. **Full Stripe teardown** (optional, low priority) — `subscriptions` table, orphaned `plan_id` columns, dead stored functions, `lib/stripe.ts`, `@stripe/*` deps, Stripe env vars.
+9. **Clean up unused `preview-landing.jsx` component?** It was the source for the now-promoted `/` landing; the route `/preview-landing` may still reference it. Check before deleting.
+
+---
+
 ## Session: April 18, 2026 — Preview Landing Build + Source-Count Scrub
 
 ### Context
