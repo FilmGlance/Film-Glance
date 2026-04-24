@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { FloatingParticles } from "@/components/ui/floating-particles";
-import { StarfieldFlythrough } from "@/components/ui/starfield-flythrough";
 const FG_VERSION = "5.10";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1298,31 +1297,20 @@ export default function FilmGlance() {
       {!result && !loading && !showFavs && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
-          {isPortrait ? (
-            <div key="portrait-flythrough" className="fg-particles-wrap" aria-hidden="true">
-              <StarfieldFlythrough
-                particleCount={3500}
-                particleColor1="#FFD700"
-                particleColor2="#FFE4A0"
-                particleSize={14}
-                flythroughSpeed={1.4}
-              />
-            </div>
-          ) : (
-            <div key="landscape-orbital" className="fg-particles-wrap" aria-hidden="true">
-              <FloatingParticles
-                particleCount={3500}
-                particleColor1="#FFD700"
-                particleColor2="#FFE4A0"
-                cameraDistance={1000}
-                cameraFov={35}
-                rotationSpeed={0.06}
-                particleSize={14}
-                antigravityForce={30}
-                activationRate={30}
-              />
-            </div>
-          )}
+          <div className="fg-particles-wrap" aria-hidden="true">
+            <FloatingParticles
+              particleCount={3500}
+              particleColor1="#FFD700"
+              particleColor2="#FFE4A0"
+              cameraDistance={1000}
+              cameraFov={isPortrait ? 55 : 35}
+              rotationSpeed={0.06}
+              particleSize={14}
+              antigravityForce={30}
+              activationRate={30}
+              distributed={isPortrait}
+            />
+          </div>
           <div className="bg-vignette" aria-hidden="true" />
           <div className="bg-grain" aria-hidden="true" />
         </>
