@@ -63,6 +63,37 @@ PID 54968 still running (uptime 7+ days on rotated token). Last snapshot:
 
 Pace since Apr 18: ~8,817 topics/day, ~174 boards/day. Projected completion: **May 3, 2026 (±2 days)**.
 
+### Workstream 4: Custom Loading Animation (INCOMPLETE — priority for next session)
+
+User provided `loading-screen.mp4` (1.2 MB, gold film-reel animation on black background) to replace the skeleton+spinner loading state during movie searches. Requirements: muted, looping, tasteful (not full screen), works on mobile + desktop, both signed-in and signed-out users.
+
+**Iterations attempted (all on staging, NOT merged to main):**
+
+1. **Commit `e00ede0`** — Copied mp4 to `/public/loading-screen.mp4`. Replaced Skeleton component in loading JSX with a muted autoplay-loop video. Width `min(280px, 65vw)`. User reported: black square around logo didn't blend with page background, wanted it bigger.
+
+2. **Commit `623cd08`** — Bumped width to `min(440px, 80vw)`. Added `mixBlendMode: "screen"` hoping black pixels would composite as transparent on the dark page bg. User reported: black square still visible. Root cause: the `slideUp` animation on the wrapper uses `transform`, which creates a new stacking context — `mix-blend-mode` on the video was trapped inside that context and blended against the (transparent) wrapper instead of the page.
+
+3. **Commit `46c4d08`** — Replaced mix-blend-mode with a radial `mask-image` (`radial-gradient(ellipse at center, black 42%, transparent 78%)`). Masks are not subject to stacking context trapping. User confirmed: black frame successfully faded, gold logo looks clean on page.
+
+4. **Commit `3e27b8c`** — User reported animation "does not appear when logged in." Hypothesis: inline block was inside the `showFavs ? favs : main` ternary in the main view branch. Refactored to a fixed-position global overlay at the top level of the JSX tree (end of component return, sibling to everything else). `zIndex: 40` (below sticky header z-50), `pointerEvents: none`. Video renders whenever `loading=true` regardless of view state, auth state, route, or hash.
+
+**Status after commit `3e27b8c`:** User reports it STILL doesn't work. End of session — user signed off.
+
+**Possible root causes to investigate next session (ordered):**
+
+1. **Browser caching** — the page is cached; a hard refresh (Ctrl+Shift+R / Cmd+Shift+R) may be needed to pick up the global overlay change. Easiest to rule out first.
+2. **Video autoplay blocked** — some browsers block autoplay without user interaction. Video has `muted` + `autoPlay` which should be sufficient in modern Chrome/Safari, but older or corporate-managed browsers may require user gesture. Check console for "NotAllowedError" or "play() failed".
+3. **A different code path when signed in** — maybe a cached server response returns in <100ms and `loading` is only true for a frame, so the video technically shows but is too brief to perceive. Possible fixes: minimum loading duration (e.g., `setLoading(false)` after `Math.max(actual_duration, 800ms)`) or use a `requestAnimationFrame` to hold for at least one frame.
+4. **zIndex conflict** — the overlay at z-40 might be behind some element I didn't catalog. A `position: relative` + `z-index` on a parent container could be occluding.
+5. **User testing on a stale build** — if user is on the production URL (merged to main), none of the Apr 24 loading work has reached main yet. User has been testing on staging preview URLs, but worth confirming.
+
+**Current state of code (commit `3e27b8c` on staging, NOT on main):**
+- Video at `/public/loading-screen.mp4`
+- Loading overlay JSX at bottom of `components/film-glance.jsx` (search "Global loading overlay")
+- Width `min(440px, 80vw)`, mask-image for edge fade
+- Sibling to outer wrapper div, `position: fixed`, `zIndex: 40`, `pointerEvents: none`
+- Renders only when `loading=true`
+
 ### Files Created / Modified / Deleted
 
 | File | Status | Purpose |
@@ -77,6 +108,7 @@ Pace since Apr 18: ~8,817 topics/day, ~174 boards/day. Projected completion: **M
 
 ### Next Steps (For Next Chat)
 
+0. **🎯 PRIORITY: Finish the custom loading animation.** Current state is on staging at commit `3e27b8c` but user reports it doesn't appear when signed in. Investigate in this order: (a) hard refresh to rule out browser cache, (b) browser console for autoplay errors, (c) check if there's a different loading code path for signed-in users that bypasses `loading` state (e.g., cached-result return path), (d) verify zIndex 40 isn't being occluded. See "Workstream 4: Custom Loading Animation (INCOMPLETE)" above for full context. **Do not open a PR to main until this works for both signed-in and signed-out users on mobile + desktop.**
 1. **Forum import ETA May 3, 2026.** Monitor daily: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"`. Don't touch the VPS (import, NodeBB, Postgres) until complete.
 2. **Fix doubled-log cosmetic issue** on next clean import stop — swap `run_import.sh` redirect from `>> import.log 2>&1` to `> /dev/null 2>> import.err.log`.
 3. **Post-import queue (unchanged from prior handoffs):**
