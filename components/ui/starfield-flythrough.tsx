@@ -12,31 +12,37 @@ interface Props {
 }
 
 /**
- * StarfieldFlythrough — WebGL "traveling through space" effect tuned for
- * portrait viewports.
+ * StarfieldFlythrough — "traveling through space" effect for portrait viewports.
  *
- * Built as a sibling to FloatingParticles because the motion paradigm is
- * fundamentally different:
+ * Camera moves forward through a static starfield tube. As particles pass
+ * behind the camera they respawn at the far end with fresh random X/Y, so
+ * density is constant and the effect loops forever.
  *
- *   FloatingParticles: camera orbits a suspended gold cloud while particles
- *   rain + antigravitate upward. Atmospheric on wide landscape viewports
- *   because the horizontal span dilutes the vertical cohort motion.
+ * Shares desktop FloatingParticles' visual vocabulary (dual gold, additive
+ * blending, fog depth, radial sprite) but with a different motion paradigm:
+ * the orbital camera of the desktop component produces antigravity-driven
+ * upward drift that reads as a "stream" on tall narrow viewports. This
+ * component's forward-fly camera eliminates the directional bias.
  *
- *   StarfieldFlythrough: camera moves forward through a static starfield.
- *   Particles live in a deep tube (900 wide × 1100 tall × 3300 deep). As
- *   the camera passes them, they respawn at the far end. No vertical bias,
- *   constant density at all times, stars stream past the viewer.
- *
- * Shares the desktop component's visual vocabulary: dual-gold palette,
- * additive blending, identical particle size, same radial-gradient sprite,
- * same fog depth cue.
+ * Implementation notes:
+ *   - Each color has its own tightly-packed position array. An earlier
+ *     revision wasted half of each geometry's slots as "zombie" points at
+ *     the origin, which fogged out over the first ~36 seconds and looked
+ *     like the particles were vanishing.
+ *   - Particles spawn at uniform random depth across [D_NEAR, D_FAR] at
+ *     startup — no visible "pop-in" wave.
+ *   - Respawn triggers when a particle is BEHIND_LIMIT units behind the
+ *     camera, teleporting it to D_FAR ahead. The cycle time is constant
+ *     (~35 sec per particle) and phases are naturally staggered.
+ *   - Fog near=200 / far=2000 is tighter than the desktop component so
+ *     particles are always at least partially visible in the tube.
  */
 export function StarfieldFlythrough({
   particleCount = 3500,
   particleColor1 = "#FFD700",
   particleColor2 = "#FFE4A0",
   particleSize = 14,
-  flythroughSpeed = 1.4,
+  flythroughSpeed = 1.0,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const animIdRef = useRef<number | null>(null);
@@ -54,29 +60,32 @@ export function StarfieldFlythrough({
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x000000, 400, 3000);
+    scene.fog = new THREE.Fog(0x000000, 200, 2000);
 
-    // FOV 65° is wider than desktop's 35° because portrait viewports need
-    // more horizontal spread to feel atmospheric instead of claustrophobic.
-    const camera = new THREE.PerspectiveCamera(65, width / height, 1, 4000);
+    // Wide FOV compensates for portrait aspect. With FOV 35° (desktop's
+    // value), portrait's horizontal visible angle is only ~16° — particles
+    // stream past outside the frame. 75° opens that up to ~33° horizontal.
+    const FOV = 75;
+    const camera = new THREE.PerspectiveCamera(FOV, width / height, 1, 2500);
     camera.position.set(0, 0, 0);
     camera.lookAt(0, 0, -1);
 
-    // Particle spatial bounds — a box centered on the camera's forward axis.
-    // Y is slightly larger than X so portrait frustums see particles at
-    // both top and bottom edges throughout the flythrough.
-    const SPREAD_X = 900;
-    const SPREAD_Y = 1100;
-    const Z_MIN = -3000; // farthest ahead (most negative)
-    const Z_MAX = 300; // just behind the camera
+    // Spawn box roughly matches the frustum at medium depth (d~400). Close
+    // depths fill the frustum fully; far depths see a narrow central column
+    // of particles (which reads as depth perspective). Y taller than X
+    // because portrait aspect.
+    const SPAWN_X_HALF = 300;
+    const SPAWN_Y_HALF = 550;
+    const D_NEAR = 50;
+    const D_FAR = 2000;
+    const BEHIND_LIMIT = 100;
 
     const randomXY = () => [
-      (Math.random() - 0.5) * SPREAD_X * 2,
-      (Math.random() - 0.5) * SPREAD_Y * 2,
+      (Math.random() - 0.5) * 2 * SPAWN_X_HALF,
+      (Math.random() - 0.5) * 2 * SPAWN_Y_HALF,
     ];
 
-    // Same sprite texture the desktop component uses — circular radial
-    // gradient composited with additive blending for the soft gold glow.
+    // Soft radial gradient sprite — identical to desktop for aesthetic parity.
     const canvas = document.createElement("canvas");
     canvas.width = 200;
     canvas.height = 200;
@@ -91,76 +100,80 @@ export function StarfieldFlythrough({
     texture.minFilter = THREE.NearestFilter;
     texture.needsUpdate = true;
 
-    const mat1 = new THREE.PointsMaterial({
-      color: particleColor1,
-      size: particleSize,
-      transparent: true,
-      opacity: 0.8,
-      map: texture,
-      depthTest: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const mat2 = new THREE.PointsMaterial({
-      color: particleColor2,
-      size: particleSize,
-      transparent: true,
-      opacity: 0.8,
-      map: texture,
-      depthTest: false,
-      blending: THREE.AdditiveBlending,
-    });
+    // Each color gets its own tightly-packed buffer. Contrast with the earlier
+    // revision where a single shared indexing scheme left half of each
+    // geometry's slots at (0,0,0) — those rendered at world origin and
+    // disappeared as the camera moved away, creating the "all the particles
+    // went away" impression after ~30-60s.
+    const countA = Math.ceil(particleCount / 2);
+    const countB = particleCount - countA;
 
-    const geo1 = new THREE.BufferGeometry();
-    const geo2 = new THREE.BufferGeometry();
-    const pos1 = new Float32Array(particleCount * 3);
-    const pos2 = new Float32Array(particleCount * 3);
+    const makeMaterial = (color: string) =>
+      new THREE.PointsMaterial({
+        color,
+        size: particleSize,
+        transparent: true,
+        opacity: 0.85,
+        map: texture,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
 
-    for (let i = 0; i < particleCount; i++) {
-      const [x, y] = randomXY();
-      const z = Math.random() * (Z_MAX - Z_MIN) + Z_MIN;
-      if (i % 2 === 0) {
-        pos1[i * 3] = x;
-        pos1[i * 3 + 1] = y;
-        pos1[i * 3 + 2] = z;
-      } else {
-        pos2[i * 3] = x;
-        pos2[i * 3 + 1] = y;
-        pos2[i * 3 + 2] = z;
+    const matA = makeMaterial(particleColor1);
+    const matB = makeMaterial(particleColor2);
+
+    const posA = new Float32Array(countA * 3);
+    const posB = new Float32Array(countB * 3);
+
+    // Initial spawn: uniform depth distribution so we hit steady-state density
+    // on frame 0, no pop-in wave.
+    const initializePositions = (arr: Float32Array, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const [x, y] = randomXY();
+        const d = Math.random() * (D_FAR - D_NEAR) + D_NEAR;
+        arr[i * 3] = x;
+        arr[i * 3 + 1] = y;
+        arr[i * 3 + 2] = -d;
       }
-    }
+    };
+    initializePositions(posA, countA);
+    initializePositions(posB, countB);
 
-    geo1.setAttribute("position", new THREE.BufferAttribute(pos1, 3));
-    geo2.setAttribute("position", new THREE.BufferAttribute(pos2, 3));
+    const geoA = new THREE.BufferGeometry();
+    const geoB = new THREE.BufferGeometry();
+    geoA.setAttribute("position", new THREE.BufferAttribute(posA, 3));
+    geoB.setAttribute("position", new THREE.BufferAttribute(posB, 3));
 
-    const points1 = new THREE.Points(geo1, mat1);
-    const points2 = new THREE.Points(geo2, mat2);
-    scene.add(points1);
-    scene.add(points2);
+    const pointsA = new THREE.Points(geoA, matA);
+    const pointsB = new THREE.Points(geoB, matB);
+    scene.add(pointsA);
+    scene.add(pointsB);
 
     let cameraZ = 0;
+
+    const respawn = (arr: Float32Array, count: number) => {
+      const threshold = cameraZ + BEHIND_LIMIT;
+      const respawnZ = cameraZ - D_FAR;
+      for (let i = 0; i < count; i++) {
+        if (arr[i * 3 + 2] > threshold) {
+          const [x, y] = randomXY();
+          arr[i * 3] = x;
+          arr[i * 3 + 1] = y;
+          arr[i * 3 + 2] = respawnZ;
+        }
+      }
+    };
 
     const animate = () => {
       cameraZ -= flythroughSpeed;
       camera.position.z = cameraZ;
       camera.lookAt(0, 0, cameraZ - 100);
 
-      const a1 = geo1.attributes.position.array as Float32Array;
-      const a2 = geo2.attributes.position.array as Float32Array;
+      respawn(geoA.attributes.position.array as Float32Array, countA);
+      respawn(geoB.attributes.position.array as Float32Array, countB);
 
-      // Respawn particles that pass behind the camera, placed far ahead
-      // at a random X/Y so we never see a visible "seam" entering the view.
-      for (let i = 0; i < particleCount; i++) {
-        const arr = i % 2 === 0 ? a1 : a2;
-        const pz = arr[i * 3 + 2];
-        if (pz > cameraZ + Z_MAX) {
-          const [x, y] = randomXY();
-          arr[i * 3] = x;
-          arr[i * 3 + 1] = y;
-          arr[i * 3 + 2] = cameraZ + Z_MIN;
-        }
-      }
-      geo1.attributes.position.needsUpdate = true;
-      geo2.attributes.position.needsUpdate = true;
+      geoA.attributes.position.needsUpdate = true;
+      geoB.attributes.position.needsUpdate = true;
 
       renderer.render(scene, camera);
       animIdRef.current = requestAnimationFrame(animate);
@@ -182,10 +195,10 @@ export function StarfieldFlythrough({
       if (animIdRef.current != null) cancelAnimationFrame(animIdRef.current);
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       renderer.dispose();
-      geo1.dispose();
-      geo2.dispose();
-      mat1.dispose();
-      mat2.dispose();
+      geoA.dispose();
+      geoB.dispose();
+      matA.dispose();
+      matB.dispose();
       texture.dispose();
     };
   }, [particleCount, particleColor1, particleColor2, particleSize, flythroughSpeed]);
