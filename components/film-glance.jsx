@@ -1581,11 +1581,10 @@ export default function FilmGlance() {
                 preload="auto"
                 aria-hidden="true"
                 style={{
-                  width: "min(280px, 65vw)",
+                  width: "min(440px, 80vw)",
                   height: "auto",
-                  borderRadius: 16,
                   display: "block",
-                  background: "#050505",
+                  mixBlendMode: "screen",
                 }}
               />
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
