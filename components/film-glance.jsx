@@ -1301,7 +1301,7 @@ export default function FilmGlance() {
               <MobileParticles
                 particleCount={450}
                 particleColor="#FFD700"
-                particleSize={10}
+                particleSize={14}
               />
             </div>
           ) : (
