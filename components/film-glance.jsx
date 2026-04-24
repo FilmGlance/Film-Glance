@@ -1558,47 +1558,9 @@ export default function FilmGlance() {
             </div>
           </div>
 
-          {/* Loading — custom muted looping video + status text. Video caps at
-              280px desktop, 65vw on narrow viewports so it never dominates the
-              screen. aria-hidden keeps it decorative; loadMsg carries the
-              actual status for screen readers. */}
-          {loading && (
-            <div style={{
-              animation: "slideUp 0.4s",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "32px 20px",
-              gap: 14,
-            }}>
-              <video
-                src="/loading-screen.mp4"
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                aria-hidden="true"
-                style={{
-                  width: "min(440px, 80vw)",
-                  height: "auto",
-                  display: "block",
-                  // Radial mask fades the video's edges to transparent so the
-                  // black background of the mp4 doesn't show as a hard square.
-                  // Unlike mix-blend-mode, masks don't get trapped by parent
-                  // stacking contexts (slideUp animation on the wrapper uses
-                  // transform, which creates one).
-                  WebkitMaskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
-                  maskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
-                }}
-              />
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Loader2 size={13} style={{ color: "#FFD700", animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 11.5, color: "#888" }}>{loadMsg}</span>
-              </div>
-            </div>
-          )}
+          {/* Loading video now rendered as a global overlay at the bottom of
+              the component tree — so it appears regardless of whether the
+              user is in favs view, signed in/out, or any other state. */}
 
           {/* Result */}
           {/* Coming Soon — Unreleased Movie (v5.7) */}
@@ -2244,6 +2206,50 @@ export default function FilmGlance() {
           </div>
           {scrollPct > 0.8 && (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 50, background: `linear-gradient(to top, rgba(255,215,0,${(scrollPct - 0.8) * 0.15}), transparent)`, pointerEvents: "none", zIndex: 150 }} />)}
         </>
+      )}
+
+      {/* Global loading overlay — renders whenever loading=true, regardless of
+          view (main/favs), auth state, or any other conditional. zIndex 40 keeps
+          it below the sticky header (50) so the search bar stays visible, and
+          pointerEvents: none lets clicks pass through to the page. */}
+      {loading && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingTop: "6vh",
+          zIndex: 40,
+          pointerEvents: "none",
+          gap: 16,
+          animation: "slideUp 0.4s",
+        }}>
+          <video
+            src="/loading-screen.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+            style={{
+              width: "min(440px, 80vw)",
+              height: "auto",
+              display: "block",
+              WebkitMaskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
+              maskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Loader2 size={13} style={{ color: "#FFD700", animation: "spin 1s linear infinite" }} />
+            <span style={{ fontSize: 11.5, color: "#888" }}>{loadMsg}</span>
+          </div>
+        </div>
       )}
     </div>
   );
