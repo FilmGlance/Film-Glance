@@ -2212,9 +2212,8 @@ export default function FilmGlance() {
           view (main/favs), auth state, or any other conditional. zIndex 40 keeps
           it below the sticky header (50) so the search bar stays visible, and
           pointerEvents: none lets clicks pass through to the page.
-          Semi-opaque dark backdrop + blur obscures the page footer/watermark
-          and gives the video's black corners a uniform dark surface to blend
-          into (instead of revealing the spotlight gradient behind). */}
+          Pure black backdrop (no transparency, no blur, no mask) means the
+          video's black corners blend perfectly — zero contrast. */}
       {loading && (
         <div style={{
           position: "fixed",
@@ -2231,9 +2230,7 @@ export default function FilmGlance() {
           pointerEvents: "none",
           gap: 16,
           animation: "slideUp 0.4s",
-          background: "rgba(5, 5, 5, 0.92)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
+          background: "#000000",
         }}>
           <video
             src="/loading-screen.mp4"
@@ -2247,8 +2244,6 @@ export default function FilmGlance() {
               width: "min(440px, 80vw)",
               height: "auto",
               display: "block",
-              WebkitMaskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
-              maskImage: "radial-gradient(ellipse at center, black 42%, transparent 78%)",
             }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

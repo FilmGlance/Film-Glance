@@ -193,7 +193,8 @@ async function buildComingSoonResponse(
 async function runFullPipeline(
   queryForClaude: string,
   queryForRatings: string,
-  yearHint?: number
+  yearHint?: number,
+  releaseInfo?: { tmdbId: number; officialTitle: string; releaseDate: string | null; overview: string; posterPath: string | null }
 ): Promise<any> {
   const start = Date.now();
 
@@ -236,6 +237,40 @@ async function runFullPipeline(
 
   const mv = JSON.parse(match[0]);
   if (mv.error === "not_a_movie" || !mv.title || !mv.sources || mv.sources.length === 0) {
+    // v5.8 TMDB fallback — Claude can't process every title (too new/obscure
+    // for its training, e.g. 2025/2026 indie films). When TMDB knows about
+    // the film and we have any verified ratings, build a complete response
+    // from TMDB data + verified ratings instead of returning "no results".
+    if (releaseInfo) {
+      const details = await fetchComingSoonDetails(releaseInfo.tmdbId).catch(() => null);
+      const safeVerified = verified || { sources: new Map(), allUrls: new Map() };
+      const fallbackSources = applyVerifiedRatings([], safeVerified as any);
+      const posterPath = tmdb?.poster_path || releaseInfo.posterPath;
+      const fallbackMv: any = {
+        title: releaseInfo.officialTitle,
+        year: releaseInfo.releaseDate ? parseInt(releaseInfo.releaseDate.substring(0, 4)) : yearHint,
+        genre: details?.genres || "",
+        director: details?.director || null,
+        runtime: details?.runtime || null,
+        tagline: details?.tagline || null,
+        description: details?.overview || releaseInfo.overview || "",
+        sources: fallbackSources,
+        no_scores: fallbackSources.length === 0,
+        cast: tmdb?.cast?.map((tc: any) => ({
+          name: tc.name,
+          character: tc.character,
+          profile_path: tc.profile_path,
+        })) || [],
+        streaming: (tmdb as any)?.streaming || [],
+        recommendations: (tmdb as any)?.recommendations || [],
+        video_reviews: (tmdb as any)?.video_reviews || [],
+        trailer_key: (tmdb as any)?.trailer_key || null,
+        poster_path: posterPath || null,
+        poster: posterPath ? `https://image.tmdb.org/t/p/w500${posterPath}` : null,
+      };
+      console.log(`[fallback] Claude couldn't process "${queryForClaude}" — built TMDB+verified response for "${fallbackMv.title}" (${fallbackMv.year}) with ${fallbackSources.length} verified sources`);
+      return fallbackMv;
+    }
     return null;
   }
 
@@ -670,7 +705,8 @@ export async function POST(req: NextRequest) {
       const mv = await runFullPipeline(
         pipelineTitle,
         pipelineTitle,
-        pipelineYear
+        pipelineYear,
+        releaseInfo
       );
 
       if (!mv) {
