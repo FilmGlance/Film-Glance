@@ -2224,10 +2224,19 @@ export default function FilmGlance() {
 
       {/* Global loading overlay — renders whenever loading=true, regardless of
           view (main/favs), auth state, or any other conditional. zIndex 60
-          places it ABOVE the sticky header (50) so the entire viewport is a
-          single black field during loading — no header borderBottom or other
-          decorative edges showing through. pointerEvents: none lets clicks
-          pass through to the page. */}
+          places it ABOVE the sticky header (50). pointerEvents: none lets
+          clicks pass through.
+
+          Why no animation on the container: the previous slideUp keyframes
+          went from opacity:0 + translateY(22px) → opacity:1 + translateY(0).
+          During those 400ms the overlay was partially transparent (page
+          content showed through) AND translated down (leaving the top 22px
+          of the viewport uncovered, exposing the header's borderBottom).
+          That transient state is what produced the visible white line.
+
+          Solution: container has solid #000 background from frame 1 (no
+          fade, no translate), so it's a complete black field instantly.
+          The video element itself does the fade-in for visual softness. */}
       {loading && (
         <div style={{
           position: "fixed",
@@ -2241,8 +2250,6 @@ export default function FilmGlance() {
           justifyContent: "center",
           zIndex: 60,
           pointerEvents: "none",
-          gap: 16,
-          animation: "slideUp 0.4s",
           background: "#000000",
         }}>
           <video
@@ -2257,6 +2264,13 @@ export default function FilmGlance() {
               width: "min(440px, 80vw)",
               height: "auto",
               display: "block",
+              border: 0,
+              outline: 0,
+              animation: "fadeIn 0.3s",
+              // Defensive 2px clip from each edge in case the mp4 has a
+              // 1-pixel light row at any frame boundary (which would
+              // otherwise show as a thin line on the solid black backdrop).
+              clipPath: "inset(2px)",
             }}
           />
         </div>
