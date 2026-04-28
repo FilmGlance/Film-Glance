@@ -672,6 +672,22 @@ export async function POST(req: NextRequest) {
     let pipelineYear = userYearHint || resolvedYear;
 
     if (releaseInfo && releaseInfo.officialTitle) {
+      // Year-mismatch guard: when the user explicitly typed a year (e.g.
+      // "michael 2026"), TMDB's strict year filter may have failed and the
+      // searchMovie fallback returned a popular but wrong-year film
+      // (Michael 1996 in that case). The title gate's similarity check would
+      // then accept the wrong film as a "close match" and redirect the
+      // pipeline to it, silently ignoring the user's year intent. Reject
+      // year mismatches > 1 year and let the Did-You-Mean path surface
+      // candidates the user can choose from.
+      if (userYearHint && releaseInfo.releaseDate) {
+        const tmdbYear = parseInt(releaseInfo.releaseDate.substring(0, 4));
+        if (!isNaN(tmdbYear) && Math.abs(tmdbYear - userYearHint) > 1) {
+          console.log(`[title-gate] Year mismatch: query year=${userYearHint} vs TMDB result "${releaseInfo.officialTitle}" year=${tmdbYear} — returning 404 for suggestions`);
+          return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+        }
+      }
+
       const normQ = query.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
       const normT = releaseInfo.officialTitle.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
 
