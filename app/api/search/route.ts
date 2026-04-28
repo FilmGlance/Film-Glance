@@ -407,6 +407,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid search query" }, { status: 400 });
     }
 
+    // Parse trailing year as a search hint while keeping `query` as the cache
+    // key. Lets users disambiguate same-titled films — e.g., "michael 2026"
+    // picks the 2026 MJ biopic instead of the 1996 Nora Ephron comedy that
+    // TMDB's popularity ranking would surface first.
+    let searchTitle = query;
+    let userYearHint: number | undefined;
+    const yearMatch = query.match(/^(.+?)\s+\(?(\d{4})\)?\s*$/);
+    if (yearMatch) {
+      const yr = parseInt(yearMatch[2]);
+      if (yr >= 1900 && yr <= 2100) {
+        searchTitle = yearMatch[1].trim();
+        userYearHint = yr;
+      }
+    }
+
     // 4a. Anonymous daily limit check (15 searches/day per IP)
     if (!user) {
       try {
@@ -541,7 +556,7 @@ export async function POST(req: NextRequest) {
     let resolvedTitle: string = query;
     let resolvedYear: number | undefined;
 
-    const sequelResolution = await resolveSequelTitle(query).catch(() => null);
+    const sequelResolution = await resolveSequelTitle(searchTitle).catch(() => null);
     if (sequelResolution) {
       resolvedTitle = sequelResolution.title;
       resolvedYear = sequelResolution.year;
@@ -597,8 +612,8 @@ export async function POST(req: NextRequest) {
     //       If TMDB knows the movie but it hasn't been released yet,
     //       return a "Coming Soon" response with TMDB data only.
     //       This prevents Claude from hallucinating ratings for unreleased films.
-    const releaseTitle = sequelResolution ? resolvedTitle : query;
-    const releaseInfo = await getMovieReleaseInfo(releaseTitle, resolvedYear).catch(() => null);
+    const releaseTitle = sequelResolution ? resolvedTitle : searchTitle;
+    const releaseInfo = await getMovieReleaseInfo(releaseTitle, userYearHint || resolvedYear).catch(() => null);
 
     if (releaseInfo && !releaseInfo.isReleased) {
       console.log(`[coming-soon] "${releaseTitle}" releases ${releaseInfo.releaseDate} — skipping Claude`);
@@ -653,8 +668,8 @@ export async function POST(req: NextRequest) {
     //      If TMDB found a movie but the official title doesn't closely match the query,
     //      either redirect to the correct title or return 404 for suggestions.
     //      This prevents Claude from hallucinating data for "avatarrr", "forsss gump", etc.
-    let pipelineTitle = sequelResolution ? resolvedTitle : query;
-    let pipelineYear = resolvedYear;
+    let pipelineTitle = sequelResolution ? resolvedTitle : searchTitle;
+    let pipelineYear = userYearHint || resolvedYear;
 
     if (releaseInfo && releaseInfo.officialTitle) {
       const normQ = query.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
