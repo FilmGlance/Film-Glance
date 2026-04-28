@@ -625,7 +625,18 @@ export async function POST(req: NextRequest) {
       const normQ = query.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
       const normT = releaseInfo.officialTitle.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
 
-      if (normQ !== normT) {
+      if (normQ === normT) {
+        // Exact (case-insensitive) match — adopt TMDB's official title casing
+        // and seed the year from the release date so Claude has the
+        // disambiguation needed to pick the right film. Without this, queries
+        // like "fargo" went to Claude with no year hint and returned
+        // not_a_movie because multiple "Fargo" titles exist (1996 film, 2003
+        // film, 2014 TV series, etc).
+        pipelineTitle = releaseInfo.officialTitle;
+        pipelineYear = releaseInfo.releaseDate
+          ? parseInt(releaseInfo.releaseDate.substring(0, 4))
+          : pipelineYear;
+      } else {
         // Check similarity: substring with close length, or high word overlap
         const lenRatio = Math.min(normQ.length, normT.length) / Math.max(normQ.length, normT.length);
         const isCloseSubstring = (normT.includes(normQ) || normQ.includes(normT)) && lenRatio >= 0.75;
