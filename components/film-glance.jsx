@@ -7,7 +7,7 @@ import {
   MessageSquare, ArrowRight, LogIn, BarChart3, Flame, Youtube, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-import { FloatingParticles } from "@/components/ui/floating-particles";
+import { GridBackground } from "@/components/ui/grid-background";
 const FG_VERSION = "5.10";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1312,18 +1312,7 @@ export default function FilmGlance() {
         <>
           <div className="bg-spotlight" aria-hidden="true" />
           <div className="fg-particles-wrap" aria-hidden="true">
-            <FloatingParticles
-              particleCount={3500}
-              particleColor1="#FFD700"
-              particleColor2="#FFE4A0"
-              cameraDistance={1000}
-              cameraFov={isPortrait ? 55 : 35}
-              rotationSpeed={0.06}
-              particleSize={14}
-              antigravityForce={30}
-              activationRate={30}
-              distributed={isPortrait}
-            />
+            <GridBackground />
           </div>
           <div className="bg-vignette" aria-hidden="true" />
           <div className="bg-grain" aria-hidden="true" />

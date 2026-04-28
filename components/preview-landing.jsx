@@ -25,7 +25,7 @@ import {
   User,
   Heart,
 } from "lucide-react";
-import { FloatingParticles } from "@/components/ui/floating-particles";
+import { GridBackground } from "@/components/ui/grid-background";
 import { supabase } from "@/lib/supabase-browser";
 
 /* ─────────────────────────────────────────────────────────────
@@ -672,16 +672,7 @@ export default function PreviewLanding() {
       {/* ─────────────── Atmosphere layers ─────────────── */}
       <div className="bg-spotlight" aria-hidden="true" />
       <div className="fg-particles-wrap" aria-hidden="true">
-        <FloatingParticles
-          particleCount={3500}
-          particleColor1="#FFD700"
-          particleColor2="#FFE4A0"
-          cameraDistance={1000}
-          rotationSpeed={0.06}
-          particleSize={14}
-          antigravityForce={30}
-          activationRate={30}
-        />
+        <GridBackground />
       </div>
       <div className="bg-vignette" aria-hidden="true" />
       <div className="bg-grain" aria-hidden="true" />
