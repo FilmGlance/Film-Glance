@@ -1195,7 +1195,7 @@ export default function FilmGlance() {
 
         @media (max-width: 520px) {
           .dym-card { gap: 16px !important; padding: 16px 16px 16px 14px !important; }
-          .dym-poster-wrap { width: 92px !important; height: 138px !important; }
+          .dym-poster-wrap { width: 100px !important; height: 150px !important; }
           .dym-title { font-size: 17px !important; }
         }
 
@@ -2283,7 +2283,7 @@ export default function FilmGlance() {
                         >
                           {/* Poster — bigger, premium treatment with neutral frame number */}
                           <div className="dym-poster-wrap" style={{
-                            width: 110, height: 165,
+                            width: 130, height: 195,
                             borderRadius: 8,
                             background: "rgba(255, 255, 255, 0.03)",
                             flexShrink: 0,
@@ -2311,11 +2311,11 @@ export default function FilmGlance() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="dym-title" style={{
                               fontFamily: "'Syne', sans-serif",
-                              fontSize: 19, fontWeight: 700,
+                              fontSize: 20, fontWeight: 700,
                               color: "#fff",
                               letterSpacing: -0.3,
                               lineHeight: 1.22,
-                              marginBottom: 9,
+                              marginBottom: 10,
                               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                             }}>
                               {s.title}
@@ -2329,9 +2329,27 @@ export default function FilmGlance() {
                                 background: "rgba(255, 215, 0, 0.06)",
                                 padding: "3px 9px", borderRadius: 4,
                                 border: "1px solid rgba(255, 215, 0, 0.14)",
+                                marginBottom: s.overview ? 12 : 0,
                               }}>
                                 {s.year}
                               </span>
+                            )}
+                            {s.overview && (
+                              <p style={{
+                                margin: 0,
+                                fontFamily: "'Syne', sans-serif",
+                                fontSize: 12.5,
+                                fontWeight: 400,
+                                color: "rgba(255, 255, 255, 0.58)",
+                                lineHeight: 1.5,
+                                letterSpacing: 0.1,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 3,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}>
+                                {s.overview}
+                              </p>
                             )}
                           </div>
 

@@ -19,7 +19,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
 
-type Suggestion = { title: string; year: number | null; poster_path: string | null };
+type Suggestion = { title: string; year: number | null; poster_path: string | null; overview: string | null };
 
 async function tmdbSuggestions(q: string): Promise<Suggestion[]> {
   if (!TMDB_KEY) return [];
@@ -38,6 +38,7 @@ async function tmdbSuggestions(q: string): Promise<Suggestion[]> {
       title: m.title,
       year: m.release_date ? parseInt(m.release_date.substring(0, 4)) : null,
       poster_path: m.poster_path,
+      overview: m.overview || null,
     }));
   } catch {
     return [];
@@ -55,6 +56,7 @@ async function fuzzyCacheSuggestions(q: string): Promise<Suggestion[]> {
       title: r.title,
       year: typeof r.year === "number" ? r.year : null,
       poster_path: r.poster_path,
+      overview: r.overview || null,
     }));
   } catch {
     return [];
