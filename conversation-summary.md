@@ -1,5 +1,78 @@
 # Film Glance — Conversation Summary
 
+## Session: April 28, 2026 (afternoon) — v5.10.5 Landing Redesign Pass 1: Grid Background + Sticky Header Fix
+
+### Context
+
+First of three planned landing-page redesign passes (landing → did-you-mean → movie result). User initiated the design work after living with v5.10.4 for the day. Two PRs of work merged into one staging branch under v5.10.5: the starfield→grid swap, and a sticky-header fix discovered during scroll-testing the new background. Forum import continues in the background — checked at session start (1,609/3,308 boards, ~91 boards/hr empirical pace, ETA revised to ~May 11).
+
+### Workstream 1: Forum Import Status Check
+
+User asked for current state. Empirical recheck:
+- PID 2644 still running on KVM 4
+- 1,609 unique boards complete (log doubled-line cosmetic accounted for via `sort -u`)
+- Pace ~91 boards/hr over the last ~17h window since current PID started — slower than the ~206/day projection from KVM 4 first hour. Could be normal variance or post-burst settling.
+- **Revised ETA: ~May 11, 2026** (~12.5 days at current pace) — slower than the ~May 4-6 estimate from yesterday
+- User asked about increasing speed. Investigated: NodeBB at 27% of one CPU core (single-threaded V8 ceiling), Postgres light, server overall 26% CPU / 70% idle. Bottleneck is `REQUEST_DELAY = 0.05s` serial calls in `import_filmboards.py` (~40s of every ~5min board is `time.sleep`). 2-3× speedup theoretically available via asyncio + concurrent in-flight requests, but requires stopping the import + editing the script + restart, and CLAUDE.md is explicit about VPS read-only-during-import. **User decision: leave it alone — don't risk double imports.**
+
+### Workstream 2: v5.10.5 Pass 1 — Starfield → Static Grid Background
+
+**Trigger:** User said the starfield "isn't working as intended and is too bombastic." Asked to install `https://21st.dev/r/ctate/grid-background` via shadcn CLI and theme it for Film Glance dark/gold.
+
+**Discovery:** Project has no Tailwind, no shadcn config, no `components.json` — the lone file in `components/ui/` is the custom Three.js `floating-particles.tsx` which explicitly notes "this codebase is inline-styled, no Tailwind" in its header comment. Running `npx shadcn@latest add ...` would have first forced `shadcn init` which requires standing up Tailwind project-wide (postcss, content array, design tokens in globals.css, the `cn()` helper, ~6 new dev deps). The grid-background component itself is trivial (25 lines fetched from 21st.dev — two divs with inline-style background-image gradients, no JS logic, no registry dependencies). Net call: port the source directly into `components/ui/grid-background.tsx` matching the existing inline-style convention. User approved the deviation.
+
+**Theme decisions** (all approved before commit):
+- Field: `#050505` (matches the existing root background) with a soft gold radial centered at `rgba(255, 215, 0, 0.07)`, fading to transparent by 65%
+- Grid lines: gold `rgba(255, 215, 0, 0.035)` at 32px spacing — quiet geometric texture, intentionally not flashy
+- Existing `.bg-spotlight` (gold ambient overhead lighting), `.bg-vignette`, `.bg-grain` overlays preserved on top
+
+**Surface area** (commit `7cde279`):
+- `components/ui/grid-background.tsx` (NEW, 30 lines)
+- `components/film-glance.jsx` lines 10, 1314-1326 — swap `<FloatingParticles>` block for `<GridBackground />`
+- `components/preview-landing.jsx` lines 28, 674-685 — same swap
+
+No per-device or per-account-type branching needed — there's no such gating today. The pre-existing `isPortrait` state was only used to tweak FloatingParticles' camera params; with a static grid there's nothing to branch on. Left the `isPortrait` state in place (used elsewhere or harmless).
+
+**Build pre-flight** failed locally with the well-known Windows path-casing collision (webpack saw both `\Film-Glance-Terminal\` capital-F and `\film-glance-terminal\` lowercase-f as separate modules → React loaded twice → "useContext is null" during prerender). Pre-existing, not caused by this change. Vercel/Linux build (deployment `dpl_EVUXyRkDNBf6AMg8zZ3uvtFmwKuz`) succeeded on first try.
+
+### Workstream 3: v5.10.5 Pass 1 Addendum — Sticky-Header Fix
+
+**Trigger:** After pushing the grid-background swap, user scroll-tested staging and reported the header doesn't stay locked at top.
+
+**Root cause:** Header on both `/` and `/preview-landing` already has `position: sticky; top: 0; zIndex: 50` set correctly. The bug was in `app/layout.tsx` lines 36-37: both `<html>` and `<body>` had `overflow-x: hidden`. When overflow on an ancestor is anything other than `visible`, that ancestor becomes the scroll container, and `position: sticky` on a descendant gets confined to that container's bounds rather than the viewport. The body becomes the scroll element, sticky tries to stick to top of body's scrollable area, which scrolls with content, never appearing to stick.
+
+**Fix** (commit `9cc13da`): swap `overflow-x: hidden` → `overflow-x: clip` on both `<html>` and `<body>`. `overflow: clip` is the modern equivalent specifically designed for this case — it clips horizontal overflow (preserving the original anti-horizontal-scroll intent) but does NOT establish a containing block, so descendant `position: sticky` works against the viewport as intended. Browser support: Chrome 90+, Firefox 81+, Edge 90+, Safari 16+ — pre-Safari-16 (<5% of 2026 traffic) falls back to `visible`, which would only manifest as a horizontal scrollbar IF some child overflowed horizontally. None of the current fixed-position atmosphere layers or content sections do.
+
+User confirmed the staging preview shows the header now stays locked.
+
+### Files Modified / Created
+
+| File | Commit | Purpose |
+|------|--------|---------|
+| `components/ui/grid-background.tsx` | `7cde279` (NEW) | Themed grid backdrop, ~30 lines, inline-styled |
+| `components/film-glance.jsx` | `7cde279` | Swap FloatingParticles → GridBackground on `/` |
+| `components/preview-landing.jsx` | `7cde279` | Swap FloatingParticles → GridBackground on `/preview-landing` |
+| `app/layout.tsx` | `9cc13da` | `overflow-x: hidden` → `clip` on html + body to unbreak sticky |
+| `tech-specs.md` | (this docs commit) | §0 version header, §9 v5.10.5 row, §10 four new rows |
+| `conversation-summary.md` | (this docs commit) | This entry |
+
+### Key Learnings
+
+1. **`overflow: clip` is the modern fix for sticky-broken-by-ancestor-overflow.** `overflow: hidden` creates a scroll container; `overflow: clip` clips without one. This pattern is going to come up again — note for future layout debugging.
+2. **Verify the registry component before assuming the install path is right.** WebFetch on the 21st.dev URL revealed the component was 25 lines of trivial CSS — adding shadcn + Tailwind to consume that would have been all cost, no benefit. Always inspect what you're installing.
+3. **Don't trust the local Windows build for verdicts on Vercel deploys.** This project has a long-standing local-only path-casing collision (`Film-Glance-Terminal` vs `film-glance-terminal`) that breaks `next build` with a "useContext is null" prerender error. Vercel builds on Linux with a single canonical path and is unaffected. Use `npx tsc --noEmit` for local typecheck and let Vercel's build be authoritative.
+
+### Next Steps (For Next Chat / Same Session If Continuing)
+
+1. **Merge v5.10.5 PR (staging → main)** once user signs off on landing visuals.
+2. **Pass 2 — Did-You-Mean screen redesign** (next on user's queue).
+3. **Pass 3 — Movie result page redesign** (third on queue).
+4. **Forum import** — wait for completion ~May 11. No VPS writes until then.
+5. **Post-landing-redesign cleanup**: delete `components/ui/floating-particles.tsx` and drop `three` from `package.json` (orphaned after v5.10.5 — kept temporarily for rollback safety until v5.10.5 lands in production).
+6. **Other queued work unchanged** — see `tech-specs.md` §10 NEXT STEPS row.
+
+---
+
 ## Session: April 27-28, 2026 — VPS Tier Upgrade + v5.10.1→v5.10.4 Search/Loading Sweep
 
 ### Context
