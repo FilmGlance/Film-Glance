@@ -1138,9 +1138,9 @@ export default function FilmGlance() {
         }
 
         @media (max-width: 520px) {
-          .dym-card { gap: 13px !important; padding: 12px 14px 12px 12px !important; }
-          .dym-poster-wrap { width: 56px !important; height: 84px !important; }
-          .dym-title { font-size: 16px !important; }
+          .dym-card { gap: 16px !important; padding: 16px 16px 16px 14px !important; }
+          .dym-poster-wrap { width: 92px !important; height: 138px !important; }
+          .dym-title { font-size: 17px !important; }
         }
 
         /* Respect reduced-motion preference — disable stagger, rail sweep,
@@ -2135,67 +2135,54 @@ export default function FilmGlance() {
               <div style={{ padding: "32px 0 36px", animation: "fadeIn 0.5s ease-out" }}>
                 <div className="dym-rail dym-rail-top" aria-hidden="true" />
 
-                {/* Header — framed Film glyph + italic gold headline + mono diagnostic */}
-                <div style={{ textAlign: "center", padding: "32px 18px 22px" }}>
-                  <div
-                    aria-hidden="true"
-                    style={{
-                      width: 46, height: 46,
-                      margin: "0 auto 18px",
-                      borderRadius: 12,
-                      background: "linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 165, 0, 0.04))",
-                      border: "1px solid rgba(255, 215, 0, 0.20)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      boxShadow: "0 0 28px rgba(255, 215, 0, 0.12), inset 0 1px 0 rgba(255, 215, 0, 0.18)",
-                      animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both",
-                    }}
-                  >
-                    <Film size={20} style={{ color: "#FFD700", filter: "drop-shadow(0 0 10px rgba(255, 215, 0, 0.45))" }} />
-                  </div>
+                {/* Header — searched diagnostic on top, then italic gold headline.
+                    No icon glyph (per design feedback). */}
+                <div style={{ textAlign: "center", padding: "36px 18px 24px" }}>
+                  {showSearchedFootnote && (
+                    <p
+                      style={{
+                        margin: 0,
+                        padding: "0 16px",
+                        color: "rgba(255, 255, 255, 0.50)",
+                        fontSize: 11,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        letterSpacing: 1.4,
+                        textTransform: "uppercase",
+                        wordBreak: "break-word",
+                        animation: "softFade 0.5s ease-out 0.1s both",
+                      }}
+                    >
+                      <span style={{ color: "rgba(255, 215, 0, 0.62)" }}>searched&nbsp;&middot;&nbsp;</span>
+                      <span style={{ color: "rgba(255, 255, 255, 0.82)", textTransform: "none", letterSpacing: 0.2, fontSize: 12 }}>&ldquo;{result.query}&rdquo;</span>
+                    </p>
+                  )}
 
                   <h2
                     className="dym-headline"
                     style={{
+                      marginTop: showSearchedFootnote ? 14 : 0,
                       fontFamily: "'Playfair Display', serif",
                       fontStyle: "italic",
-                      fontSize: "clamp(26px, 5.5vw, 36px)",
+                      fontSize: "clamp(30px, 6vw, 44px)",
                       fontWeight: 600,
                       letterSpacing: -0.8,
-                      lineHeight: 1.1,
-                      margin: 0,
-                      animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both",
+                      lineHeight: 1.05,
+                      margin: showSearchedFootnote ? "14px 0 0" : 0,
+                      animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both",
                     }}
                   >
                     {headline}
                   </h2>
 
-                  {showSearchedFootnote && (
-                    <p
-                      style={{
-                        marginTop: 16,
-                        padding: "0 16px",
-                        color: "rgba(255, 255, 255, 0.55)",
-                        fontSize: 11.5,
-                        fontFamily: "'JetBrains Mono', monospace",
-                        letterSpacing: 0.4,
-                        wordBreak: "break-word",
-                        animation: "softFade 0.55s ease-out 0.32s both",
-                      }}
-                    >
-                      <span style={{ color: "rgba(255, 215, 0, 0.62)" }}>// searched:&nbsp;</span>
-                      <span style={{ color: "rgba(255, 255, 255, 0.78)" }}>&ldquo;{result.query}&rdquo;</span>
-                    </p>
-                  )}
-
                   {errMsg && (
                     <p style={{
-                      marginTop: showSearchedFootnote ? 10 : 18,
+                      marginTop: 14,
                       padding: "0 16px",
                       color: "rgba(255, 255, 255, 0.46)",
                       fontSize: 12.5,
                       fontStyle: "italic",
                       lineHeight: 1.45,
-                      animation: "softFade 0.55s ease-out 0.4s both",
+                      animation: "softFade 0.55s ease-out 0.32s both",
                     }}>
                       {errMsg}
                     </p>
@@ -2217,8 +2204,8 @@ export default function FilmGlance() {
                           aria-label={ariaLabel}
                           className="dym-card"
                           style={{
-                            display: "flex", alignItems: "center", gap: 16,
-                            padding: "14px 18px 14px 14px",
+                            display: "flex", alignItems: "center", gap: 22,
+                            padding: "20px 22px 20px 18px",
                             background: "rgba(12, 10, 6, 0.55)",
                             border: "1px solid rgba(255, 215, 0, 0.06)",
                             borderLeft: "3px solid rgba(255, 215, 0, 0.42)",
@@ -2233,51 +2220,52 @@ export default function FilmGlance() {
                             transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, border-left-width 0.4s ease, background 0.4s ease, filter 0.2s ease",
                           }}
                         >
-                          {/* Poster — contact-sheet treatment with frame number */}
+                          {/* Poster — bigger, premium treatment with neutral frame number */}
                           <div className="dym-poster-wrap" style={{
-                            width: 64, height: 96,
-                            borderRadius: 6,
-                            background: "rgba(255, 255, 255, 0.04)",
+                            width: 110, height: 165,
+                            borderRadius: 8,
+                            background: "rgba(255, 255, 255, 0.03)",
                             flexShrink: 0,
                             overflow: "hidden",
                             position: "relative",
-                            boxShadow: "0 6px 18px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04)",
+                            boxShadow: "0 10px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05)",
                           }}>
                             {s.poster_path ? (
                               <img
                                 className="dym-poster"
-                                src={IMG + "w154" + s.poster_path}
+                                src={IMG + "w342" + s.poster_path}
                                 alt=""
                                 loading="lazy"
                                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                               />
                             ) : (
                               <div className="dym-poster" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <Film size={20} style={{ color: "rgba(255, 215, 0, 0.4)" }} aria-hidden="true" />
+                                <Film size={28} style={{ color: "rgba(255, 255, 255, 0.18)" }} aria-hidden="true" />
                               </div>
                             )}
 
                             <span aria-hidden="true" style={{
-                              position: "absolute", top: 4, right: 4,
-                              fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-                              color: "rgba(255, 215, 0, 0.92)",
+                              position: "absolute", top: 6, right: 6,
+                              fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6,
+                              color: "rgba(255, 255, 255, 0.92)",
                               fontFamily: "'JetBrains Mono', monospace",
-                              background: "rgba(0, 0, 0, 0.7)",
-                              padding: "2px 5px", borderRadius: 3,
+                              background: "rgba(0, 0, 0, 0.72)",
+                              padding: "3px 6px", borderRadius: 3,
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
                             }}>
                               {num}
                             </span>
                           </div>
 
-                          {/* Title block */}
+                          {/* Title block — Syne (site body font) for cohesion */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="dym-title" style={{
-                              fontFamily: "'Playfair Display', serif",
-                              fontSize: 17, fontWeight: 700,
+                              fontFamily: "'Syne', sans-serif",
+                              fontSize: 19, fontWeight: 700,
                               color: "#fff",
-                              letterSpacing: -0.2,
-                              lineHeight: 1.2,
-                              marginBottom: 7,
+                              letterSpacing: -0.3,
+                              lineHeight: 1.22,
+                              marginBottom: 9,
                               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                             }}>
                               {s.title}
@@ -2285,12 +2273,12 @@ export default function FilmGlance() {
                             {s.year && (
                               <span style={{
                                 display: "inline-block",
-                                fontSize: 10, fontWeight: 700, letterSpacing: 0.9,
-                                color: "rgba(255, 215, 0, 0.78)",
+                                fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
+                                color: "rgba(255, 215, 0, 0.82)",
                                 fontFamily: "'JetBrains Mono', monospace",
-                                background: "rgba(255, 215, 0, 0.07)",
-                                padding: "2px 7px", borderRadius: 4,
-                                border: "1px solid rgba(255, 215, 0, 0.13)",
+                                background: "rgba(255, 215, 0, 0.06)",
+                                padding: "3px 9px", borderRadius: 4,
+                                border: "1px solid rgba(255, 215, 0, 0.14)",
                               }}>
                                 {s.year}
                               </span>
