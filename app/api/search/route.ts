@@ -194,7 +194,7 @@ async function runFullPipeline(
   queryForClaude: string,
   queryForRatings: string,
   yearHint?: number,
-  releaseInfo?: { tmdbId: number; officialTitle: string; releaseDate: string | null; overview: string; posterPath: string | null }
+  releaseInfo?: { tmdbId: number; officialTitle: string; releaseDate: string | null; overview: string; posterPath: string | null } | null
 ): Promise<any> {
   const start = Date.now();
 
