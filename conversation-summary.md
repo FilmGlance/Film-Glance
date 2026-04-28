@@ -1,5 +1,168 @@
 # Film Glance — Conversation Summary
 
+## Session: April 27-28, 2026 — VPS Tier Upgrade + v5.10.1→v5.10.4 Search/Loading Sweep
+
+### Context
+
+Multi-day arc resolving forum-import slowdown (Hostinger CPU throttle re-trigger), then a focused Apr 28 session that fixed the loading-screen white line and the search disambiguation issues. Five PRs merged to `main`: **#37 v5.10.1**, **#38 v5.10.2**, **#39 v5.10.3**, **#40 v5.10.4** (note: PR numbering reflects merged-then-resubmitted iterations). Forum import accelerated from ~38 boards/day (throttled) to ~206 boards/day after KVM 4 upgrade.
+
+### Workstream 1: Hostinger KVM 2 → KVM 4 + PostgreSQL Tuning (Apr 27)
+
+Forum import had slowed to 26-38 boards/day (vs 174 boards/day Apr 18-23). Initial diagnosis was Hostinger hypervisor CPU steal (~47% measured via `iostat -xz`), which would have suggested no client-side fix. **Real cause discovered when user shared hPanel screenshot:** Hostinger's per-VPS CPU limitation had been activated (same throttle from Apr 11-16). The 47% "steal" reading was Hostinger's tier-level throttle enforcing the cap, not other-tenant contention.
+
+**Resolution sequence:**
+1. Removed limitations via hPanel "Remove limitations" (1×/week allowance per Hostinger).
+2. Upgraded KVM 2 → KVM 4 ($15.73 net, $34.49/mo gross with Hostinger balance applied). KVM 4 = 4 vCPU, 16 GB RAM, 200 GB NVMe (vs 2/8/96 on KVM 2).
+3. Hostinger forced auto-reboot during resize. PostgreSQL came back via systemd; NodeBB and import process did NOT auto-restart.
+4. Bootstrap NOPASSWD for `filmglance` via Hostinger root browser terminal (one-line drop-in to `/etc/sudoers.d/filmglance-temp`), revoked after maintenance window.
+5. Backed up `/etc/postgresql/16/main/postgresql.conf` to `.bak-20260427-213951`.
+6. **Postgres tuning block appended** (Tier 2):
+   - `shared_buffers = 4GB` (default 128 MB)
+   - `effective_cache_size = 12GB` (default 4 GB)
+   - `work_mem = 32MB`, `maintenance_work_mem = 512MB`
+   - `wal_buffers = 32MB`, `max_wal_size = 4GB`, `checkpoint_timeout = 15min`
+   - `random_page_cost = 1.1` (NVMe), `effective_io_concurrency = 200`
+   - `max_worker_processes = 4`, `max_parallel_workers = 4`, `max_parallel_workers_per_gather = 2`
+7. **Tier 1 bundled with Tier 2:** `REQUEST_DELAY` in `import_filmboards.py` 0.15s → 0.05s (backup at `.bak-20260427-214144`). KVM 4's expanded credit budget makes the conservative 0.15s no longer needed.
+8. Restarted PostgreSQL cleanly; verified config via `SHOW shared_buffers` etc.
+9. Started NodeBB manually (`cd /root/nodebb && sudo ./nodebb start`); verified token auth via `/api/self` returning `uid: 1, isAdmin: true`.
+10. Relaunched import via `/root/filmboards-crawl/run_import.sh` (PID 2644).
+
+**Performance results (verified post-restart):**
+- CPU steal: 47% → 0–5% in fresh `iostat` samples
+- Per-thread time consistent at ~5.2s (vs 30s+ timeouts under throttle)
+- Pace: **~206 boards/day** projected
+- Errors: stable at 40 (pre-existing throttle-era 30s timeouts; no new ones)
+
+### Workstream 2: PR #37 — v5.10.1 Search + Loading Sweep (8 commits)
+
+Bundled fixes from prior staging review:
+
+**Search fixes (`app/api/search/route.ts`):**
+- **Trailing-year parser:** query `michael 2026` extracts `userYearHint=2026` and `searchTitle=michael`. Original `query` kept as cache key.
+- **Title-gate exact-match year hint:** when normalized query == TMDB `officialTitle`, redirect uses TMDB title + year so Claude isn't sent an ambiguous bare title.
+- **TMDB+verified fallback in `runFullPipeline`:** when Claude returns `not_a_movie`/empty sources AND `releaseInfo` exists, build complete response from `fetchComingSoonDetails` + TMDB enrichment + `applyVerifiedRatings([], verified)`. Sets `no_scores: true` if verified data also empty.
+- **Year-mismatch guard at title gate:** reject TMDB results >1 year off from `userYearHint`, return 404 → Did-You-Mean suggestions.
+
+**Loading screen (`components/film-glance.jsx`, `public/loading-screen.mp4`):**
+- Added user-supplied 1.2 MB `loading-screen.mp4` (gold film-reel)
+- Iterations: mix-blend-mode (failed due to stacking-context trap from `slideUp` animation) → `mask-image` radial → global fixed overlay (z-40, then z-60) → solid `#000` bg → removed scanning text + search-area borderBottom during loading
+
+### Workstream 3: PR #38 — v5.10.2 Rate-Limit Masquerade Fix
+
+After PR #37 deployed, user reported `michael 2026` still returning "no results" on production. **Vercel runtime logs revealed every recent `/api/search` returned 429 (Too Many Requests), not 404.** Two compounding issues:
+
+1. **`SEARCH_LIMIT` was 10/min** — burst-testing exhausted it
+2. **Frontend masked 429 as "no results"** — `fetchMovieAPI`'s 429 handler only recognized `DAILY_LIMIT_REACHED`. Per-minute throttle 429 fell through to `return null`, which `doSearch` rendered as `setResult({notFound: true})` with message "Could not find this movie."
+
+**Fixes:**
+- `SEARCH_LIMIT` 10/min → 30/min in `lib/rate-limit.ts`
+- Frontend: 429 without `DAILY_LIMIT_REACHED` returns `{rateLimited: true, retryAfter}` parsed from `Retry-After` header. `doSearch` surfaces "Searching too fast — try again in N seconds."
+
+### Workstream 4: PR #39 — v5.10.3 Pass Year to Claude (the real disambiguation fix)
+
+User pushed back: `michael 2026` and `super mario galaxy movie 2026` STILL returned wrong films even after PR #38. Tested TMDB API directly with production key:
+- `michael` + `primary_release_year=2026` → **Michael (2026-04-22, MJ biopic)**, popularity 271, top result
+- `super mario galaxy movie` + `primary_release_year=2026` → **The Super Mario Galaxy Movie (2026-04-01)**, only result
+
+So TMDB was NOT the bug. Found the actual root cause: **`claudeUserPrompt(title)` takes only title, never year.** Even though `runFullPipeline` receives `yearHint`, it's used only for TMDB enrichment and verified ratings — **never passed to Claude**. Claude received `Movie: "Michael"` with no year, returned the most famous Michael in its training data (1996 Nora Ephron film), and the pipeline returned Claude's wrong-film data. The TMDB+verified fallback never fired because Claude returned valid-shaped data — just for the wrong film.
+
+**Fixes:**
+- `claudeUserPrompt(title, year?)` now appends `(YYYY)` to the title and adds: *"if you don't recognize it, return `not_a_movie` so we can fall back; do NOT substitute a same-titled film from another year."*
+- Year sanity check after Claude's response: if `expectedYear` (from `userYearHint` or `releaseInfo.releaseDate`) and `mv.year` differ by >1 year, treat as Claude failure and fall through to TMDB+verified fallback (which has correct film data from `releaseInfo`).
+
+After PR #39 merged, user verified: `michael 2026`, `super mario galaxy movie 2026`, `fargo` all return correct films. Memory saved encouraging me to test external systems with curl before patching the layer in front.
+
+### Workstream 5: PR #40 — v5.10.4 Loading-Screen White Line (verified visually)
+
+User reported persistent thin white horizontal lines on the loading screen across multiple "fix" iterations. Each prior fix was a guess that didn't actually verify.
+
+**Real cause traced** to line 1035 of `film-glance.jsx`:
+```css
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+```
+The loading overlay had `animation: slideUp 0.4s`. During those 400ms it was simultaneously **partly transparent** (page bg leaked through) AND **translated 22px down** (top 22px of viewport uncovered, exposing header's `borderBottom: 1px rgba(255,255,255,0.04)`). Either alone would produce a transient white line; together it was guaranteed for the first 400ms of every loading state. Screenshots taken during that window caught it.
+
+**Fix:**
+- Container: solid `#000` from frame 1, NO animation on container. Always opaque, always at correct position.
+- Video element: `animation: fadeIn 0.3s` (opacity-only — bg behind it is solid black, fade only affects the gold logo's appearance, never exposes anything underneath).
+- Defensive: `clipPath: inset(2px)` on video for any mp4 edge artifacts. `border: 0; outline: 0;`.
+
+**Visual verification before push** (this time): wrote isolated HTML test page in `scratch/` (gitignored) reproducing production page chrome — header z-50 with borderBottom, search bar, footer watermark — and overlaid the new loading code. Rendered with Chromium via temporary `playwright-core` install (`npm install --no-save playwright-core@1.55`). Screenshot confirmed: solid black field, gold logo centered, **zero white lines anywhere**.
+
+User confirmed: *"I went into incognito to check, and you did actually fix it. Nice job."*
+
+Memory saved encouraging visual verification for UI bugs before pushing.
+
+### Workstream 6: Scheduled Cleanup Agent
+
+One-time scheduled remote agent created for **2026-05-12 13:00 UTC** (9am ET, 2 weeks from Apr 28):
+- Routine ID: `trig_01XgUj4SH6z6d9vSp9Betg8R`
+- Tasks: verify PR #40 merged + stable, remove temporary `playwright-core` from `node_modules` via `npm ci`, verify `scratch/` still gitignored with only Apr 28 artifacts, comment summary on PR #40
+- Manage at: https://claude.ai/code/routines/trig_01XgUj4SH6z6d9vSp9Betg8R
+
+### Workstream 7: Huashu-Design Skill Installed (Personal Use Only)
+
+User asked to install `alchaincyf/huashu-design` — HTML-native design skill for Claude Code (high-fidelity prototypes, slide decks, motion design with MP4/GIF export, design philosophy advisor, expert critique). Installed via `npx skills add alchaincyf/huashu-design -y -g` to `~/.agents/skills/huashu-design`. Universal install (Cursor, Codex, Cline + others), symlinked into Claude Code.
+
+**LICENSE caveat:** Personal use ALLOWED for free (learning, personal creative work, derivatives with attribution, non-commercial sharing). Commercial use REQUIRES prior written authorization (companies/teams, paid client deliverables, B2B SaaS, paid templates, profit-driven training). **Don't use this skill for Film Glance commercial output without first emailing the author** (花叔 / 花生).
+
+### Files Modified / Created
+
+| File | PR(s) | Purpose |
+|------|-------|---------|
+| `app/api/search/route.ts` | #37, #39 | Year parser, exact-match branch, TMDB+verified fallback, year sanity check on Claude response, prompt updated to take year |
+| `lib/rate-limit.ts` | #38 | `SEARCH_LIMIT` 10→30/min |
+| `components/film-glance.jsx` | #37, #38, #40 | Loading overlay rewrites (final form), frontend rate-limit handling, year-aware error messages |
+| `public/loading-screen.mp4` | #37 (NEW) | 1.2 MB user-supplied gold film-reel |
+| VPS `/etc/postgresql/16/main/postgresql.conf` | — | KVM 4 tuning block appended (reversible — remove block + restart postgresql) |
+| VPS `/root/filmboards-crawl/import_filmboards.py` | — | REQUEST_DELAY 0.15→0.05 |
+| `scratch/*.{mjs,html,png,mp4}` | — (gitignored) | Apr 28 visual verification artifacts; cleanup scheduled May 12 |
+| `node_modules/playwright-core` | — (no-save install) | Cleanup scheduled May 12 via `npm ci` |
+
+### Key Learnings
+
+1. **The actual bottleneck wasn't where I thought.** Three iterations on title-gate logic and TMDB year filters didn't help because Claude was the disambiguation point — and we were never sending it the year. Test the external system (TMDB curl) before patching the layer in front of it.
+2. **Visual UI bugs need visual verification.** I made 4 attempts at the white line before actually rendering an isolated reproduction and screenshotting. The `slideUp` animation hypothesis only became diagnosable once I could SEE the transient state.
+3. **Vercel runtime logs are diagnostic gold.** PR #38's 429-as-404 issue was invisible without checking actual response codes via `mcp__plugin_vercel_vercel__get_runtime_logs`.
+4. **Rate limits should be informative, not silent.** A 429 surfaced as "no results" cost ~30 minutes of wasted debugging.
+5. **Hostinger CPU "steal" can be a tier-level throttle, not host contention.** The hPanel "CPU limitation activated" banner is the authoritative signal; iostat steal numbers are just a symptom.
+6. **`npm install --no-save`** leaves cruft in `node_modules` that diverges from `package-lock.json`. Plan a cleanup or use `npx -p` for ephemeral usage.
+
+### VPS / Forum Import Status (Apr 28 end of session)
+
+PID 2644 running on KVM 4 since Apr 27 22:00 EDT (replaced PID 54968 after Hostinger-forced reboot).
+- Boards: ~1,961+ / 3,308 (advancing rapidly)
+- Pace: ~206 boards/day verified empirically over 5 minutes after restart
+- Errors: 40 stable (all pre-existing throttle-era timeouts)
+- **Updated ETA: May 4-6, 2026** (~6-8 days from Apr 27)
+
+### Next Steps (For Next Chat)
+
+1. **Forum import is the gate.** Don't touch the VPS until completion (~May 4-6). Monitor: `ssh filmglance@147.93.113.39 "tail -5 /root/filmboards-crawl/import.log"`.
+2. **After import completes:** downgrade KVM 4 → KVM 2 to recoup ~$15/mo. Postgres tuning block can stay (4 GB shared_buffers fits in KVM 2's 8 GB RAM) or be reverted.
+3. **Fix doubled-log cosmetic** at next clean import stop — `run_import.sh` redirect `>> import.log 2>&1` → `> /dev/null 2>> import.err.log`.
+4. **Post-import work queue** (unchanged):
+   - GDPR consent removal (NodeBB plugin)
+   - Mobile responsiveness audit
+   - Full Film Glance API health check across rating sources
+   - Discuss links on movie result pages (IMDb ID match)
+   - Staging cleanup (`filmboards_crawler.py`, etc.)
+   - Capacitor mobile app conversion (Phase 2)
+5. **6 Dependabot vulnerabilities on main** (3 high, 3 moderate as of Apr 28). Worth a dedicated security session.
+6. **May 12 cleanup agent fires automatically.** Verify it commented on PR #40 with cleanup summary.
+7. **Rotate Supabase PAT before April 17, 2027.**
+8. **Delete dead `YOUTUBE_API_KEY`** from Vercel env vars (unused since v5.6).
+9. **Reconstruct missing `003_anonymous_searches.sql`** to close repo-vs-prod schema drift.
+10. **Full Stripe teardown** (optional, low priority).
+11. **Consider deleting `components/preview-landing.jsx`** if unreferenced (`/preview-landing` route may still use it — check first).
+12. **Huashu-design skill is at `~/.agents/skills/huashu-design`** — restart Claude Code session to activate. **Personal use only. Email author for any Film Glance commercial use.**
+
+---
+
 ## Session: April 19-24, 2026 — v5.10 Release + Mobile Particle Odyssey + Vercel Pro
 
 ### Context
