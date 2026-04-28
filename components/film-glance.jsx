@@ -2143,17 +2143,18 @@ export default function FilmGlance() {
                       style={{
                         margin: 0,
                         padding: "0 16px",
-                        color: "rgba(255, 255, 255, 0.50)",
-                        fontSize: 11,
+                        color: "rgba(255, 255, 255, 0.78)",
+                        fontSize: 11.5,
                         fontFamily: "'JetBrains Mono', monospace",
-                        letterSpacing: 1.4,
+                        fontWeight: 700,
+                        letterSpacing: 1.6,
                         textTransform: "uppercase",
                         wordBreak: "break-word",
                         animation: "softFade 0.5s ease-out 0.1s both",
                       }}
                     >
-                      <span style={{ color: "rgba(255, 215, 0, 0.62)" }}>searched&nbsp;&middot;&nbsp;</span>
-                      <span style={{ color: "rgba(255, 255, 255, 0.82)", textTransform: "none", letterSpacing: 0.2, fontSize: 12 }}>&ldquo;{result.query}&rdquo;</span>
+                      <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>searched&nbsp;&middot;&nbsp;</span>
+                      <span style={{ color: "#fff", textTransform: "none", letterSpacing: 0.2, fontSize: 12.5, fontWeight: 700 }}>&ldquo;{result.query}&rdquo;</span>
                     </p>
                   )}
 
@@ -2174,7 +2175,7 @@ export default function FilmGlance() {
                     {headline}
                   </h2>
 
-                  {errMsg && (
+                  {errMsg && isSystemError && (
                     <p style={{
                       marginTop: 14,
                       padding: "0 16px",
@@ -2244,17 +2245,6 @@ export default function FilmGlance() {
                               </div>
                             )}
 
-                            <span aria-hidden="true" style={{
-                              position: "absolute", top: 6, right: 6,
-                              fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6,
-                              color: "rgba(255, 255, 255, 0.92)",
-                              fontFamily: "'JetBrains Mono', monospace",
-                              background: "rgba(0, 0, 0, 0.72)",
-                              padding: "3px 6px", borderRadius: 3,
-                              border: "1px solid rgba(255, 255, 255, 0.08)",
-                            }}>
-                              {num}
-                            </span>
                           </div>
 
                           {/* Title block — Syne (site body font) for cohesion */}
@@ -2318,38 +2308,7 @@ export default function FilmGlance() {
                   </p>
                 )}
 
-                {/* Search-again — minimalist text button. Hidden on rate-limit
-                    (nothing to retry until the window resets). */}
-                {showRetry && (
-                  <div style={{ textAlign: "center", animation: "softFade 0.55s ease-out 0.62s both" }}>
-                    <button
-                      onClick={() => { setResult(null); setErrMsg(null); setSuggestions([]); inputRef.current?.focus(); }}
-                      className="dym-retry"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "rgba(255, 215, 0, 0.78)",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: 1.6,
-                        textTransform: "uppercase",
-                        cursor: "pointer",
-                        fontFamily: "'Syne', sans-serif",
-                        padding: "10px 32px 12px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 9,
-                        position: "relative",
-                        transition: "color 0.3s ease",
-                      }}
-                    >
-                      <RefreshCw size={12} aria-hidden="true" />
-                      Search again
-                    </button>
-                  </div>
-                )}
-
-                <div className="dym-rail dym-rail-bot" style={{ marginTop: 22 }} aria-hidden="true" />
+                <div className="dym-rail dym-rail-bot" style={{ marginTop: 28 }} aria-hidden="true" />
               </div>
             );
           })()}
