@@ -1505,7 +1505,7 @@ export default function FilmGlance() {
       ) : (
         <main style={{ maxWidth: (result || loading) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
           {/* Search area */}
-          <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) }}>
+          <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
             {!result && !loading && (
               <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44, animation: "fadeIn 0.7s" }}>
                 <LetterLine text="Every Film." offset={0.15} />
@@ -1558,18 +1558,9 @@ export default function FilmGlance() {
             </div>
           </div>
 
-          {/* Loading */}
-          {loading && (
-            <div style={{ animation: "slideUp 0.4s" }}>
-              <div style={{ background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, overflow: "hidden" }}>
-                <Skeleton />
-              </div>
-              <div style={{ textAlign: "center", marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <Loader2 size={13} style={{ color: "#FFD700", animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 11.5, color: "#888" }}>{loadMsg}</span>
-              </div>
-            </div>
-          )}
+          {/* Loading video now rendered as a global overlay at the bottom of
+              the component tree — so it appears regardless of whether the
+              user is in favs view, signed in/out, or any other state. */}
 
           {/* Result */}
           {/* Coming Soon — Unreleased Movie (v5.7) */}
@@ -2215,6 +2206,46 @@ export default function FilmGlance() {
           </div>
           {scrollPct > 0.8 && (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 50, background: `linear-gradient(to top, rgba(255,215,0,${(scrollPct - 0.8) * 0.15}), transparent)`, pointerEvents: "none", zIndex: 150 }} />)}
         </>
+      )}
+
+      {/* Global loading overlay — renders whenever loading=true, regardless of
+          view (main/favs), auth state, or any other conditional. zIndex 60
+          places it ABOVE the sticky header (50) so the entire viewport is a
+          single black field during loading — no header borderBottom or other
+          decorative edges showing through. pointerEvents: none lets clicks
+          pass through to the page. */}
+      {loading && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 60,
+          pointerEvents: "none",
+          gap: 16,
+          animation: "slideUp 0.4s",
+          background: "#000000",
+        }}>
+          <video
+            src="/loading-screen.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+            style={{
+              width: "min(440px, 80vw)",
+              height: "auto",
+              display: "block",
+            }}
+          />
+        </div>
       )}
     </div>
   );
