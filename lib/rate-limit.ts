@@ -84,10 +84,12 @@ function rateLimitCheck(key: string, config: RateLimitConfig): RateLimitResult {
 
 // ─── Pre-configured limiters ────────────────────────────────────────────────
 
-// Search: 10 requests/minute per key (most expensive — triggers Claude API)
+// Search: 30 requests/minute per key (most expensive — triggers Claude API)
+// Bumped from 10 → 30 to accommodate normal active usage / testing without
+// false-tripping. Per-instance limit is still meaningful abuse protection.
 export const SEARCH_LIMIT: RateLimitConfig = {
-  maxTokens: 10,
-  refillRate: 10 / 60,  // 10 tokens per 60 seconds
+  maxTokens: 30,
+  refillRate: 30 / 60,  // 30 tokens per 60 seconds
   windowMs: 60_000,
 };
 
