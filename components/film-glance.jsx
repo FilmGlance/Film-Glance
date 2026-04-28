@@ -428,6 +428,10 @@ async function fetchMovieAPI(title, authToken) {
       if (err.code === "DAILY_LIMIT_REACHED") {
         return { dailyLimitReached: true, searches_used: err.searches_used, daily_limit: err.daily_limit };
       }
+      // Per-minute throttle (10s of requests in <60s). Distinct from
+      // DAILY_LIMIT_REACHED — temporary, not a hard cap.
+      const retryAfter = parseInt(r.headers.get("Retry-After") || "60", 10);
+      return { rateLimited: true, retryAfter };
     }
     if (!r.ok) return null;
 
@@ -871,6 +875,16 @@ export default function FilmGlance() {
         setDailyLimitReached(true);
         setPendingSearch(q);
         setShowAuth(true);
+        setLoading(false);
+        return;
+      }
+
+      // Per-minute rate limit — temporary, surface a clear "slow down" message
+      // instead of the misleading "no results" path.
+      if (mv && mv.rateLimited) {
+        const wait = Math.max(1, mv.retryAfter || 60);
+        setErrMsg(`Searching too fast — try again in ${wait} second${wait === 1 ? "" : "s"}.`);
+        setResult({ notFound: true, query: q });
         setLoading(false);
         return;
       }
