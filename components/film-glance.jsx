@@ -3,8 +3,8 @@ import Link from "next/link";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
-  Users, AlertCircle, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
-  MessageSquare, ArrowRight, LogIn, BarChart3, Flame, Youtube, Sparkles
+  Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
+  MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -1071,6 +1071,94 @@ export default function FilmGlance() {
         .glow-mask { position: absolute; width: 30px; height: 20px; background: #E8A000; top: 10px; left: 8px; filter: blur(24px); opacity: 0.6; transition: opacity 2s; pointer-events: none; z-index: 3; }
         .glow-wrap:hover .glow-mask { opacity: 0; }
 
+        /* Did You Mean — suggestion cards (v2) */
+        .dym-card {
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        }
+        .dym-card:hover {
+          border-color: rgba(255, 215, 0, 0.14) !important;
+          border-left-color: rgba(255, 215, 0, 0.92) !important;
+          border-left-width: 5px !important;
+          background: rgba(22, 18, 6, 0.72) !important;
+          transform: translateX(3px);
+          box-shadow: 0 14px 38px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 215, 0, 0.10), inset 0 0 38px rgba(255, 215, 0, 0.05);
+        }
+        .dym-card:hover .dym-chevron {
+          transform: translateX(4px);
+          color: rgba(255, 215, 0, 0.96) !important;
+        }
+        .dym-card:hover .dym-poster { transform: scale(1.04); }
+        .dym-card:active {
+          transform: translateX(3px) translateY(0.5px);
+          filter: brightness(0.97);
+          transition-duration: 0.08s !important;
+        }
+        .dym-card:focus-visible {
+          outline: none;
+          border-color: rgba(255, 215, 0, 0.45) !important;
+          box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.32), 0 4px 16px rgba(0, 0, 0, 0.32);
+        }
+        .dym-poster { transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* Search-again — minimalist text-button with center-out underline */
+        .dym-retry::after {
+          content: '';
+          position: absolute;
+          left: 32px; right: 32px; bottom: 4px;
+          height: 1px;
+          background: rgba(255, 215, 0, 0.55);
+          transform: scaleX(0);
+          transform-origin: center;
+          transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .dym-retry:hover { color: #FFD700 !important; }
+        .dym-retry:hover::after { transform: scaleX(1); }
+
+        /* Letterbox rails — top/bottom hairlines bookending the panel */
+        @keyframes dymRailIn { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+        .dym-rail {
+          height: 1px;
+          background: linear-gradient(to right, transparent 0%, rgba(255, 215, 0, 0.32) 18%, rgba(255, 215, 0, 0.32) 82%, transparent 100%);
+          transform-origin: center;
+          animation: dymRailIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .dym-rail-top { animation-delay: 0.05s; }
+        .dym-rail-bot { animation-delay: 0.15s; }
+
+        /* Static gold gradient for the headline — no infinite shimmer animation
+           (the page is a "we couldn't find it" moment; restraint reads as
+           sophisticated, not boastful like the landing hero shimmer). */
+        .dym-headline {
+          background: linear-gradient(135deg, #FFE6A0 0%, #FFD700 38%, #E8A000 78%, #FFD700 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+          text-shadow: none;
+        }
+
+        @media (max-width: 520px) {
+          .dym-card { gap: 13px !important; padding: 12px 14px 12px 12px !important; }
+          .dym-poster-wrap { width: 56px !important; height: 84px !important; }
+          .dym-title { font-size: 16px !important; }
+        }
+
+        /* Respect reduced-motion preference — disable stagger, rail sweep,
+           hover translate. Keep static layout, no animation. */
+        @media (prefers-reduced-motion: reduce) {
+          .dym-card,
+          .dym-card:hover,
+          .dym-card:active,
+          .dym-card .dym-poster,
+          .dym-rail,
+          .dym-chevron {
+            animation: none !important;
+            transform: none !important;
+            transition: none !important;
+          }
+          .dym-rail { transform: scaleX(1) !important; opacity: 1 !important; }
+        }
+
         /* Unified header nav — matches /preview-landing */
         .nav-btn { transition: border-color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease; }
         .nav-btn:hover {
@@ -2023,53 +2111,260 @@ export default function FilmGlance() {
             </div>
           )}
 
-          {/* Not found */}
-          {result && result.notFound && (
-            <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.012)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 17, animation: "slideUp 0.4s" }}>
-              <AlertCircle size={34} style={{ color: "#f97316", marginBottom: 12 }} />
-              <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: "#4a4a4a", marginBottom: 6 }}>No results for &ldquo;{result.query}&rdquo;</h3>
-              <p style={{ color: "#2a2a2a", fontSize: 11.5, marginBottom: 16 }}>{errMsg || "Try a different title."}</p>
+          {/* Did You Mean — search returned no results / system error.
+              State-aware: rate-limit and timeout get their own headlines and
+              suppress the suggestion section + retry button (where retrying
+              isn't useful). Default no-match path shows close TMDB matches. */}
+          {result && result.notFound && (() => {
+            const lcErr = (errMsg || "").toLowerCase();
+            const isRateLimited = lcErr.includes("too fast") || lcErr.includes("limit");
+            const isTimeout = lcErr.includes("timed out") || lcErr.includes("timeout");
+            const hasMatches = suggestions.length > 0;
+            const headline = hasMatches
+              ? "Did you mean…"
+              : isRateLimited
+              ? "Hold on a moment"
+              : isTimeout
+              ? "Connection slow"
+              : "We couldn’t find that";
+            const showSearchedFootnote = !isRateLimited && !isTimeout;
+            const showSuggestionBlock = !isRateLimited && !isTimeout;
+            const showRetry = !isRateLimited;
 
-              {suggestions.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <p style={{ color: "#888", fontSize: 12, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Did you mean?</p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-                    {suggestions.map((s, i) => (
-                      <button key={`${s.title}-${s.year}-${i}`}
-                        onClick={() => { setQuery(s.title); doSearch(s.title); }}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 12,
-                          padding: "10px 18px", borderRadius: 12, cursor: "pointer",
-                          background: "rgba(255,215,0,0.03)", border: "1px solid rgba(255,215,0,0.12)",
-                          transition: "all 0.2s", width: "100%", maxWidth: 340,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.3)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,215,0,0.03)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.12)"; }}
-                      >
-                        {s.poster_path ? (
-                          <img src={IMG + "w92" + s.poster_path} alt="" loading="lazy" style={{ width: 32, height: 48, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
-                        ) : (
-                          <div style={{ width: 32, height: 48, borderRadius: 5, background: "rgba(255,255,255,0.04)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Film size={14} style={{ color: "#888" }} />
-                          </div>
-                        )}
-                        <div style={{ textAlign: "left" }}>
-                          <span style={{ color: "#FFD700", fontSize: 13, fontWeight: 600 }}>{s.title}</span>
-                          {s.year && <span style={{ color: "#666", fontSize: 11, marginLeft: 6 }}>({s.year})</span>}
-                        </div>
-                        <Search size={13} style={{ color: "#888", marginLeft: "auto", flexShrink: 0 }} />
-                      </button>
-                    ))}
+            return (
+              <div style={{ padding: "32px 0 36px", animation: "fadeIn 0.5s ease-out" }}>
+                <div className="dym-rail dym-rail-top" aria-hidden="true" />
+
+                {/* Header — framed Film glyph + italic gold headline + mono diagnostic */}
+                <div style={{ textAlign: "center", padding: "32px 18px 22px" }}>
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      width: 46, height: 46,
+                      margin: "0 auto 18px",
+                      borderRadius: 12,
+                      background: "linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 165, 0, 0.04))",
+                      border: "1px solid rgba(255, 215, 0, 0.20)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      boxShadow: "0 0 28px rgba(255, 215, 0, 0.12), inset 0 1px 0 rgba(255, 215, 0, 0.18)",
+                      animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both",
+                    }}
+                  >
+                    <Film size={20} style={{ color: "#FFD700", filter: "drop-shadow(0 0 10px rgba(255, 215, 0, 0.45))" }} />
                   </div>
-                </div>
-              )}
 
-              <button onClick={() => { setResult(null); setErrMsg(null); setSuggestions([]); inputRef.current?.focus(); }}
-                style={{ padding: "8px 20px", borderRadius: 10, border: "1px solid rgba(255,215,0,0.15)", background: "rgba(255,215,0,0.04)", color: "#FFD700", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <RefreshCw size={13} /> Try Again
-              </button>
-            </div>
-          )}
+                  <h2
+                    className="dym-headline"
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontStyle: "italic",
+                      fontSize: "clamp(26px, 5.5vw, 36px)",
+                      fontWeight: 600,
+                      letterSpacing: -0.8,
+                      lineHeight: 1.1,
+                      margin: 0,
+                      animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both",
+                    }}
+                  >
+                    {headline}
+                  </h2>
+
+                  {showSearchedFootnote && (
+                    <p
+                      style={{
+                        marginTop: 16,
+                        padding: "0 16px",
+                        color: "rgba(255, 255, 255, 0.55)",
+                        fontSize: 11.5,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        letterSpacing: 0.4,
+                        wordBreak: "break-word",
+                        animation: "softFade 0.55s ease-out 0.32s both",
+                      }}
+                    >
+                      <span style={{ color: "rgba(255, 215, 0, 0.62)" }}>// searched:&nbsp;</span>
+                      <span style={{ color: "rgba(255, 255, 255, 0.78)" }}>&ldquo;{result.query}&rdquo;</span>
+                    </p>
+                  )}
+
+                  {errMsg && (
+                    <p style={{
+                      marginTop: showSearchedFootnote ? 10 : 18,
+                      padding: "0 16px",
+                      color: "rgba(255, 255, 255, 0.46)",
+                      fontSize: 12.5,
+                      fontStyle: "italic",
+                      lineHeight: 1.45,
+                      animation: "softFade 0.55s ease-out 0.4s both",
+                    }}>
+                      {errMsg}
+                    </p>
+                  )}
+                </div>
+
+                {/* Suggestion cards */}
+                {showSuggestionBlock && hasMatches && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 4px", marginBottom: 28 }}>
+                    {suggestions.map((s, i) => {
+                      const num = String(i + 1).padStart(2, "0");
+                      const ariaLabel = s.year
+                        ? `Search ${s.title} from ${s.year}`
+                        : `Search ${s.title}`;
+                      return (
+                        <button
+                          key={`${s.title}-${s.year}-${i}`}
+                          onClick={() => { setQuery(s.title); doSearch(s.title); }}
+                          aria-label={ariaLabel}
+                          className="dym-card"
+                          style={{
+                            display: "flex", alignItems: "center", gap: 16,
+                            padding: "14px 18px 14px 14px",
+                            background: "rgba(12, 10, 6, 0.55)",
+                            border: "1px solid rgba(255, 215, 0, 0.06)",
+                            borderLeft: "3px solid rgba(255, 215, 0, 0.42)",
+                            borderRadius: 12,
+                            cursor: "pointer",
+                            width: "100%",
+                            textAlign: "left",
+                            position: "relative",
+                            overflow: "hidden",
+                            opacity: 0,
+                            animation: `softFade 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${0.42 + i * 0.08}s both`,
+                            transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, border-left-width 0.4s ease, background 0.4s ease, filter 0.2s ease",
+                          }}
+                        >
+                          {/* Poster — contact-sheet treatment with frame number */}
+                          <div className="dym-poster-wrap" style={{
+                            width: 64, height: 96,
+                            borderRadius: 6,
+                            background: "rgba(255, 255, 255, 0.04)",
+                            flexShrink: 0,
+                            overflow: "hidden",
+                            position: "relative",
+                            boxShadow: "0 6px 18px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04)",
+                          }}>
+                            {s.poster_path ? (
+                              <img
+                                className="dym-poster"
+                                src={IMG + "w154" + s.poster_path}
+                                alt=""
+                                loading="lazy"
+                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                              />
+                            ) : (
+                              <div className="dym-poster" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <Film size={20} style={{ color: "rgba(255, 215, 0, 0.4)" }} aria-hidden="true" />
+                              </div>
+                            )}
+
+                            <span aria-hidden="true" style={{
+                              position: "absolute", top: 4, right: 4,
+                              fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                              color: "rgba(255, 215, 0, 0.92)",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              background: "rgba(0, 0, 0, 0.7)",
+                              padding: "2px 5px", borderRadius: 3,
+                            }}>
+                              {num}
+                            </span>
+                          </div>
+
+                          {/* Title block */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="dym-title" style={{
+                              fontFamily: "'Playfair Display', serif",
+                              fontSize: 17, fontWeight: 700,
+                              color: "#fff",
+                              letterSpacing: -0.2,
+                              lineHeight: 1.2,
+                              marginBottom: 7,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>
+                              {s.title}
+                            </div>
+                            {s.year && (
+                              <span style={{
+                                display: "inline-block",
+                                fontSize: 10, fontWeight: 700, letterSpacing: 0.9,
+                                color: "rgba(255, 215, 0, 0.78)",
+                                fontFamily: "'JetBrains Mono', monospace",
+                                background: "rgba(255, 215, 0, 0.07)",
+                                padding: "2px 7px", borderRadius: 4,
+                                border: "1px solid rgba(255, 215, 0, 0.13)",
+                              }}>
+                                {s.year}
+                              </span>
+                            )}
+                          </div>
+
+                          <ChevronRight
+                            size={18}
+                            aria-hidden="true"
+                            className="dym-chevron"
+                            style={{
+                              color: "rgba(255, 215, 0, 0.55)",
+                              flexShrink: 0,
+                              transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.4s ease",
+                            }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Empty-state line — only when this is a normal "not found"
+                    with no TMDB suggestions (rate-limit/timeout get their own
+                    explanation via errMsg above and skip this). */}
+                {showSuggestionBlock && !hasMatches && (
+                  <p style={{
+                    textAlign: "center",
+                    color: "rgba(255, 255, 255, 0.42)",
+                    fontSize: 13,
+                    fontStyle: "italic",
+                    margin: "16px 0 28px",
+                    padding: "0 16px",
+                    animation: "softFade 0.55s ease-out 0.4s both",
+                  }}>
+                    No close matches in our index. Try a different spelling or the full title.
+                  </p>
+                )}
+
+                {/* Search-again — minimalist text button. Hidden on rate-limit
+                    (nothing to retry until the window resets). */}
+                {showRetry && (
+                  <div style={{ textAlign: "center", animation: "softFade 0.55s ease-out 0.62s both" }}>
+                    <button
+                      onClick={() => { setResult(null); setErrMsg(null); setSuggestions([]); inputRef.current?.focus(); }}
+                      className="dym-retry"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(255, 215, 0, 0.78)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        letterSpacing: 1.6,
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                        fontFamily: "'Syne', sans-serif",
+                        padding: "10px 32px 12px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 9,
+                        position: "relative",
+                        transition: "color 0.3s ease",
+                      }}
+                    >
+                      <RefreshCw size={12} aria-hidden="true" />
+                      Search again
+                    </button>
+                  </div>
+                )}
+
+                <div className="dym-rail dym-rail-bot" style={{ marginTop: 22 }} aria-hidden="true" />
+              </div>
+            );
+          })()}
 
           {/* ───── New landing below-fold (ticker + how-it-works + film-strip) — idle only ───── */}
           {!result && !loading && (
