@@ -2209,11 +2209,11 @@ export default function FilmGlance() {
       )}
 
       {/* Global loading overlay — renders whenever loading=true, regardless of
-          view (main/favs), auth state, or any other conditional. zIndex 40 keeps
-          it below the sticky header (50) so the search bar stays visible, and
-          pointerEvents: none lets clicks pass through to the page.
-          Pure black backdrop (no transparency, no blur, no mask) means the
-          video's black corners blend perfectly — zero contrast. */}
+          view (main/favs), auth state, or any other conditional. zIndex 60
+          places it ABOVE the sticky header (50) so the entire viewport is a
+          single black field during loading — no header borderBottom or other
+          decorative edges showing through. pointerEvents: none lets clicks
+          pass through to the page. */}
       {loading && (
         <div style={{
           position: "fixed",
@@ -2225,8 +2225,7 @@ export default function FilmGlance() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          paddingTop: "6vh",
-          zIndex: 40,
+          zIndex: 60,
           pointerEvents: "none",
           gap: 16,
           animation: "slideUp 0.4s",
