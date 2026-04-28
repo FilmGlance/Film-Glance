@@ -1071,17 +1071,75 @@ export default function FilmGlance() {
         .glow-mask { position: absolute; width: 30px; height: 20px; background: #E8A000; top: 10px; left: 8px; filter: blur(24px); opacity: 0.6; transition: opacity 2s; pointer-events: none; z-index: 3; }
         .glow-wrap:hover .glow-mask { opacity: 0; }
 
-        /* Did You Mean — suggestion cards (v2) */
-        .dym-card {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        /* Did You Mean — premium suggestion cards (v3, spotlight + conic border) */
+        @property --dym-angle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
         }
+        @keyframes dymBorderRotate { to { --dym-angle: 360deg; } }
+
+        .dym-card {
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+          isolation: isolate;
+        }
+        .dym-card > * { position: relative; z-index: 2; }
+
+        /* Cursor-following spotlight — radial glow tracks --mx/--my from
+           onPointerMove on the button. Idle: invisible. Hover: blooms in. */
+        .dym-card::before {
+          content: '';
+          position: absolute; inset: 0;
+          border-radius: inherit;
+          background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%),
+            rgba(255, 215, 0, 0.14) 0%,
+            rgba(255, 215, 0, 0.06) 28%,
+            transparent 65%);
+          opacity: 0;
+          transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+          pointer-events: none;
+          z-index: 1;
+        }
+        .dym-card:hover::before,
+        .dym-card:focus-visible::before { opacity: 1; }
+
+        /* Animated conic-gradient border — gold sweep around the card edge.
+           Built from a 1px ring + mask-composite trick so the gradient only
+           paints on the perimeter, never on the interior surface. */
+        .dym-card::after {
+          content: '';
+          position: absolute; inset: -1px;
+          border-radius: inherit;
+          padding: 1px;
+          background: conic-gradient(from var(--dym-angle, 0deg),
+            transparent 0%,
+            rgba(255, 215, 0, 0.95) 8%,
+            rgba(255, 220, 120, 0.55) 14%,
+            transparent 28%,
+            transparent 100%);
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+                  mask-composite: exclude;
+          opacity: 0;
+          transition: opacity 0.5s ease;
+          pointer-events: none;
+          z-index: 1;
+        }
+        .dym-card:hover::after,
+        .dym-card:focus-visible::after {
+          opacity: 1;
+          animation: dymBorderRotate 4s linear infinite;
+        }
+
         .dym-card:hover {
-          border-color: rgba(255, 215, 0, 0.14) !important;
-          border-left-color: rgba(255, 215, 0, 0.92) !important;
-          border-left-width: 5px !important;
-          background: rgba(22, 18, 6, 0.72) !important;
-          transform: translateX(3px);
-          box-shadow: 0 14px 38px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 215, 0, 0.10), inset 0 0 38px rgba(255, 215, 0, 0.05);
+          background: rgba(14, 11, 4, 0.78) !important;
+          transform: translateY(-3px);
+          box-shadow: 0 22px 48px rgba(0, 0, 0, 0.6), 0 0 60px rgba(255, 215, 0, 0.07), inset 0 0 0 1px rgba(255, 215, 0, 0.06);
         }
         .dym-card:hover .dym-chevron {
           transform: translateX(4px);
@@ -1089,16 +1147,14 @@ export default function FilmGlance() {
         }
         .dym-card:hover .dym-poster { transform: scale(1.04); }
         .dym-card:active {
-          transform: translateX(3px) translateY(0.5px);
-          filter: brightness(0.97);
+          transform: translateY(-1px);
+          filter: brightness(0.96);
           transition-duration: 0.08s !important;
         }
         .dym-card:focus-visible {
           outline: none;
-          border-color: rgba(255, 215, 0, 0.45) !important;
-          box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.32), 0 4px 16px rgba(0, 0, 0, 0.32);
         }
-        .dym-poster { transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+        .dym-poster { transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
 
         /* Search-again — minimalist text-button with center-out underline */
         .dym-retry::after {
@@ -2202,15 +2258,19 @@ export default function FilmGlance() {
                         <button
                           key={`${s.title}-${s.year}-${i}`}
                           onClick={() => { setQuery(s.title); doSearch(s.title); }}
+                          onPointerMove={(e) => {
+                            const r = e.currentTarget.getBoundingClientRect();
+                            e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+                            e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+                          }}
                           aria-label={ariaLabel}
                           className="dym-card"
                           style={{
                             display: "flex", alignItems: "center", gap: 22,
-                            padding: "20px 22px 20px 18px",
-                            background: "rgba(12, 10, 6, 0.55)",
-                            border: "1px solid rgba(255, 215, 0, 0.06)",
-                            borderLeft: "3px solid rgba(255, 215, 0, 0.42)",
-                            borderRadius: 12,
+                            padding: "20px 22px 20px 22px",
+                            background: "rgba(10, 8, 4, 0.62)",
+                            border: "1px solid rgba(255, 215, 0, 0.10)",
+                            borderRadius: 14,
                             cursor: "pointer",
                             width: "100%",
                             textAlign: "left",
@@ -2218,7 +2278,7 @@ export default function FilmGlance() {
                             overflow: "hidden",
                             opacity: 0,
                             animation: `softFade 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${0.42 + i * 0.08}s both`,
-                            transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, border-left-width 0.4s ease, background 0.4s ease, filter 0.2s ease",
+                            transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease, filter 0.2s ease",
                           }}
                         >
                           {/* Poster — bigger, premium treatment with neutral frame number */}
