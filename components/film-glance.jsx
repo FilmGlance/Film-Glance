@@ -2175,7 +2175,7 @@ export default function FilmGlance() {
                     {headline}
                   </h2>
 
-                  {errMsg && isSystemError && (
+                  {errMsg && (isRateLimited || isTimeout) && (
                     <p style={{
                       marginTop: 14,
                       padding: "0 16px",
