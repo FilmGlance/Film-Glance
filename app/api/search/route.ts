@@ -69,8 +69,13 @@ const CLAUDE_SYSTEM = [
   '- If the input does not look like a movie title, return: {"error": "not_a_movie"}',
 ].join("\n");
 
-function claudeUserPrompt(title: string): string {
-  return `Movie: "${title}"\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings summarizing general positive sentiment about the film, and "bad": array of 3 short strings summarizing general negative sentiment — keep each point to one succinct line, NO SPOILERS, never reveal plot points or endings), awards (IMPORTANT: always populate this array — list ALL major awards including Oscar, Golden Globe, BAFTA, SAG, Cannes, Critics Choice, etc. Each entry: award as string like "Academy Awards", result as "Won" or "Nominated", detail as string like "Best Picture", year as number like 2009. Include both wins AND nominations. Do NOT return an empty array for any movie that has received nominations or wins), boxOffice (budget as "$200,000,000", openingWeekend as "$128,122,480", openingRank as "#X all-time" or null, pta as "$XX,XXX" per-theater average, domestic as dollar string, domesticRank as "#X all-time" or null, international as dollar string, worldwide as dollar string, worldwideRank as "#X all-time" or null, roi as "XXX%" estimated return on investment, theaterCount as number string like "4,662", daysInTheater as "XX days"). ONLY JSON.`;
+function claudeUserPrompt(title: string, year?: number): string {
+  // Year is included in the title line so Claude can disambiguate same-titled
+  // films (Michael 1996 vs Michael 2026, Fargo 1996 vs Fargo 2003, etc.).
+  // Without this, Claude returns the most famous match in its training data,
+  // which is rarely the user's intended film when they explicitly typed a year.
+  const yearStr = year ? ` (${year})` : "";
+  return `Movie: "${title}"${yearStr}\n\nReturn JSON with: title (official title), year, genre (string like "Action · Comedy"), director, runtime (string like "93 min"), tagline, description, cast (6-8 with name and character), sources (all 9: RT Critics, RT Audience, Metacritic Metascore, Metacritic User, IMDb, Letterboxd, TMDB, Trakt, Simkl — each with name, score as NUMBER, max as NUMBER, type, url), hot_take (object with "good": array of 3 short strings summarizing general positive sentiment about the film, and "bad": array of 3 short strings summarizing general negative sentiment — keep each point to one succinct line, NO SPOILERS, never reveal plot points or endings), awards (IMPORTANT: always populate this array — list ALL major awards including Oscar, Golden Globe, BAFTA, SAG, Cannes, Critics Choice, etc. Each entry: award as string like "Academy Awards", result as "Won" or "Nominated", detail as string like "Best Picture", year as number like 2009. Include both wins AND nominations. Do NOT return an empty array for any movie that has received nominations or wins), boxOffice (budget as "$200,000,000", openingWeekend as "$128,122,480", openingRank as "#X all-time" or null, pta as "$XX,XXX" per-theater average, domestic as dollar string, domesticRank as "#X all-time" or null, international as dollar string, worldwide as dollar string, worldwideRank as "#X all-time" or null, roi as "XXX%" estimated return on investment, theaterCount as number string like "4,662", daysInTheater as "XX days"). ${year ? `The film is from ${year} — if you don't recognize it, return {"error": "not_a_movie"} so we can fall back to verified data; do NOT substitute a same-titled film from another year. ` : ""}ONLY JSON.`;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -210,7 +215,7 @@ async function runFullPipeline(
       model: CLAUDE_MODEL,
       max_tokens: 3500,
       system: CLAUDE_SYSTEM,
-      messages: [{ role: "user", content: claudeUserPrompt(queryForClaude) }],
+      messages: [{ role: "user", content: claudeUserPrompt(queryForClaude, yearHint) }],
     }),
   });
 
@@ -236,7 +241,22 @@ async function runFullPipeline(
   if (!match) return null;
 
   const mv = JSON.parse(match[0]);
-  if (mv.error === "not_a_movie" || !mv.title || !mv.sources || mv.sources.length === 0) {
+  // Year sanity check: if the user (or TMDB) gave us a year hint and Claude
+  // returned data for a film >1 year off, treat it as a Claude failure and
+  // fall through to the TMDB+verified fallback. This catches the common case
+  // where Claude's training data has only the older same-titled film
+  // (e.g. Michael 1996 instead of the 2026 MJ biopic).
+  const expectedYear = yearHint || (releaseInfo?.releaseDate
+    ? parseInt(releaseInfo.releaseDate.substring(0, 4))
+    : undefined);
+  const claudeYearMismatch =
+    expectedYear !== undefined &&
+    typeof mv.year === "number" &&
+    Math.abs(mv.year - expectedYear) > 1;
+  if (claudeYearMismatch) {
+    console.log(`[claude-year-mismatch] expected=${expectedYear}, claude returned year=${mv.year} for "${queryForClaude}" — using TMDB+verified fallback`);
+  }
+  if (mv.error === "not_a_movie" || !mv.title || !mv.sources || mv.sources.length === 0 || claudeYearMismatch) {
     // v5.8 TMDB fallback — Claude can't process every title (too new/obscure
     // for its training, e.g. 2025/2026 indie films). When TMDB knows about
     // the film and we have any verified ratings, build a complete response
