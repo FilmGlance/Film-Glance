@@ -2556,7 +2556,6 @@ export default function FilmGlance() {
                     visual gauge + stars below. Trailer button has moved into the
                     hero meta row above. */}
                 {(() => {
-                  const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
                   return (
                     <div id="fg-score" style={{
                       marginTop: 26,
@@ -2594,59 +2593,34 @@ export default function FilmGlance() {
                         }}>True Movie Rating Score</h3>
                       </div>
 
-                      {/* Body — gauge + tagline + stars in one horizontal row */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 26, flexWrap: "wrap" }}>
+                      {/* Body — huge glowing score number on the left, tagline + stars on the right */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
+                        {/* Massive gold score number — replaces the gauge */}
                         <div style={{
-                          position: "relative", width: 132, height: 132, flexShrink: 0,
-                          borderRadius: "50%",
-                          background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.04) ${pct}% 100%)`,
-                          boxShadow: `
-                            0 0 28px rgba(255,215,0,${0.32 + pct * 0.003}),
-                            0 0 64px rgba(255,215,0,${0.14 + pct * 0.0018}),
-                            inset 0 0 0 1px rgba(255,255,255,0.04)
-                          `,
-                          filter: `drop-shadow(0 0 10px rgba(255,215,0,${0.35 + pct * 0.0024}))`,
+                          flexShrink: 0,
+                          display: "inline-flex",
+                          alignItems: "baseline",
+                          minWidth: 180,
+                          padding: "12px 16px",
+                          justifyContent: "center",
                           animation: "fadeIn 0.6s 0.4s both",
                         }}>
-                          <div style={{
-                            position: "absolute", inset: 8,
-                            borderRadius: "50%",
-                            background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
-                            border: "1px solid rgba(255,255,255,0.05)",
-                            overflow: "hidden",
-                          }}>
-                            {/* Absolute-centered wrapper. translate(-50%, calc(-50% + 4px))
-                                puts the wrapper's geometric center 4px BELOW the parent's
-                                geometric center — Playfair digits sit visually higher than
-                                their bounding box center (because the box reserves descender
-                                space below the baseline), so this 4px optical correction
-                                lands the digit's visual center at the circle's center. */}
-                            <div style={{
-                              position: "absolute",
-                              top: "50%", left: "50%",
-                              transform: "translate(-50%, calc(-50% + 4px))",
-                              display: "inline-flex",
-                              alignItems: "baseline",
-                              whiteSpace: "nowrap",
-                              lineHeight: 1,
-                            }}>
-                              <span style={{
-                                fontFamily: "'Playfair Display',serif",
-                                fontSize: 44, fontWeight: 700,
-                                background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
-                                WebkitBackgroundClip: "text", backgroundClip: "text",
-                                WebkitTextFillColor: "transparent", color: "transparent",
-                                lineHeight: 1, letterSpacing: -1.4,
-                              }}>{result.score.ten}</span>
-                              <span style={{
-                                fontFamily: "'JetBrains Mono',monospace",
-                                fontSize: 12, fontWeight: 700,
-                                color: "rgba(255,255,255,0.5)",
-                                letterSpacing: 0.3,
-                                marginLeft: 2,
-                              }}>/10</span>
-                            </div>
-                          </div>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontSize: 124, fontWeight: 700,
+                            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+                            WebkitBackgroundClip: "text", backgroundClip: "text",
+                            WebkitTextFillColor: "transparent", color: "transparent",
+                            lineHeight: 0.9, letterSpacing: -3.5,
+                            filter: "drop-shadow(0 0 28px rgba(255,215,0,0.65)) drop-shadow(0 0 80px rgba(255,215,0,0.32))",
+                          }}>{result.score.ten}</span>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontSize: 38, fontWeight: 600,
+                            color: "rgba(255,255,255,0.42)",
+                            marginLeft: 6,
+                            letterSpacing: -0.5,
+                          }}>/ 10</span>
                         </div>
                         <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
                           <p style={{
