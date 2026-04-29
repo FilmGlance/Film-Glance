@@ -5,7 +5,8 @@ import {
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
-  ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote
+  ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
+  Music, BookOpen
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -189,21 +190,21 @@ function CastMember({ name, character, img, idx, visible }) {
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0) scale(1)" : "translateY(10px) scale(0.95)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04 + 0.05}s`,
-        minWidth: 96, maxWidth: 110, flexShrink: 0, width: "calc(25% - 8px)"
+        minWidth: 116, maxWidth: 130, flexShrink: 0, width: "calc(25% - 10px)"
       }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
       <div style={{
-        width: 72, height: 72, borderRadius: "50%", overflow: "hidden",
+        width: 96, height: 96, borderRadius: "50%", overflow: "hidden",
         background: `linear-gradient(135deg, hsl(${hue},22%,13%), hsl(${hue},28%,22%))`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        border: `2px solid ${hov ? "rgba(255,215,0,0.55)" : `hsla(${hue},20%,32%,0.35)`}`,
+        border: `2px solid ${hov ? "rgba(255,215,0,0.6)" : `hsla(${hue},20%,32%,0.4)`}`,
         transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
-        transform: hov ? "scale(1.08) translateY(-2px)" : "scale(1)",
+        transform: hov ? "scale(1.07) translateY(-3px)" : "scale(1)",
         boxShadow: hov
-          ? "0 10px 32px rgba(255,215,0,0.18), 0 0 0 4px rgba(255,215,0,0.06), inset 0 0 0 1px rgba(255,215,0,0.2)"
-          : "0 4px 14px rgba(0,0,0,0.45)",
+          ? "0 14px 38px rgba(255,215,0,0.22), 0 0 0 5px rgba(255,215,0,0.07), inset 0 0 0 1px rgba(255,215,0,0.22)"
+          : "0 6px 18px rgba(0,0,0,0.5)",
         position: "relative"
       }}>
         {hasImg && !imgFail && (
@@ -220,25 +221,25 @@ function CastMember({ name, character, img, idx, visible }) {
         )}
         {!imgOk && (
           <span style={{
-            fontSize: 20, fontWeight: 700,
-            color: hov ? "#FFD700" : `hsl(${hue},18%,55%)`,
+            fontSize: 28, fontWeight: 700,
+            color: hov ? "#FFD700" : `hsl(${hue},18%,58%)`,
             fontFamily: "'Playfair Display',serif",
-            transition: "color 0.2s", letterSpacing: 1.2, zIndex: 1
+            transition: "color 0.2s", letterSpacing: 1.4, zIndex: 1
           }}>{initials}</span>
         )}
       </div>
-      <div style={{ textAlign: "center", lineHeight: 1.25, width: "100%", marginTop: 4 }}>
+      <div style={{ textAlign: "center", lineHeight: 1.25, width: "100%", marginTop: 6 }}>
         <div style={{
           fontFamily: "'Syne',sans-serif",
-          fontSize: 11.5, fontWeight: 700,
-          letterSpacing: 0.2,
-          color: hov ? "#FFD700" : "rgba(255,255,255,0.88)",
+          fontSize: 13, fontWeight: 700,
+          letterSpacing: 0.15,
+          color: hov ? "#FFD700" : "rgba(255,255,255,0.92)",
           transition: "color 0.25s",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{name}</div>
         <div style={{
           fontFamily: "'Playfair Display',serif",
-          fontSize: 10.5, color: "rgba(255,255,255,0.42)", marginTop: 2, fontStyle: "italic",
+          fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 3, fontStyle: "italic",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{character}</div>
       </div>
@@ -260,44 +261,48 @@ function StreamingBadge({ platform, url, type, logo_path, idx, visible, title })
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         display: "inline-flex", alignItems: "center", gap: 11,
-        padding: "11px 18px", borderRadius: 12,
+        padding: "13px 19px", borderRadius: 12,
         background: hov
           ? "linear-gradient(135deg, rgba(255,215,0,0.14), rgba(255,165,0,0.06))"
-          : "rgba(10,8,4,0.65)",
-        border: `1px solid ${hov ? "rgba(255,215,0,0.42)" : "rgba(255,215,0,0.16)"}`,
+          : "rgba(0,0,0,0.45)",
+        border: `1px solid ${hov ? "rgba(255,215,0,0.45)" : "rgba(255,255,255,0.07)"}`,
         boxShadow: hov
-          ? "0 10px 26px rgba(0,0,0,0.5), 0 0 22px rgba(255,215,0,0.14), inset 0 1px 0 rgba(255,215,0,0.12)"
+          ? "0 12px 30px rgba(0,0,0,0.55), 0 0 28px rgba(255,215,0,0.16), inset 0 1px 0 rgba(255,215,0,0.14)"
           : "0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)",
         textDecoration: "none", cursor: "pointer",
         opacity: visible ? 1 : 0,
-        transform: visible ? (hov ? "translateY(-2px)" : "translateY(0)") : "translateY(8px)",
+        transform: visible ? (hov ? "translateY(-3px)" : "translateY(0)") : "translateY(8px)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s, transform 0.3s cubic-bezier(0.16,1,0.3,1)`,
       }}
     >
       {logoUrl ? (
-        <img src={logoUrl} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} onError={e => e.target.style.display = "none"} />
+        <img src={logoUrl} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={e => e.target.style.display = "none"} />
       ) : (
-        <div style={{ width: 24, height: 24, borderRadius: 5, background: "rgba(255,215,0,0.08)", border: "1px solid rgba(255,215,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Play size={11} fill="#FFD700" stroke="#FFD700" />
+        <div style={{ width: 26, height: 26, borderRadius: 6, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Play size={12} fill={hov ? "#FFD700" : "rgba(255,255,255,0.65)"} stroke={hov ? "#FFD700" : "rgba(255,255,255,0.65)"} />
         </div>
       )}
       <span style={{
         fontFamily: "'Syne',sans-serif",
-        fontSize: 13.5, fontWeight: 700, color: "#FFD700",
+        fontSize: 15, fontWeight: 700,
+        color: hov ? "#FFD700" : "rgba(255,255,255,0.92)",
         letterSpacing: 0.2,
         whiteSpace: "nowrap",
+        transition: "color 0.3s ease",
       }}>{platform}</span>
       {typeLabel && (
         <span style={{
           fontFamily: "'JetBrains Mono',monospace",
-          fontSize: 10, color: "rgba(255,215,0,0.7)", fontWeight: 700,
-          letterSpacing: 0.8, textTransform: "uppercase",
-          padding: "2px 7px", borderRadius: 4,
-          background: "rgba(255,215,0,0.06)",
-          border: "1px solid rgba(255,215,0,0.14)",
+          fontSize: 11, fontWeight: 700,
+          color: hov ? "rgba(255,215,0,0.85)" : "rgba(255,255,255,0.55)",
+          letterSpacing: 0.9, textTransform: "uppercase",
+          padding: "3px 8px", borderRadius: 5,
+          background: hov ? "rgba(255,215,0,0.08)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${hov ? "rgba(255,215,0,0.22)" : "rgba(255,255,255,0.06)"}`,
+          transition: "all 0.3s ease",
         }}>{typeLabel}</span>
       )}
-      <ExternalLink size={11} style={{ color: "#FFD700", opacity: hov ? 0.85 : 0.35, transition: "opacity 0.25s, transform 0.25s", transform: hov ? "translate(2px,-2px)" : "translate(0,0)" }} />
+      <ExternalLink size={12} style={{ color: hov ? "#FFD700" : "rgba(255,255,255,0.4)", opacity: hov ? 0.95 : 0.5, transition: "color 0.3s, opacity 0.25s, transform 0.25s", transform: hov ? "translate(2px,-2px)" : "translate(0,0)" }} />
     </a>
   );
 }
@@ -392,35 +397,140 @@ function formatBoxOfficeVal(val, label) {
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
   const showRank = rank && rank !== "#N/A" && rank !== "N/A";
   const formatted = formatBoxOfficeVal(val, label);
-  // Highlight key rows (worldwide gross, ROI, budget) in gold
   const lbl = label.toLowerCase();
   const isHero = lbl.includes("worldwide") || lbl.includes("budget") || lbl.includes("roi");
   const isROIPositive = lbl.includes("roi") && /^\d+%/.test(formatted) && parseInt(formatted) >= 100;
   const valColor = isROIPositive ? "#22c55e" : isHero ? "#FFD700" : "#fff";
+  // Pick a Lucide icon based on the label
+  const Icon = lbl.includes("budget") ? DollarSign
+    : lbl.includes("opening") ? Sparkles
+    : lbl.includes("per-theater") || lbl.includes("pta") ? BarChart3
+    : lbl.includes("domestic") ? Flame
+    : lbl.includes("international") ? Globe
+    : lbl.includes("worldwide") ? Globe
+    : lbl.includes("roi") ? TrendingUp
+    : lbl.includes("theater count") ? Tv
+    : lbl.includes("days") ? Calendar
+    : DollarSign;
   return (
     <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "12px 16px", borderRadius: 10,
+      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
+      padding: "16px 18px", borderRadius: 11,
       background: idx % 2 === 0 ? "rgba(255,255,255,0.022)" : "transparent",
-      borderLeft: isHero ? "2px solid rgba(255,215,0,0.45)" : "2px solid transparent",
+      borderLeft: isHero ? "3px solid rgba(255,215,0,0.55)" : "3px solid transparent",
       opacity: visible ? 1 : 0,
       transform: visible ? "translateY(0)" : "translateY(8px)",
       transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04}s`,
     }}>
-      <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 13, color: isHero ? "rgba(255,215,0,0.78)" : "rgba(255,255,255,0.62)", fontWeight: isHero ? 700 : 500, letterSpacing: 0.2 }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 13, minWidth: 0, flex: 1 }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: isHero ? "linear-gradient(135deg, rgba(255,215,0,0.14), rgba(255,165,0,0.04))" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${isHero ? "rgba(255,215,0,0.28)" : "rgba(255,255,255,0.07)"}`,
+          color: isHero ? "#FFD700" : "rgba(255,255,255,0.62)",
+          boxShadow: isHero ? "0 0 16px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.10)" : "none",
+        }}>
+          <Icon size={15} />
+        </div>
+        <span style={{
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 15,
+          color: isHero ? "rgba(255,215,0,0.85)" : "rgba(255,255,255,0.7)",
+          fontWeight: isHero ? 700 : 500,
+          letterSpacing: 0.2,
+          minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+        }}>{label}</span>
+      </div>
       <span style={{
         fontFamily: "'JetBrains Mono',monospace",
-        fontSize: isHero ? 15 : 13.5,
+        fontSize: isHero ? 18 : 16,
         color: valColor,
         fontWeight: 700,
         letterSpacing: 0.4,
-        textShadow: isHero ? "0 0 12px rgba(255,215,0,0.18)" : "none",
+        textShadow: isHero ? "0 0 14px rgba(255,215,0,0.22)" : "none",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
       }}>
         {formatted}
-        {showRank && <span style={{ color: "rgba(255,255,255,0.42)", fontWeight: 500, fontSize: 11, marginLeft: 6 }}>/ {rank}</span>}
+        {showRank && <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 12.5, marginLeft: 7 }}>/ {rank}</span>}
       </span>
     </div>
   );
+}
+
+/* Pick a Lucide icon based on keywords in the hot-take bullet text.
+   Falls back to ThumbsUp/Down. The mapping is intentionally broad — we
+   don't want every row sharing one icon (the prior version was visually
+   uniform and felt like one boring list). */
+function pickHotTakeIcon(text, positive) {
+  const t = (text || "").toLowerCase();
+  if (/\b(act(ing|or|ress)|perform(ance|er)|cast|chemistry|lead)\b/.test(t)) return Users;
+  if (/\b(direct(or|ion|ed)|filmmak|vision)\b/.test(t)) return Film;
+  if (/\b(visual|cinematograph|shot|cinema|image|colou?r|frame|composition)\b/.test(t)) return Eye;
+  if (/\b(score|music|soundtrack|composer|theme song)\b/.test(t)) return Music;
+  if (/\b(plot|story|script|writing|screenplay|narrative|dialog|pacing|structure)\b/.test(t)) return BookOpen;
+  if (/\b(emotion|heart|feel|moving|powerful|touching|sentiment|tear)\b/.test(t)) return Heart;
+  if (/\b(action|chase|fight|stunt|sequence|set piece|climax|battle)\b/.test(t)) return Zap;
+  if (/\b(award|oscar|nomin|win|win\s)\b/.test(t)) return Trophy;
+  if (/\b(box office|gross|opening|million|billion|hit|flop)\b/.test(t)) return DollarSign;
+  if (/\b(comedy|funny|laugh|hilarious|humour|humor|joke)\b/.test(t)) return Sparkles;
+  if (/\b(scary|terrify|thrill|tension|suspense|fright|horror)\b/.test(t)) return Flame;
+  if (/\b(audience|viewer|fan|crowd|popular|reception)\b/.test(t)) return Users;
+  return positive ? ThumbsUp : ThumbsDown;
+}
+
+function HotTakeRow({ text, idx, positive, visible, delay }) {
+  const Icon = pickHotTakeIcon(text, positive);
+  const accent = positive ? "34,197,94" : "239,68,68";
+  const accentHex = positive ? "#22c55e" : "#ef4444";
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 14,
+      padding: "16px 18px", borderRadius: 12,
+      fontFamily: "'Syne',sans-serif",
+      fontSize: 15.5, lineHeight: 1.55, color: "rgba(255,255,255,0.9)",
+      background: "rgba(0,0,0,0.42)",
+      border: `1px solid rgba(${accent},0.14)`,
+      borderLeft: `3px solid rgba(${accent},0.65)`,
+      opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(8px)",
+      transition: `all 0.45s cubic-bezier(0.16,1,0.3,1) ${delay}s`,
+      letterSpacing: 0.05,
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: `linear-gradient(135deg, rgba(${accent},0.16), rgba(${accent},0.04))`,
+        border: `1px solid rgba(${accent},0.32)`,
+        color: accentHex,
+        boxShadow: `0 0 14px rgba(${accent},0.18), inset 0 1px 0 rgba(${accent},0.22)`,
+        marginTop: 1,
+      }}>
+        <Icon size={15} strokeWidth={2.1} />
+      </div>
+      <span style={{ flex: 1 }}>{text}</span>
+    </div>
+  );
+}
+
+/* Returns runtime in "120 min · 2h 0m" form regardless of input shape.
+   API may give "120 min" (cache) or "2h 0m" (TMDB-formatted) — we want both. */
+function formatRuntimeBoth(rt) {
+  if (!rt) return null;
+  const s = String(rt).trim();
+  // Try to extract minutes
+  let totalMins = null;
+  const minMatch = s.match(/^(\d+)\s*min/i);
+  if (minMatch) totalMins = parseInt(minMatch[1]);
+  if (totalMins === null) {
+    const hmMatch = s.match(/^(\d+)\s*h(?:\s*(\d+)\s*m)?/i);
+    if (hmMatch) totalMins = parseInt(hmMatch[1]) * 60 + (hmMatch[2] ? parseInt(hmMatch[2]) : 0);
+  }
+  if (totalMins === null || totalMins <= 0) return s;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const hm = h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
+  return `${totalMins} min · ${hm}`;
 }
 
 /* Trim DYM suggestion overviews to a clean fixed length so every card
@@ -633,37 +743,61 @@ function SourceRow({ source, idx, visible }) {
   const norm = (!isNaN(score) && !isNaN(max) && max > 0) ? (max === 100 ? score : max === 10 ? score * 10 : max === 5 ? score * 20 : (score / max) * 100) : 0;
   const clr = norm >= 80 ? "#22c55e" : norm >= 60 ? "#eab308" : norm >= 40 ? "#f97316" : "#ef4444";
   const [h, setH] = useState(false);
+  // Extract domain for the favicon — use Google's s2 service which works for
+  // ~all major movie review sites without us hosting any logo files ourselves.
+  let logoUrl = null;
+  try {
+    if (source.url) {
+      const dom = new URL(source.url).hostname.replace(/^www\./, "");
+      logoUrl = `https://www.google.com/s2/favicons?domain=${dom}&sz=64`;
+    }
+  } catch { /* ignore malformed urls */ }
   return (
     <a href={source.url} target="_blank" rel="noopener noreferrer"
       style={{
-        display: "grid", gridTemplateColumns: "1fr 78px 1fr 28px", alignItems: "center", gap: 12,
-        padding: "13px 16px", borderRadius: 10,
-        background: h ? "rgba(255,215,0,0.05)" : "rgba(10,8,4,0.45)",
-        border: `1px solid ${h ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)"}`,
+        display: "grid", gridTemplateColumns: "auto 1fr 88px 1fr 28px", alignItems: "center", gap: 14,
+        padding: "16px 18px", borderRadius: 11,
+        background: h ? "rgba(22,18,6,0.7)" : "rgba(0,0,0,0.42)",
+        border: `1px solid ${h ? "rgba(255,215,0,0.32)" : "rgba(255,255,255,0.06)"}`,
         textDecoration: "none", color: "#fff", cursor: "pointer",
         opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(8px)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
-        boxShadow: h ? "0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
+        boxShadow: h ? "0 12px 30px rgba(0,0,0,0.5), 0 0 28px rgba(255,215,0,0.08), inset 0 1px 0 rgba(255,215,0,0.06)" : "none",
       }}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
     >
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: h ? "#FFD700" : "rgba(255,255,255,0.92)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: "rgba(255,255,255,0.42)", letterSpacing: 0.8, textTransform: "uppercase" }}>{source.type}</span>
+      {/* Logo chip — site favicon, themed black-at-rest gold-on-hover */}
+      <div style={{
+        width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: h ? "rgba(255,215,0,0.10)" : "rgba(255,255,255,0.04)",
+        border: `1px solid ${h ? "rgba(255,215,0,0.32)" : "rgba(255,255,255,0.07)"}`,
+        transition: "all 0.3s ease",
+        overflow: "hidden",
+      }}>
+        {logoUrl ? (
+          <img src={logoUrl} alt="" loading="lazy" style={{ width: 22, height: 22, objectFit: "contain", borderRadius: 4 }} onError={e => { e.target.style.display = "none"; }} />
+        ) : (
+          <Film size={14} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.4)" }} />
+        )}
       </div>
-      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14.5, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
-        {source.score}<span style={{ color: "rgba(255,255,255,0.35)", fontWeight: 500 }}>/{source.max}</span>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: h ? "#FFD700" : "rgba(255,255,255,0.94)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "rgba(255,255,255,0.45)", letterSpacing: 0.9, textTransform: "uppercase" }}>{source.type}</span>
       </div>
-      <div style={{ position: "relative", height: 6, borderRadius: 3, background: "rgba(0,0,0,0.55)", overflow: "hidden", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.5)" }}>
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 17, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
+        {source.score}<span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>/{source.max}</span>
+      </div>
+      <div style={{ position: "relative", height: 7, borderRadius: 3.5, background: "rgba(0,0,0,0.6)", overflow: "hidden", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.6)" }}>
         <div style={{
-          position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 3,
+          position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 3.5,
           background: `linear-gradient(90deg, ${clr}66 0%, ${clr} 60%, ${clr}dd 100%)`,
           boxShadow: `0 0 10px ${clr}55`,
           width: visible ? `${Math.min(norm, 100)}%` : "0%",
           transition: `width 0.85s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05 + 0.25}s`,
         }} />
       </div>
-      <ExternalLink size={13} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.32)", transition: "color 0.25s, transform 0.25s", transform: h ? "translate(2px,-2px)" : "translate(0,0)" }} />
+      <ExternalLink size={14} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.34)", transition: "color 0.25s, transform 0.25s", transform: h ? "translate(2px,-2px)" : "translate(0,0)" }} />
     </a>
   );
 }
@@ -676,11 +810,11 @@ function Accordion({ icon, label, count, open, toggle, children }) {
       transition: "background 0.4s ease",
     }}>
       <button onClick={toggle} style={{
-        width: "100%", padding: "18px 26px", background: "none", border: "none",
+        width: "100%", padding: "20px 28px", background: "none", border: "none",
         color: open ? "#FFD700" : "rgba(255,255,255,0.55)",
         fontFamily: "'Playfair Display',serif",
         fontStyle: "italic",
-        fontSize: 17, fontWeight: 600,
+        fontSize: 19, fontWeight: 600,
         letterSpacing: -0.2,
         cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -1308,6 +1442,17 @@ export default function FilmGlance() {
           box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 0 40px rgba(255,215,0,0.5) !important;
         }
         .fg-vid-card:focus-visible { outline: none; border-color: rgba(255,215,0,0.6) !important; }
+
+        /* Result-page meta chips — dark at rest, gold-glow on hover
+           (matches the .newl-how-card behavior on the landing). */
+        .fg-meta-chip:hover {
+          border-color: rgba(255,215,0,0.42) !important;
+          background: linear-gradient(135deg, rgba(255,215,0,0.10), rgba(255,165,0,0.03)) !important;
+          color: #FFD700 !important;
+          box-shadow: 0 0 22px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,215,0,0.14) !important;
+          transform: translateY(-2px);
+        }
+        .fg-meta-chip:hover svg { color: #FFD700; }
 
         /* Mobile: hero stacks vertically with smaller poster */
         @media (max-width: 640px) {
@@ -2058,46 +2203,48 @@ export default function FilmGlance() {
                       )}
                     </div>
 
-                    {/* Meta chips — year / runtime / director, gold-accented */}
-                    <div className="fg-hero-meta" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 12, animation: "fadeIn 0.5s 0.2s both" }}>
+                    {/* Meta chips — dark-at-rest, gold-on-hover (How It Works pattern from landing) */}
+                    <div className="fg-hero-meta" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 14, animation: "fadeIn 0.5s 0.2s both" }}>
                       {result.year && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
+                        <span className="fg-meta-chip" style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
                           fontFamily: "'JetBrains Mono',monospace",
-                          fontSize: 12, fontWeight: 700, letterSpacing: 1,
-                          color: "rgba(255,215,0,0.92)",
-                          background: "rgba(255,215,0,0.08)",
-                          padding: "5px 11px", borderRadius: 6,
-                          border: "1px solid rgba(255,215,0,0.18)",
+                          fontSize: 14, fontWeight: 700, letterSpacing: 1,
+                          color: "rgba(255,255,255,0.88)",
+                          background: "rgba(0,0,0,0.45)",
+                          padding: "7px 13px", borderRadius: 7,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
                         }}>
-                          <Calendar size={11} style={{ opacity: 0.7 }} />
+                          <Calendar size={12} style={{ opacity: 0.7 }} />
                           {result.year}
                         </span>
                       )}
                       {result.runtime && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
+                        <span className="fg-meta-chip" style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
                           fontFamily: "'JetBrains Mono',monospace",
-                          fontSize: 12, fontWeight: 600, letterSpacing: 0.5,
-                          color: "rgba(255,255,255,0.78)",
-                          background: "rgba(255,255,255,0.04)",
-                          padding: "5px 11px", borderRadius: 6,
+                          fontSize: 14, fontWeight: 700, letterSpacing: 0.5,
+                          color: "rgba(255,255,255,0.88)",
+                          background: "rgba(0,0,0,0.45)",
+                          padding: "7px 13px", borderRadius: 7,
                           border: "1px solid rgba(255,255,255,0.08)",
+                          transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
                         }}>
-                          <Clock size={11} style={{ opacity: 0.7 }} />
-                          {result.runtime}
+                          <Clock size={12} style={{ opacity: 0.7 }} />
+                          {formatRuntimeBoth(result.runtime)}
                         </span>
                       )}
                       {result.director && (
                         <span style={{
                           fontFamily: "'Syne',sans-serif",
-                          fontSize: 13, fontWeight: 500,
-                          color: "rgba(255,255,255,0.7)",
+                          fontSize: 15, fontWeight: 500,
+                          color: "rgba(255,255,255,0.78)",
                           letterSpacing: 0.15,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          maxWidth: 320,
+                          maxWidth: 360,
                         }}>
-                          <span style={{ color: "rgba(255,215,0,0.62)", fontWeight: 600 }}>Directed by</span>&nbsp;{result.director}
+                          <span style={{ color: "rgba(255,215,0,0.7)", fontWeight: 600 }}>Directed by</span>&nbsp;{result.director}
                         </span>
                       )}
                     </div>
@@ -2105,10 +2252,10 @@ export default function FilmGlance() {
                     {result.genre && (
                       <p style={{
                         fontFamily: "'JetBrains Mono',monospace",
-                        color: "rgba(255,255,255,0.42)",
-                        fontSize: 10.5, fontWeight: 600,
+                        color: "rgba(255,255,255,0.5)",
+                        fontSize: 11.5, fontWeight: 600,
                         letterSpacing: 1.6, textTransform: "uppercase",
-                        marginBottom: 14,
+                        marginBottom: 16,
                         animation: "fadeIn 0.5s 0.25s both",
                       }}>{result.genre}</p>
                     )}
@@ -2116,69 +2263,69 @@ export default function FilmGlance() {
                     {result.description && (
                       <p style={{
                         fontFamily: "'Syne',sans-serif",
-                        color: "rgba(255,255,255,0.86)",
-                        fontSize: 14, lineHeight: 1.6,
-                        marginBottom: 22,
+                        color: "rgba(255,255,255,0.9)",
+                        fontSize: 16, lineHeight: 1.6,
+                        marginBottom: 24,
                         animation: "fadeIn 0.5s 0.3s both",
                         letterSpacing: 0.1,
                       }}>{result.description}</p>
                     )}
 
-                    {/* Score panel — labeled, isolated, hero-treatment */}
+                    {/* Score panel — the one place gold treatment is meaningful (it's THE score) */}
                     <div style={{
-                      padding: "16px 18px",
+                      padding: "20px 22px",
                       borderRadius: 14,
-                      background: "linear-gradient(135deg, rgba(255,215,0,0.05) 0%, rgba(255,215,0,0.015) 100%)",
-                      border: "1px solid rgba(255,215,0,0.16)",
+                      background: "linear-gradient(135deg, rgba(255,215,0,0.06) 0%, rgba(255,215,0,0.018) 100%)",
+                      border: "1px solid rgba(255,215,0,0.18)",
                       boxShadow: "inset 0 1px 0 rgba(255,215,0,0.08)",
                       animation: "fadeIn 0.5s 0.32s both",
                     }}>
                       <p style={{
                         fontFamily: "'JetBrains Mono',monospace",
-                        fontSize: 9.5, letterSpacing: 1.8, color: "rgba(255,215,0,0.7)",
+                        fontSize: 11, letterSpacing: 1.8, color: "rgba(255,215,0,0.78)",
                         textTransform: "uppercase", fontWeight: 700,
-                        marginBottom: 8,
+                        marginBottom: 10,
                       }}>Averaged Across Major Review Sites</p>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 7, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
                           <span style={{
                             fontFamily: "'Playfair Display',serif",
-                            fontSize: 64, fontWeight: 700,
+                            fontSize: 72, fontWeight: 700,
                             background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 38%, #E8A000 78%, #FFD700 100%)",
                             backgroundSize: "220% auto",
                             WebkitBackgroundClip: "text", backgroundClip: "text",
                             WebkitTextFillColor: "transparent", color: "transparent",
                             lineHeight: 0.95,
-                            textShadow: "0 0 28px rgba(255,215,0,0.18)",
-                            letterSpacing: -2,
+                            textShadow: "0 0 30px rgba(255,215,0,0.2)",
+                            letterSpacing: -2.4,
                           }}>{result.score.ten}</span>
-                          <span style={{ color: "rgba(255,255,255,0.42)", fontSize: 22, fontWeight: 600, fontFamily: "'Playfair Display',serif" }}>/ 10</span>
+                          <span style={{ color: "rgba(255,255,255,0.46)", fontSize: 26, fontWeight: 600, fontFamily: "'Playfair Display',serif" }}>/ 10</span>
                         </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
-                          <StarDisplay rating={result.score.stars} sz={18} />
-                          <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4 }}>{result.score.stars}/5 stars</span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 }}>
+                          <StarDisplay rating={result.score.stars} sz={20} />
+                          <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12.5, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4 }}>{result.score.stars}/5 stars</span>
                         </div>
                         {result.trailer_key && (
                           <button
                             onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
                             className="fg-trailer-btn"
                             style={{
-                              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8,
-                              padding: "10px 18px", borderRadius: 10,
-                              background: "linear-gradient(135deg, rgba(255,215,0,0.16) 0%, rgba(255,165,0,0.06) 100%)",
-                              border: "1px solid rgba(255,215,0,0.32)",
-                              color: "#FFD700",
+                              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 9,
+                              padding: "12px 22px", borderRadius: 11,
+                              background: "rgba(0,0,0,0.45)",
+                              border: "1px solid rgba(255,255,255,0.12)",
+                              color: "rgba(255,255,255,0.92)",
                               fontFamily: "'Syne',sans-serif",
-                              fontSize: 12, fontWeight: 700,
-                              letterSpacing: 1, textTransform: "uppercase",
+                              fontSize: 13, fontWeight: 700,
+                              letterSpacing: 1.1, textTransform: "uppercase",
                               cursor: "pointer",
-                              transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
-                              boxShadow: "0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.12)",
+                              transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
+                              boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
                             }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.28) 0%, rgba(255,165,0,0.12) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.7)"; e.currentTarget.style.boxShadow = "0 10px 32px rgba(0,0,0,0.5), 0 0 30px rgba(255,215,0,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.16) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.32)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.12)"; e.currentTarget.style.transform = "translateY(0)"; }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.55)"; e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.55), 0 0 32px rgba(255,215,0,0.22), inset 0 1px 0 rgba(255,215,0,0.14)"; e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.color = "#FFD700"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.45)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.color = "rgba(255,255,255,0.92)"; }}
                           >
-                            <Play size={12} fill="#FFD700" stroke="#FFD700" />
+                            <Play size={13} fill="currentColor" stroke="currentColor" />
                             Watch Trailer
                           </button>
                         )}
@@ -2217,86 +2364,90 @@ export default function FilmGlance() {
               {/* Movie Hot Take */}
               {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
                 <Accordion icon={<Flame size={14} />} label="The Good & The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
-                  <div style={{ padding: "8px 26px 26px" }}>
+                  <div style={{ padding: "12px 26px 28px" }}>
                     {result.hot_take.good?.length > 0 && (
-                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 22 : 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 28 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
                           <div style={{
-                            width: 32, height: 32, borderRadius: 9,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            flexShrink: 0,
-                            background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(22,163,74,0.06))",
-                            border: "1px solid rgba(34,197,94,0.32)",
-                            boxShadow: "0 0 18px rgba(34,197,94,0.12), inset 0 1px 0 rgba(34,197,94,0.18)",
+                            width: 40, height: 40, borderRadius: 11,
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                            background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(22,163,74,0.08))",
+                            border: "1px solid rgba(34,197,94,0.4)",
+                            boxShadow: "0 0 24px rgba(34,197,94,0.18), inset 0 1px 0 rgba(34,197,94,0.22)",
                           }}>
-                            <ThumbsUp size={15} stroke="#22c55e" strokeWidth={2.2} />
+                            <ThumbsUp size={19} stroke="#22c55e" strokeWidth={2.2} />
                           </div>
-                          <span style={{
-                            fontFamily: "'Playfair Display',serif",
-                            fontStyle: "italic",
-                            fontSize: 18, fontWeight: 600,
-                            letterSpacing: -0.2,
-                            color: "#22c55e",
-                          }}>The Good</span>
+                          <div>
+                            <span style={{
+                              display: "block",
+                              fontFamily: "'Playfair Display',serif",
+                              fontStyle: "italic",
+                              fontSize: 24, fontWeight: 600, letterSpacing: -0.4,
+                              color: "#22c55e", lineHeight: 1.1,
+                            }}>The Good</span>
+                            <span style={{
+                              display: "block",
+                              fontFamily: "'JetBrains Mono',monospace",
+                              fontSize: 10.5, fontWeight: 600,
+                              color: "rgba(34,197,94,0.62)",
+                              letterSpacing: 1.4, textTransform: "uppercase",
+                              marginTop: 3,
+                            }}>What critics & audiences praise</span>
+                          </div>
                         </div>
-                        {result.hot_take.good.map((point, i) => (
-                          <div key={`good-${i}`} style={{
-                            display: "flex", alignItems: "baseline", gap: 12,
-                            padding: "13px 16px", borderRadius: 10, marginBottom: 6,
-                            fontFamily: "'Syne',sans-serif",
-                            fontSize: 13.5, lineHeight: 1.55, color: "rgba(255,255,255,0.84)",
-                            background: "rgba(34,197,94,0.04)",
-                            border: "1px solid rgba(34,197,94,0.10)",
-                            borderLeft: "3px solid rgba(34,197,94,0.55)",
-                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
-                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s`,
-                          }}>
-                            <span style={{ flexShrink: 0, width: 6, height: 6, borderRadius: "50%", background: "#22c55e", marginTop: 7, boxShadow: "0 0 8px rgba(34,197,94,0.6)" }} />
-                            <span style={{ flex: 1 }}>{point}</span>
-                          </div>
-                        ))}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {result.hot_take.good.map((point, i) => (
+                            <HotTakeRow
+                              key={`good-${i}`} text={point} idx={i} positive={true}
+                              visible={hotTakeOpen}
+                              delay={i * 0.06}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
                     {result.hot_take.good?.length > 0 && result.hot_take.bad?.length > 0 && (
-                      <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(255,215,0,0.18), transparent)", margin: "20px 4px" }} />
+                      <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(255,215,0,0.22), transparent)", margin: "22px 4px" }} />
                     )}
                     {result.hot_take.bad?.length > 0 && (
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
                           <div style={{
-                            width: 32, height: 32, borderRadius: 9,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            flexShrink: 0,
-                            background: "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(220,38,38,0.06))",
-                            border: "1px solid rgba(239,68,68,0.32)",
-                            boxShadow: "0 0 18px rgba(239,68,68,0.12), inset 0 1px 0 rgba(239,68,68,0.18)",
+                            width: 40, height: 40, borderRadius: 11,
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                            background: "linear-gradient(135deg, rgba(239,68,68,0.22), rgba(220,38,38,0.08))",
+                            border: "1px solid rgba(239,68,68,0.4)",
+                            boxShadow: "0 0 24px rgba(239,68,68,0.18), inset 0 1px 0 rgba(239,68,68,0.22)",
                           }}>
-                            <ThumbsDown size={15} stroke="#ef4444" strokeWidth={2.2} />
+                            <ThumbsDown size={19} stroke="#ef4444" strokeWidth={2.2} />
                           </div>
-                          <span style={{
-                            fontFamily: "'Playfair Display',serif",
-                            fontStyle: "italic",
-                            fontSize: 18, fontWeight: 600,
-                            letterSpacing: -0.2,
-                            color: "#ef4444",
-                          }}>The Bad</span>
+                          <div>
+                            <span style={{
+                              display: "block",
+                              fontFamily: "'Playfair Display',serif",
+                              fontStyle: "italic",
+                              fontSize: 24, fontWeight: 600, letterSpacing: -0.4,
+                              color: "#ef4444", lineHeight: 1.1,
+                            }}>The Bad</span>
+                            <span style={{
+                              display: "block",
+                              fontFamily: "'JetBrains Mono',monospace",
+                              fontSize: 10.5, fontWeight: 600,
+                              color: "rgba(239,68,68,0.62)",
+                              letterSpacing: 1.4, textTransform: "uppercase",
+                              marginTop: 3,
+                            }}>Where it falls short</span>
+                          </div>
                         </div>
-                        {result.hot_take.bad.map((point, i) => (
-                          <div key={`bad-${i}`} style={{
-                            display: "flex", alignItems: "baseline", gap: 12,
-                            padding: "13px 16px", borderRadius: 10, marginBottom: 6,
-                            fontFamily: "'Syne',sans-serif",
-                            fontSize: 13.5, lineHeight: 1.55, color: "rgba(255,255,255,0.84)",
-                            background: "rgba(239,68,68,0.04)",
-                            border: "1px solid rgba(239,68,68,0.10)",
-                            borderLeft: "3px solid rgba(239,68,68,0.55)",
-                            opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
-                            transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${(result.hot_take.good?.length || 0) * 0.05 + i * 0.05}s`,
-                          }}>
-                            <span style={{ flexShrink: 0, width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 7, boxShadow: "0 0 8px rgba(239,68,68,0.6)" }} />
-                            <span style={{ flex: 1 }}>{point}</span>
-                          </div>
-                        ))}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {result.hot_take.bad.map((point, i) => (
+                            <HotTakeRow
+                              key={`bad-${i}`} text={point} idx={i} positive={false}
+                              visible={hotTakeOpen}
+                              delay={(result.hot_take.good?.length || 0) * 0.06 + i * 0.06}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2336,18 +2487,18 @@ export default function FilmGlance() {
                             <Play size={18} fill="#050505" stroke="#050505" style={{ marginLeft: 3 }} />
                           </div>
                         </div>
-                        <div style={{ padding: "11px 13px 13px" }}>
+                        <div style={{ padding: "13px 15px 15px" }}>
                           <p style={{
                             fontFamily: "'Syne',sans-serif",
-                            fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.92)", lineHeight: 1.35,
-                            margin: "0 0 4px",
+                            fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.94)", lineHeight: 1.35,
+                            margin: "0 0 5px",
                             display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
                           }}>{vr.title || vr.channel}</p>
                           {vr.title && vr.channel && (
                             <p style={{
                               fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 10, color: "rgba(255,215,0,0.62)", fontWeight: 600,
-                              letterSpacing: 0.5, textTransform: "uppercase",
+                              fontSize: 11.5, color: "rgba(255,215,0,0.7)", fontWeight: 700,
+                              letterSpacing: 0.6, textTransform: "uppercase",
                               margin: 0,
                               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                             }}>{vr.channel}</p>
@@ -2398,24 +2549,24 @@ export default function FilmGlance() {
                           transform: awardsOpen ? "translateY(0)" : "translateY(8px)",
                           transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
                         }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 8, flexWrap: "wrap" }}>
                             <span style={{
-                              display: "inline-flex", alignItems: "center", gap: 5,
+                              display: "inline-flex", alignItems: "center", gap: 6,
                               fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
-                              textTransform: "uppercase", padding: "3px 9px", borderRadius: 5,
+                              fontSize: 12, fontWeight: 700, letterSpacing: 1.4,
+                              textTransform: "uppercase", padding: "4px 11px", borderRadius: 6,
                               background: won ? "linear-gradient(135deg, rgba(255,215,0,0.18), rgba(255,165,0,0.06))" : "rgba(255,255,255,0.05)",
-                              color: won ? "#FFD700" : "rgba(255,255,255,0.55)",
-                              border: won ? "1px solid rgba(255,215,0,0.32)" : "1px solid rgba(255,255,255,0.06)",
-                              boxShadow: won ? "0 0 14px rgba(255,215,0,0.2)" : "none",
+                              color: won ? "#FFD700" : "rgba(255,255,255,0.6)",
+                              border: won ? "1px solid rgba(255,215,0,0.34)" : "1px solid rgba(255,255,255,0.07)",
+                              boxShadow: won ? "0 0 16px rgba(255,215,0,0.22)" : "none",
                             }}>
-                              {won && <Trophy size={9} />}
+                              {won && <Trophy size={11} />}
                               {a.result}
                             </span>
-                            <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 13.5, fontWeight: 700, color: won ? "rgba(255,255,255,0.96)" : "rgba(255,255,255,0.78)", letterSpacing: 0.1 }}>{a.award}</span>
-                            {a.year && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.42)", fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.5 }}>{a.year}</span>}
+                            <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15.5, fontWeight: 700, color: won ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.82)", letterSpacing: 0.1 }}>{a.award}</span>
+                            {a.year && <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.5 }}>{a.year}</span>}
                           </div>
-                          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.62)", lineHeight: 1.5, margin: 0, letterSpacing: 0.1 }}>{a.detail}</p>
+                          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.5, margin: 0, letterSpacing: 0.1 }}>{a.detail}</p>
                         </div>
                       );
                     })}
@@ -2494,18 +2645,18 @@ export default function FilmGlance() {
                             pointerEvents: "none",
                           }} />
                           <p style={{
-                            position: "absolute", left: 10, right: 10, bottom: 10,
+                            position: "absolute", left: 11, right: 11, bottom: 11,
                             fontFamily: "'Syne',sans-serif",
-                            fontSize: 12, fontWeight: 700,
+                            fontSize: 14, fontWeight: 700,
                             color: "#fff",
-                            lineHeight: 1.25,
+                            lineHeight: 1.28,
                             letterSpacing: 0.1,
                             margin: 0,
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: "vertical",
                             overflow: "hidden",
-                            textShadow: "0 2px 8px rgba(0,0,0,0.85)",
+                            textShadow: "0 2px 10px rgba(0,0,0,0.9)",
                           }}>{rec.title}</p>
                         </div>
                       </button>
