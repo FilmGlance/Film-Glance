@@ -2160,7 +2160,7 @@ export default function FilmGlance() {
                 <LetterLine text="Every Film." offset={0.15} />
                 <span
                   className="hero-accent"
-                  style={{ fontStyle: "italic", display: "block" }}
+                  style={{ fontStyle: "italic", display: "block", lineHeight: 1.18, paddingBottom: "0.08em" }}
                 >
                   One True Rating Score.
                 </span>
@@ -2609,17 +2609,22 @@ export default function FilmGlance() {
                           animation: "fadeIn 0.6s 0.4s both",
                         }}>
                           <div style={{
-                            position: "absolute", inset: 9,
+                            position: "absolute", inset: 8,
                             borderRadius: "50%",
                             background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
                             border: "1px solid rgba(255,255,255,0.05)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            padding: "0 6px",
+                            overflow: "hidden",
                           }}>
-                            {/* Single inline-block atom so the score + denominator
-                                always render together as one centered unit and
-                                never wrap or overflow the circle. */}
-                            <span style={{
+                            {/* Absolute-centered wrapper. translate(-50%, calc(-50% + 4px))
+                                puts the wrapper's geometric center 4px BELOW the parent's
+                                geometric center — Playfair digits sit visually higher than
+                                their bounding box center (because the box reserves descender
+                                space below the baseline), so this 4px optical correction
+                                lands the digit's visual center at the circle's center. */}
+                            <div style={{
+                              position: "absolute",
+                              top: "50%", left: "50%",
+                              transform: "translate(-50%, calc(-50% + 4px))",
                               display: "inline-flex",
                               alignItems: "baseline",
                               whiteSpace: "nowrap",
@@ -2638,9 +2643,9 @@ export default function FilmGlance() {
                                 fontSize: 12, fontWeight: 700,
                                 color: "rgba(255,255,255,0.5)",
                                 letterSpacing: 0.3,
-                                marginLeft: 1,
+                                marginLeft: 2,
                               }}>/10</span>
-                            </span>
+                            </div>
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
