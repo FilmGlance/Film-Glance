@@ -475,10 +475,8 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
         flexShrink: 0,
       }}>
         {formatted}
-        {hasVal && (
-          hasRank
-            ? <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {cleanRank}</span>
-            : <span style={{ color: "rgba(255,255,255,0.28)", fontWeight: 500, fontSize: 12, marginLeft: 7, fontStyle: "italic" }}>/ Unranked</span>
+        {hasVal && hasRank && (
+          <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {cleanRank}</span>
         )}
       </span>
     </div>
@@ -2615,22 +2613,34 @@ export default function FilmGlance() {
                             borderRadius: "50%",
                             background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
                             border: "1px solid rgba(255,255,255,0.05)",
-                            display: "flex", alignItems: "baseline", justifyContent: "center", gap: 2,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: "0 6px",
                           }}>
+                            {/* Single inline-block atom so the score + denominator
+                                always render together as one centered unit and
+                                never wrap or overflow the circle. */}
                             <span style={{
-                              fontFamily: "'Playfair Display',serif",
-                              fontSize: 42, fontWeight: 700,
-                              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
-                              WebkitBackgroundClip: "text", backgroundClip: "text",
-                              WebkitTextFillColor: "transparent", color: "transparent",
-                              lineHeight: 1, letterSpacing: -1.4,
-                            }}>{result.score.ten}</span>
-                            <span style={{
-                              fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 13, fontWeight: 700,
-                              color: "rgba(255,255,255,0.5)",
-                              letterSpacing: 0.4,
-                            }}>/10</span>
+                              display: "inline-flex",
+                              alignItems: "baseline",
+                              whiteSpace: "nowrap",
+                              lineHeight: 1,
+                            }}>
+                              <span style={{
+                                fontFamily: "'Playfair Display',serif",
+                                fontSize: 44, fontWeight: 700,
+                                background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
+                                WebkitBackgroundClip: "text", backgroundClip: "text",
+                                WebkitTextFillColor: "transparent", color: "transparent",
+                                lineHeight: 1, letterSpacing: -1.4,
+                              }}>{result.score.ten}</span>
+                              <span style={{
+                                fontFamily: "'JetBrains Mono',monospace",
+                                fontSize: 12, fontWeight: 700,
+                                color: "rgba(255,255,255,0.5)",
+                                letterSpacing: 0.3,
+                                marginLeft: 1,
+                              }}>/10</span>
+                            </span>
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
