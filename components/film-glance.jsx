@@ -2254,6 +2254,23 @@ export default function FilmGlance() {
                       const ariaLabel = s.year
                         ? `Search ${s.title} from ${s.year}`
                         : `Search ${s.title}`;
+                      // Unreleased detection — server already sorts unreleased to bottom,
+                      // but we also adjust the year-pill treatment to show "TBA" or the
+                      // expected release date instead of a year.
+                      const todayStr = new Date().toISOString().substring(0, 10);
+                      const currentYear = new Date().getFullYear();
+                      const isUnreleased = s.release_date
+                        ? s.release_date > todayStr
+                        : (s.year != null && s.year > currentYear);
+                      let releaseLabel = null;
+                      if (isUnreleased) {
+                        if (s.release_date) {
+                          const d = new Date(s.release_date);
+                          releaseLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        } else {
+                          releaseLabel = "Release date TBA";
+                        }
+                      }
                       return (
                         <button
                           key={`${s.title}-${s.year}-${i}`}
@@ -2320,20 +2337,57 @@ export default function FilmGlance() {
                             }}>
                               {s.title}
                             </div>
-                            {s.year && (
-                              <span style={{
-                                display: "inline-block",
-                                fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
-                                color: "rgba(255, 215, 0, 0.82)",
-                                fontFamily: "'JetBrains Mono', monospace",
-                                background: "rgba(255, 215, 0, 0.06)",
-                                padding: "3px 9px", borderRadius: 4,
-                                border: "1px solid rgba(255, 215, 0, 0.14)",
-                                marginBottom: s.overview ? 12 : 0,
-                              }}>
-                                {s.year}
-                              </span>
-                            )}
+                            <div style={{
+                              display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+                              marginBottom: (s.overview || s.director) ? 12 : 0,
+                            }}>
+                              {!isUnreleased && s.year && (
+                                <span style={{
+                                  display: "inline-block",
+                                  fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
+                                  color: "rgba(255, 215, 0, 0.82)",
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  background: "rgba(255, 215, 0, 0.06)",
+                                  padding: "3px 9px", borderRadius: 4,
+                                  border: "1px solid rgba(255, 215, 0, 0.14)",
+                                }}>{s.year}</span>
+                              )}
+                              {isUnreleased && releaseLabel && (
+                                <span style={{
+                                  display: "inline-block",
+                                  fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+                                  color: "rgba(255, 215, 0, 0.92)",
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  background: "rgba(255, 215, 0, 0.10)",
+                                  padding: "3px 9px", borderRadius: 4,
+                                  border: "1px solid rgba(255, 215, 0, 0.22)",
+                                  textTransform: "uppercase",
+                                }}>{releaseLabel}</span>
+                              )}
+                              {s.runtime && (
+                                <span style={{
+                                  display: "inline-flex", alignItems: "center", gap: 4,
+                                  fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4,
+                                  color: "rgba(255, 255, 255, 0.62)",
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  background: "rgba(255, 255, 255, 0.03)",
+                                  padding: "3px 9px", borderRadius: 4,
+                                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                                }}>{s.runtime}</span>
+                              )}
+                              {s.director && (
+                                <span style={{
+                                  fontSize: 11, fontWeight: 500,
+                                  color: "rgba(255, 255, 255, 0.5)",
+                                  fontFamily: "'Syne', sans-serif",
+                                  letterSpacing: 0.1,
+                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                  maxWidth: 220,
+                                }}>
+                                  <span style={{ color: "rgba(255, 215, 0, 0.45)", fontWeight: 600 }}>dir.</span>&nbsp;{s.director}
+                                </span>
+                              )}
+                            </div>
                             {s.overview && (
                               <p style={{
                                 margin: 0,
