@@ -6,7 +6,8 @@ import {
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
-  Music, BookOpen, Gauge
+  Music, BookOpen, Gauge,
+  Drama, Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -546,12 +547,81 @@ function ResultSidebar({ result, sections }) {
   );
 }
 
+/* Pick a contextual Lucide icon for a Hot Take bullet based on what the
+   statement is actually about. The 'Thumbs Up' / 'Thumbs Down' branding
+   stays at the SECTION level — these per-row icons reflect the content of
+   each individual statement (acting, plot, music, visuals, etc.). Specific
+   compound phrases like "visual effects" must be matched BEFORE the general
+   "visual" or "effects" patterns, hence the deliberate order below. */
+function pickHotTakeIcon(text, positive) {
+  const t = (text || "").toLowerCase();
+
+  // ── HIGHLY SPECIFIC compound phrases first ──
+  // Visual effects / VFX / CGI → Wand2 (matched before general "visual")
+  if (/\b(visual ?effects?|v ?fx|cgi|special effects?|practical effects?|computer.generated|set piece[s]?|spectacle)\b/.test(t)) return Wand2;
+  // Action choreography / fight / chase → Swords (matched before general visual/style)
+  if (/\b(action(?: choreograph| sequence)?|chase|fight(ing)?|stunt|battle|combat|brawl|gunplay|shootout|martial.arts)\b/.test(t)) return Swords;
+  // Sound design (specific, before generic music)
+  if (/\b(sound ?design|sound ?effects?|sound ?mixing|sonic)\b/.test(t)) return Mic;
+  // Dialogue (specific, before generic plot/script)
+  if (/\b(dialog(ue)?|line[s]? of|quip|monolog|conversation|banter|exposit(ion|ory)?|heavy.handed)\b/.test(t)) return MessageSquare;
+
+  // ── ROLE / CRAFT categories ──
+  // Acting / performance / cast / chemistry → Drama (theater masks)
+  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble)\b/.test(t)) return Drama;
+  // Direction / filmmaking / vision → Film
+  if (/\b(direct(or|ion|ed|ing|ors)?|filmmak(er|ers|ing)?|auteur|helm(ed|ing)?)\b/.test(t)) return Film;
+  // Cinematography / camera work → Camera
+  if (/\b(cinematograph(y|er)?|camera ?(work)?|shot[s]?|fram(e|ed|ing)|lens|composition)\b/.test(t)) return Camera;
+  // Music / score / soundtrack → Music
+  if (/\b(music(al)?|score|soundtrack|composer|song|theme ?song|orchestra)\b/.test(t)) return Music;
+  // Plot / story / script / narrative → Scroll (before "writing" generic).
+  // Note: "premise" intentionally NOT here — it's more about ideas/concept,
+  // see the Theme/Lightbulb block below.
+  if (/\b(plot|story(line|telling)?|script|screenplay|narrative|structure|arc[s]?|twist|writing)\b/.test(t)) return Scroll;
+
+  // ── EXPERIENCE / GENRE qualifiers ──
+  // Pacing / runtime → Clock
+  if (/\b(pac(e|ing|ed)|rhythm|drag(s|ged|ging)?|slow|sluggish|brisk|momentum|runtime|drawn.out|overstay|act\s)\b/.test(t)) return Clock;
+  // Tension / thrill / suspense → Zap
+  if (/\b(tension|thrill|suspense|edge.of|adrenaline|gripping|riveting|propuls)\b/.test(t)) return Zap;
+  // Horror / scary / dark → Ghost
+  if (/\b(scary|terrify|fright|horror|haunt|chilling|dread|disturb|macabre|grisly|gore)\b/.test(t)) return Ghost;
+  // Comedy / humor / wit → Sparkles (specifically humor — distinct from "originality" which also gets Sparkles below)
+  if (/\b(comed(y|ic)?|funny|laugh|hilari|humou?r(ous)?|joke|wit(ty)?|charming|amusing)\b/.test(t)) return Sparkles;
+  // Emotion / heart / moving → Heart
+  if (/\b(emotion(al|s)?|heart(felt|breaking|warming)?|moving|touching|tear|love|romance|tender|poignant|relat(e|able))\b/.test(t)) return Heart;
+
+  // ── INTELLECT / IDEAS ──
+  // Theme / commentary / philosophy / message → Lightbulb
+  if (/\b(theme|philosoph(y|ical)?|commentary|metaphor|allegory|symbolism|ideology|message|nuance|provocat|though(t|tful)|meditation|exploration|examin|consciousness)\b/.test(t)) return Lightbulb;
+  // Originality / innovation → Sparkles
+  if (/\b(original(ity)?|innovat|unique|fresh|inventive|trailblaz|groundbreak|paradigm|reinvent|revolutionary|defin(ed|es) a generation)\b/.test(t)) return Sparkles;
+
+  // ── EXTERNAL / META ──
+  // Awards → Trophy
+  if (/\b(award|oscar|nomin|emmy|golden ?globe|prestige|critic.darling|festival)\b/.test(t)) return Trophy;
+  // Box office / commercial → DollarSign
+  if (/\b(box office|gross|opening|million|billion|blockbuster|hit|flop|commercial|revenue|earn(ed|ings))\b/.test(t)) return DollarSign;
+  // Cultural / social commentary → Globe
+  if (/\b(cultur(e|al)|social|society|generation|consumer|masculin|feminin|gender|race|class|identity|political|polariz|divisive|controvers|timely|dated|aged|critique)\b/.test(t)) return Globe;
+  // Audience / fan / popular reception → Users
+  if (/\b(audience|viewer|fan(s)?|crowd|popular|reception|demographic|embraced|appeal)\b/.test(t)) return Users;
+
+  // ── BROAD / ATMOSPHERIC (last so they don't pre-empt specific) ──
+  // Tone / mood / atmosphere → Activity
+  if (/\b(tone|mood|atmosphere|vibe|ambien|energy)\b/.test(t)) return Activity;
+  // Visual style / aesthetic / color (general) → Palette
+  if (/\b(visual|aesthetic|colou?r|stylized|imagery|set design|production design|art direction|costume)\b/.test(t)) return Palette;
+  // Subtle nuanced details → Eye
+  if (/\b(subtle|nuanced|layered|texture|rich(ness)?|depth|observ|detail)\b/.test(t)) return Eye;
+
+  // Default — sentiment thumb
+  return positive ? ThumbsUp : ThumbsDown;
+}
+
 function HotTakeRow({ text, idx, positive, visible, delay }) {
-  // Roger Ebert-style branding: every Good row is a literal Thumbs Up,
-  // every Bad row is a literal Thumbs Down. Earlier per-row keyword icon
-  // matching was unreliable (e.g. positive 'consumerism' bullet getting
-  // a thumbs-up was correct, but other rows got mismatched icons).
-  const Icon = positive ? ThumbsUp : ThumbsDown;
+  const Icon = pickHotTakeIcon(text, positive);
   const accent = positive ? "34,197,94" : "239,68,68";
   const accentHex = positive ? "#22c55e" : "#ef4444";
   return (
