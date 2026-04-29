@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.31";
+const FG_VERSION = "5.10.32";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -2201,20 +2201,23 @@ export default function FilmGlance() {
           opacity: 0.32;
         }
 
-        /* Inner gleam — soft gold streak rotating slowly. */
+        /* Inner gleam — slim gold streak rotating slowly. Kept low-opacity
+           and narrow so the chip never reads as a filled gold pill. */
         .fg-shiny::after {
-          width: 140%;
+          width: 130%;
           aspect-ratio: 1;
           background: linear-gradient(
             -50deg,
-            transparent 32%,
+            transparent 38%,
             var(--shiny-hi) 50%,
-            transparent 68%
+            transparent 62%
           );
-          mask-image: radial-gradient(circle at bottom, transparent 38%, black);
-          opacity: 0.42;
+          mask-image: radial-gradient(circle at bottom, transparent 52%, black);
+          opacity: 0.18;
           animation: fgShinyArc linear infinite var(--shiny-dur);
         }
+        .fg-shiny.active::after,
+        .fg-shiny.fg-shiny-cta::after { opacity: 0.22; }
         .fg-shiny .fg-shiny-label {
           display: inline-flex;
           align-items: center;
@@ -2249,32 +2252,39 @@ export default function FilmGlance() {
         .fg-shiny:is(:hover, :focus-visible, :focus-within)::after {
           animation-play-state: running;
         }
-        .fg-shiny:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0.65; }
+        /* Hover bottom-glow stays subtle so the chip never reads as
+           "filled". Active and CTA variants below explicitly leave the
+           inset glow at 0 — they signal state via the rotating shine on
+           the perimeter, not via a fill. */
+        .fg-shiny:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0.22; }
 
-        /* Active filter chip — brighter, animation always running, gold text. */
+        /* Active filter chip — animation always running + gold text +
+           slightly thicker rotating shine band on the perimeter. NO inset
+           bottom-glow (was creating the heavy yellow fill the user
+           flagged). */
         .fg-shiny.active {
           --shiny-fg: #FFD700;
-          --fg-shiny-pct: 14%;
+          --fg-shiny-pct: 7%;
           --fg-shiny-shine: var(--shiny-hi-soft);
-          --shiny-bg-sub: #2a1d04;
+          --shiny-bg-sub: #1f1604;
           color: #FFD700;
         }
         .fg-shiny.active,
         .fg-shiny.active::before,
         .fg-shiny.active::after { animation-play-state: running; }
-        .fg-shiny.active .fg-shiny-label::before { opacity: 0.55; }
+        .fg-shiny.active .fg-shiny-label::before { opacity: 0; }
 
-        /* Primary CTA variant (+ New folder, save-to-folder confirm) — even
-           brighter rest state with a more prominent shine sweep. */
+        /* Primary CTA variant (+ New folder, "New folder…" save-row in the
+           heart-click picker) — same treatment as active, no inset glow. */
         .fg-shiny.fg-shiny-cta {
-          --shiny-bg-sub: #2a1d04;
-          --fg-shiny-pct: 10%;
+          --shiny-bg-sub: #1f1604;
+          --fg-shiny-pct: 7%;
           color: #FFD700;
         }
         .fg-shiny.fg-shiny-cta,
         .fg-shiny.fg-shiny-cta::before,
         .fg-shiny.fg-shiny-cta::after { animation-play-state: running; }
-        .fg-shiny.fg-shiny-cta .fg-shiny-label::before { opacity: 0.42; }
+        .fg-shiny.fg-shiny-cta .fg-shiny-label::before { opacity: 0; }
 
         /* Count badge inside a chip */
         .fg-shiny .count {
@@ -2762,7 +2772,7 @@ export default function FilmGlance() {
         </div>
       )}
 
-      {/* "Save to library" — heart-click folder picker (v5.10.31).
+      {/* "Add to Favorites" — heart-click folder picker (v5.10.31).
           Always available regardless of view, so user can favourite from
           the result page or anywhere with a heart button. Click any row to
           save instantly to that destination; "+ New folder…" reveals an
@@ -2781,23 +2791,24 @@ export default function FilmGlance() {
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontStyle: "italic",
-                fontSize: 26,
+                fontSize: 32,
                 fontWeight: 600,
                 color: "#FFD700",
-                letterSpacing: -0.5,
-                marginBottom: 6,
-                lineHeight: 1.1,
+                letterSpacing: -0.6,
+                marginBottom: 10,
+                lineHeight: 1.08,
               }}
             >
-              Save to library
+              Add to Favorites
             </h3>
             <p style={{
               fontFamily: "'Syne', sans-serif",
-              fontSize: 13,
-              color: "rgba(255, 255, 255, 0.62)",
+              fontSize: 15,
+              color: "rgba(255, 255, 255, 0.72)",
+              lineHeight: 1.5,
               marginBottom: 4,
             }}>
-              Choose where <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>{saveToFolderTarget.title}</span> should live.
+              Pick or create a folder to save this favorite.
             </p>
             {folderError && (
               <p style={{
@@ -4028,13 +4039,17 @@ export default function FilmGlance() {
 
                       {/* Body — huge glowing score number on the left, tagline + stars on the right */}
                       <div style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
-                        {/* Massive gold score number — replaces the gauge */}
+                        {/* Massive gold score number — replaces the gauge.
+                            line-height bumped 0.9 → 1.05 + paddingBottom on
+                            the score span so descenders ("3", "5", etc.)
+                            sit fully inside the line box and aren't clipped
+                            by the parent's overflow. */}
                         <div style={{
                           flexShrink: 0,
                           display: "inline-flex",
                           alignItems: "baseline",
                           minWidth: 180,
-                          padding: "12px 16px",
+                          padding: "12px 16px 18px",
                           justifyContent: "center",
                           animation: "fadeIn 0.6s 0.4s both",
                         }}>
@@ -4044,7 +4059,8 @@ export default function FilmGlance() {
                             background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
                             WebkitBackgroundClip: "text", backgroundClip: "text",
                             WebkitTextFillColor: "transparent", color: "transparent",
-                            lineHeight: 0.9, letterSpacing: -3.5,
+                            lineHeight: 1.05, letterSpacing: -3.5,
+                            paddingBottom: "0.12em",
                             filter: "drop-shadow(0 0 28px rgba(255,215,0,0.65)) drop-shadow(0 0 80px rgba(255,215,0,0.32))",
                           }}>{result.score.ten}</span>
                           <span style={{

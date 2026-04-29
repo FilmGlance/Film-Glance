@@ -1,5 +1,57 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued, round 3) — Favourites polish round 3 (v5.10.32)
+
+After v5.10.31 went up the user flagged three quick visual issues from the Vercel preview. All addressed in v5.10.32.
+
+### Context note — recovered work, not redo
+
+Prior round 3 attempt hung mid-session — terminal got stuck on a `agent-browser` install while the actual code edits had already landed locally and were sitting uncommitted on staging. This session resumed by re-verifying the diff against the three asks (it matched), running a clean `tsc --noEmit` (exit 0), and pushing as v5.10.32. No new code was written — everything below describes the edits the prior session had already made before the hang.
+
+### 1. Yellow fill on Favourites chips and the heart-click "+ New folder" CTA
+
+User flagged two spots where the active filter chip and the "+ New folder" CTA were reading as a heavy yellow fill instead of the intended shiny perimeter aesthetic. Root was the always-on `span::before` inset bottom-glow (`box-shadow: inset 0 -1.6ex 1.4rem 3px var(--shiny-hi)` at opacity 0.55 on `.active` / 0.42 on `.fg-shiny-cta`) plus a 14% / 10% conic-gradient shine band that, in combination, painted the bottom half of the pill solid gold.
+
+Fix:
+- Inset bottom-glow → opacity 0 on both `.fg-shiny.active` and `.fg-shiny.fg-shiny-cta` (it's still alive on hover at a subdued 0.22, so the chip "warms" but never "fills")
+- `--fg-shiny-pct` shine band: `.active` 14% → 7%, `.fg-shiny-cta` 10% → 7%
+- `--shiny-bg-sub` (inner pad-box tint): `#2a1d04` → `#1f1604` on both
+- `::after` gleam streak: width 140% → 130%, opacity 0.42 → 0.18 (idle) / 0.22 (active+CTA), narrower transparent stops (32%/68% → 38%/62%), darker mask threshold (38% → 52%) so the bright streak rotates through a smaller arc
+- Hover label::before glow opacity 0.65 → 0.22
+
+Result: rotating gold conic-gradient border + dotted ::before shimmer + slim arc gleam all preserved, but the chip body never reads as filled gold. State is signaled by the perimeter, not by interior fill.
+
+### 2. Heart-click modal — title, subtitle, "+ New folder" pill, sizing
+
+- Title `Save to library` → `Add to Favorites` (32px Playfair italic gold, was 26px; letter-spacing -0.5 → -0.6, line-height 1.1 → 1.08, margin-bottom 6 → 10)
+- Subtitle `Choose where {title} should live.` → `Pick or create a folder to save this favorite.` (15px Syne, was 13px; opacity .62 → .72, added line-height 1.5)
+- "+ New folder…" yellow fill — already covered by the global `.fg-shiny-cta` fix in §1 above; no extra modal-scoped CSS needed
+
+### 3. True Movie Rating Score — descender clip on the 124px Playfair number
+
+The score wrapper had `padding: 12px 16px` and the score `<span>` had `lineHeight: 0.9`. At fontSize 124 + Playfair Display's tall descenders, the bottom of "3" / "5" / "8" was sitting outside the line box and getting clipped by the parent's effective padding. Fix:
+
+- Score wrapper padding `12px 16px` → `12px 16px 18px`
+- Score `<span>`: `lineHeight: 0.9` → `1.05`, added `paddingBottom: 0.12em`
+
+`/ 10` suffix unchanged — only the gradient-clipped score number had the descender problem because its background-clip:text + transparent fill made the clip visible at the pixel level.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +48 / -31 | Shiny CSS retune (no fill on .active/.fg-shiny-cta), modal copy + sizing, score line-height + padding fix, FG_VERSION 5.10.32 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.32 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **A "shiny button" can read as a "filled button" if the always-on inset glow is bright enough.** The aliimam/shiny-button design uses `span::before` as a breathing inset bottom-glow — at low opacity (0.0–0.25) it adds depth without reading as fill. At 0.55+ it crosses the threshold and starts looking like a yellow pill. The fix on `.active` / `.fg-shiny-cta` was to keep the breathing keyframe but leave the rest-state opacity at 0, only lighting up subtly on hover.
+2. **`background-clip: text` + Playfair Display + tight line-height = descender clip.** Default Playfair descender extends well below the baseline; `line-height < 1.0` shrinks the line box below the glyph, and the parent's padding does the actual visible clipping. Lesson: at large display sizes, line-height needs to be ≥ 1.05 for serif fonts with prominent descenders, and an explicit `padding-bottom: 0.1em–0.15em` on the span is cheap insurance against clip from any ancestor `overflow: hidden`.
+3. **A hung terminal in the previous session doesn't mean the code is hung — verify by reading the diff.** This session would have produced churn (re-doing all three fixes) if it had assumed nothing landed. Always check `git status` + `git diff` before re-implementing.
+
+---
+
 ## Session: April 29, 2026 (continued, round 2) — Favourites polish (v5.10.31)
 
 After v5.10.30 hit staging the user reviewed it on the Vercel preview and gave five pieces of feedback. All addressed in v5.10.31.
