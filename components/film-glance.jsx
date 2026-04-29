@@ -7,11 +7,12 @@ import {
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
   Music, BookOpen, Gauge,
-  Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic
+  Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic,
+  Folder, FolderPlus, FolderOpen, FolderInput, Pencil, Plus, Inbox, Library
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10";
+const FG_VERSION = "5.10.30";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -1079,6 +1080,15 @@ export default function FilmGlance() {
   const [showPrice, setShowPrice] = useState(false);
   const [showFavs, setShowFavs] = useState(false);
   const [favorites, setFavorites] = useState([]);
+  // Favourites — folder organization (v5.10.30)
+  const [folders, setFolders] = useState([]);             // [{ id, name, position }]
+  const [activeFolderId, setActiveFolderId] = useState("all"); // "all" | "unsorted" | folder.id
+  const [newFolderInput, setNewFolderInput] = useState(null); // null | "" (open with empty)
+  const [renamingFolderId, setRenamingFolderId] = useState(null);
+  const [renamingFolderName, setRenamingFolderName] = useState("");
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState(null); // folder obj or null
+  const [moveMenuFavKey, setMoveMenuFavKey] = useState(null); // `${title}-${year}` of fav whose move-menu is open
+  const [folderError, setFolderError] = useState(null);
   const [plan, setPlan] = useState("free");
   const [searches, setSearches] = useState(0);
   const [showSug, setShowSug] = useState(false);
@@ -1128,17 +1138,37 @@ export default function FilmGlance() {
         const currentMonth = new Date().toISOString().slice(0, 7);
         setSearches(profile.search_month === currentMonth ? profile.searches_this_month : 0);
       }
-      const { data: favs, error: favErr } = await supabase
-        .from("favorites")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false });
-      if (favErr) console.error("Load favorites error:", favErr);
-      if (favs) {
-        setFavorites(favs.map(f => ({
+      // Favourites + folders load in parallel — each is a small query and the
+      // page can't render either correctly without both.
+      const [favRes, folderRes] = await Promise.all([
+        supabase
+          .from("favorites")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("favorite_folders")
+          .select("id, name, position, created_at")
+          .eq("user_id", session.user.id)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true }),
+      ]);
+      if (favRes.error) console.error("Load favorites error:", favRes.error);
+      if (folderRes.error) console.error("Load folders error:", folderRes.error);
+      if (favRes.data) {
+        setFavorites(favRes.data.map(f => ({
           title: f.title, year: f.year, genre: f.genre,
           poster: f.poster_url, score: { ten: f.score_ten, stars: f.score_stars },
-          searchKey: f.search_key
+          searchKey: f.search_key,
+          folderId: f.folder_id || null,
+          runtime: f.runtime || null,
+          director: f.director || null,
+          overview: f.overview || null,
+        })));
+      }
+      if (folderRes.data) {
+        setFolders(folderRes.data.map(fld => ({
+          id: fld.id, name: fld.name, position: fld.position,
         })));
       }
     } catch (e) { console.error("loadUserData error:", e); }
@@ -1178,11 +1208,41 @@ export default function FilmGlance() {
           setTimeout(() => setAuthNotice(null), 4000);
         }
       } else {
-        setUser(null); setPlan("free"); setSearches(0); setFavorites([]);
+        setUser(null); setPlan("free"); setSearches(0); setFavorites([]); setFolders([]); setActiveFolderId("all");
       }
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Move-to-folder popover — close when the user clicks outside the popover
+  // and outside the move button that opens it. A document-level mousedown is
+  // used (not a fixed-position backdrop div) because the card has its own
+  // stacking context via `isolation: isolate`, which would have placed any
+  // root-level backdrop on top of the popover itself.
+  useEffect(() => {
+    if (!moveMenuFavKey) return;
+    if (typeof document === "undefined") return;
+    const handler = (e) => {
+      const t = e.target;
+      if (t && typeof t.closest === "function") {
+        if (t.closest(".fg-move-pop") || t.closest(".fg-fav-move")) return;
+      }
+      setMoveMenuFavKey(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moveMenuFavKey]);
+
+  // Reset transient folder UI state when the user closes the favourites view.
+  useEffect(() => {
+    if (showFavs) return;
+    setMoveMenuFavKey(null);
+    setNewFolderInput(null);
+    setRenamingFolderId(null);
+    setRenamingFolderName("");
+    setDeleteFolderTarget(null);
+    setFolderError(null);
+  }, [showFavs]);
 
   // Handle URL entry: ?q=<query> auto-triggers search, #signin auto-opens auth
   // modal, #favourites auto-opens the favourites view (when signed in).
@@ -1404,8 +1464,34 @@ export default function FilmGlance() {
         if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
       } catch (e) { console.error("Remove fav exception:", e); setFavorites(prevFavs); }
     } else {
-      // Add favorite
-      const newFav = { title, year, genre, poster: movieResult.poster || "", score: movieResult.score || { ten: 0, stars: 0 }, searchKey: title.toLowerCase() };
+      // Add favorite — also persist runtime / director / overview so the
+      // redesigned Favourites card can render rich detail without re-fetching.
+      // Runtime arrives as either an int (minutes) or a string ("120 min" or
+      // "2h 0m") depending on source — coerce to int minutes for storage.
+      const runtimeMin = (() => {
+        const r = movieResult.runtime;
+        if (typeof r === "number" && r > 0) return Math.round(r);
+        if (typeof r === "string") {
+          const m = r.match(/(\d+)\s*min/i);
+          if (m) return parseInt(m[1], 10);
+          const hm = r.match(/(\d+)\s*h\s*(\d+)?/i);
+          if (hm) return parseInt(hm[1], 10) * 60 + (parseInt(hm[2] || "0", 10));
+        }
+        return null;
+      })();
+      const director = typeof movieResult.director === "string" && movieResult.director.trim()
+        ? movieResult.director.trim()
+        : null;
+      const overview = typeof movieResult.description === "string" && movieResult.description.trim()
+        ? movieResult.description.trim()
+        : null;
+      const newFav = {
+        title, year, genre,
+        poster: movieResult.poster || "",
+        score: movieResult.score || { ten: 0, stars: 0 },
+        searchKey: title.toLowerCase(),
+        folderId: null, runtime: runtimeMin, director, overview,
+      };
       const prevFavs = [...favorites];
       setFavorites(prev => [...prev, newFav]);
       try {
@@ -1414,6 +1500,7 @@ export default function FilmGlance() {
           genre, poster_url: movieResult.poster || "",
           score_ten: movieResult.score?.ten || 0, score_stars: movieResult.score?.stars || 0,
           search_key: title.toLowerCase(),
+          runtime: runtimeMin, director, overview,
         });
         if (error) { console.error("Add fav error:", error, "Data:", { title, year, genre }); setFavorites(prevFavs); }
       } catch (e) { console.error("Add fav exception:", e); setFavorites(prevFavs); }
@@ -1444,9 +1531,141 @@ export default function FilmGlance() {
     doSearch(fav.title.toLowerCase());
   };
 
+  // ─── Folder helpers (v5.10.30) ───────────────────────────────────────────
+  // Same optimistic-update + revert-on-error pattern as toggleFav/removeFav so
+  // the UI always reflects the user's intent immediately and self-heals if
+  // the network or RLS rejects the write.
+
+  const createFolder = async (rawName) => {
+    if (!user) return;
+    const name = (rawName || "").trim().slice(0, 60);
+    if (!name) { setFolderError("Folder name can't be empty."); return; }
+    if (folders.some(f => f.name.toLowerCase() === name.toLowerCase())) {
+      setFolderError("You already have a folder with that name.");
+      return;
+    }
+    setFolderError(null);
+    const tempId = `temp-${Date.now()}`;
+    const position = folders.length;
+    const optimistic = { id: tempId, name, position };
+    const prev = [...folders];
+    setFolders([...folders, optimistic]);
+    try {
+      const { data, error } = await supabase
+        .from("favorite_folders")
+        .insert({ user_id: user.id, name, position })
+        .select("id, name, position")
+        .single();
+      if (error) {
+        console.error("Create folder error:", error);
+        setFolders(prev);
+        setFolderError(error.code === "23505" ? "You already have a folder with that name." : "Couldn't create folder.");
+        return;
+      }
+      setFolders(curr => curr.map(f => f.id === tempId ? { id: data.id, name: data.name, position: data.position } : f));
+      setActiveFolderId(data.id);
+      setNewFolderInput(null);
+    } catch (e) {
+      console.error("Create folder exception:", e);
+      setFolders(prev);
+      setFolderError("Couldn't create folder.");
+    }
+  };
+
+  const renameFolder = async (folderId, rawName) => {
+    if (!user) return;
+    const name = (rawName || "").trim().slice(0, 60);
+    if (!name) { setFolderError("Folder name can't be empty."); return; }
+    if (folders.some(f => f.id !== folderId && f.name.toLowerCase() === name.toLowerCase())) {
+      setFolderError("You already have a folder with that name.");
+      return;
+    }
+    setFolderError(null);
+    const prev = [...folders];
+    setFolders(curr => curr.map(f => f.id === folderId ? { ...f, name } : f));
+    setRenamingFolderId(null);
+    setRenamingFolderName("");
+    try {
+      const { error } = await supabase
+        .from("favorite_folders")
+        .update({ name })
+        .eq("id", folderId)
+        .eq("user_id", user.id);
+      if (error) {
+        console.error("Rename folder error:", error);
+        setFolders(prev);
+        setFolderError("Couldn't rename folder.");
+      }
+    } catch (e) {
+      console.error("Rename folder exception:", e);
+      setFolders(prev);
+      setFolderError("Couldn't rename folder.");
+    }
+  };
+
+  const deleteFolder = async (folder) => {
+    if (!user || !folder) return;
+    const prevFolders = [...folders];
+    const prevFavs = [...favorites];
+    setFolders(curr => curr.filter(f => f.id !== folder.id));
+    setFavorites(curr => curr.map(f => f.folderId === folder.id ? { ...f, folderId: null } : f));
+    if (activeFolderId === folder.id) setActiveFolderId("all");
+    setDeleteFolderTarget(null);
+    try {
+      const { error } = await supabase
+        .from("favorite_folders")
+        .delete()
+        .eq("id", folder.id)
+        .eq("user_id", user.id);
+      if (error) {
+        console.error("Delete folder error:", error);
+        setFolders(prevFolders);
+        setFavorites(prevFavs);
+        setFolderError("Couldn't delete folder.");
+      }
+    } catch (e) {
+      console.error("Delete folder exception:", e);
+      setFolders(prevFolders);
+      setFavorites(prevFavs);
+      setFolderError("Couldn't delete folder.");
+    }
+  };
+
+  const moveFavToFolder = async (fav, folderId) => {
+    if (!user) return;
+    const prev = [...favorites];
+    setFavorites(curr => curr.map(f =>
+      f.title === fav.title && f.year === fav.year ? { ...f, folderId: folderId || null } : f
+    ));
+    setMoveMenuFavKey(null);
+    try {
+      const { error } = await supabase
+        .from("favorites")
+        .update({ folder_id: folderId || null })
+        .eq("user_id", user.id)
+        .eq("title", fav.title)
+        .eq("year", fav.year);
+      if (error) {
+        console.error("Move fav error:", error);
+        setFavorites(prev);
+        setFolderError("Couldn't move that film.");
+      }
+    } catch (e) {
+      console.error("Move fav exception:", e);
+      setFavorites(prev);
+      setFolderError("Couldn't move that film.");
+    }
+  };
+
   return (
     <div onClick={() => showAccountMenu && setShowAccountMenu(false)} style={{ minHeight: "100vh", background: "#050505", color: "#fff", fontFamily: "'Syne',sans-serif" }}>
-      <style>{`
+      {/* dangerouslySetInnerHTML — without this, JSX text-node escaping
+          turns `'` into `&#x27;` on SSR but not on client, breaking the
+          @import url('...') in the first line of this stylesheet (the
+          browser then tries to fetch a URL with literal &#x27; characters
+          and the page hard-crashes during hydration). Same fix used by
+          preview-landing.jsx — see PR #37 era of the conversation log. */}
+      <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1497,15 +1716,18 @@ export default function FilmGlance() {
         }
         @keyframes dymBorderRotate { to { --dym-angle: 360deg; } }
 
-        .dym-card {
+        .dym-card,
+        .fg-fav-card {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.025);
           isolation: isolate;
         }
-        .dym-card > * { position: relative; z-index: 2; }
+        .dym-card > *,
+        .fg-fav-card > * { position: relative; z-index: 2; }
 
         /* Cursor-following spotlight — radial glow tracks --mx/--my from
            onPointerMove on the button. Idle: invisible. Hover: blooms in. */
-        .dym-card::before {
+        .dym-card::before,
+        .fg-fav-card::before {
           content: '';
           position: absolute; inset: 0;
           border-radius: inherit;
@@ -1519,12 +1741,15 @@ export default function FilmGlance() {
           z-index: 1;
         }
         .dym-card:hover::before,
-        .dym-card:focus-visible::before { opacity: 1; }
+        .dym-card:focus-visible::before,
+        .fg-fav-card:hover::before,
+        .fg-fav-card:focus-within::before { opacity: 1; }
 
         /* Animated conic-gradient border — gold sweep around the card edge.
            Built from a 1px ring + mask-composite trick so the gradient only
            paints on the perimeter, never on the interior surface. */
-        .dym-card::after {
+        .dym-card::after,
+        .fg-fav-card::after {
           content: '';
           position: absolute; inset: -1px;
           border-radius: inherit;
@@ -1549,12 +1774,15 @@ export default function FilmGlance() {
           z-index: 1;
         }
         .dym-card:hover::after,
-        .dym-card:focus-visible::after {
+        .dym-card:focus-visible::after,
+        .fg-fav-card:hover::after,
+        .fg-fav-card:focus-within::after {
           opacity: 1;
           animation: dymBorderRotate 4s linear infinite;
         }
 
-        .dym-card:hover {
+        .dym-card:hover,
+        .fg-fav-card:hover {
           background: rgba(14, 11, 4, 0.78) !important;
           transform: translateY(-3px);
           box-shadow: 0 22px 48px rgba(0, 0, 0, 0.6), 0 0 60px rgba(255, 215, 0, 0.07), inset 0 0 0 1px rgba(255, 215, 0, 0.06);
@@ -1563,15 +1791,16 @@ export default function FilmGlance() {
           transform: translateX(4px);
           color: rgba(255, 215, 0, 0.96) !important;
         }
-        .dym-card:hover .dym-poster { transform: scale(1.04); }
-        .dym-card:active {
+        .dym-card:hover .dym-poster,
+        .fg-fav-card:hover .dym-poster { transform: scale(1.04); }
+        .dym-card:active,
+        .fg-fav-card:active {
           transform: translateY(-1px);
           filter: brightness(0.96);
           transition-duration: 0.08s !important;
         }
-        .dym-card:focus-visible {
-          outline: none;
-        }
+        .dym-card:focus-visible,
+        .fg-fav-card:focus-within { outline: none; }
         .dym-poster { transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
 
         /* Search-again — minimalist text-button with center-out underline */
@@ -1615,6 +1844,331 @@ export default function FilmGlance() {
           .dym-card { gap: 16px !important; padding: 16px 16px 16px 14px !important; }
           .dym-poster-wrap { width: 100px !important; height: 150px !important; }
           .dym-title { font-size: 17px !important; }
+        }
+
+        /* ─── Favourites page (v5.10.30) ────────────────────────────────────
+           Reuses the DYM card frame (selectors above) so the cursor-following
+           gold spotlight and the rotating conic-gradient border come for free.
+           These rules add: the score column on the right, the trash + move
+           buttons in the bottom-right, the folder chip bar, and the move
+           popover. */
+
+        /* Score column — replaces the chevron at the right edge of the card.
+           Big Playfair gold-gradient number, matching the result-page True
+           Movie Rating treatment but sized down. */
+        .fg-fav-score {
+          font-family: 'Playfair Display', serif;
+          font-weight: 700;
+          font-size: 56px;
+          line-height: 1;
+          letter-spacing: -1.4px;
+          background: linear-gradient(135deg, #FFE6A0 0%, #FFD700 38%, #E8A000 78%, #FFD700 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+          text-shadow: 0 0 24px rgba(255, 215, 0, 0.18);
+          transition: text-shadow 0.4s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .fg-fav-card:hover .fg-fav-score {
+          text-shadow: 0 0 38px rgba(255, 215, 0, 0.42), 0 0 80px rgba(255, 215, 0, 0.18);
+          transform: scale(1.04);
+        }
+        .fg-fav-score-suffix {
+          color: rgba(255, 255, 255, 0.32);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 1.4px;
+          text-transform: uppercase;
+          margin-top: 6px;
+        }
+
+        /* Card-bottom action row — trash + move button. Idle: dim. Hover the
+           card: cluster lifts to legible. Each button has its own hover tint. */
+        .fg-fav-actions {
+          position: absolute;
+          right: 14px;
+          bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          opacity: 0.55;
+          transition: opacity 0.35s ease;
+          z-index: 4;
+        }
+        .fg-fav-card:hover .fg-fav-actions { opacity: 1; }
+        .fg-fav-actions button {
+          background: transparent;
+          border: 1px solid transparent;
+          padding: 7px;
+          border-radius: 8px;
+          cursor: pointer;
+          color: rgba(255, 255, 255, 0.42);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+        }
+        .fg-fav-actions .fg-fav-move:hover {
+          color: #FFD700;
+          background: rgba(255, 215, 0, 0.06);
+          border-color: rgba(255, 215, 0, 0.22);
+          transform: translateY(-1px);
+        }
+        .fg-fav-actions .fg-fav-trash:hover {
+          color: #ff6b6b;
+          background: rgba(255, 80, 80, 0.06);
+          border-color: rgba(255, 80, 80, 0.22);
+          transform: translateY(-1px);
+        }
+
+        /* Folder chip currently containing this fav — bottom-left of the card.
+           Clickable shortcut to filter to that folder. Stays subtle so it
+           doesn't compete with the title/poster. */
+        .fg-fav-folder-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 10px 4px 8px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10.5px;
+          font-weight: 600;
+          letter-spacing: 1.1px;
+          text-transform: uppercase;
+          color: rgba(255, 215, 0, 0.78);
+          background: rgba(255, 215, 0, 0.06);
+          border: 1px solid rgba(255, 215, 0, 0.18);
+          border-radius: 6px;
+          cursor: pointer;
+          transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+        }
+        .fg-fav-folder-tag:hover {
+          color: #FFD700;
+          background: rgba(255, 215, 0, 0.12);
+          border-color: rgba(255, 215, 0, 0.42);
+        }
+
+        /* Move-to-folder popover */
+        .fg-move-pop {
+          position: absolute;
+          right: 14px;
+          bottom: 56px;
+          width: 240px;
+          background: rgba(10, 8, 4, 0.96);
+          border: 1px solid rgba(255, 215, 0, 0.22);
+          border-radius: 12px;
+          box-shadow: 0 22px 56px rgba(0, 0, 0, 0.7), 0 0 32px rgba(255, 215, 0, 0.08);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          padding: 6px;
+          z-index: 50;
+          animation: softFade 0.22s ease-out both;
+          max-height: 280px;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 215, 0, 0.32) transparent;
+        }
+        .fg-move-pop::-webkit-scrollbar { width: 4px; }
+        .fg-move-pop::-webkit-scrollbar-thumb { background: rgba(255, 215, 0, 0.32); border-radius: 2px; }
+        .fg-move-pop-row {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%;
+          padding: 9px 12px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          color: rgba(255, 255, 255, 0.82);
+          font-family: 'Syne', sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          letter-spacing: 0.2px;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        .fg-move-pop-row:hover {
+          background: rgba(255, 215, 0, 0.06);
+          color: #FFD700;
+          border-color: rgba(255, 215, 0, 0.18);
+        }
+        .fg-move-pop-row.active {
+          color: #FFD700;
+          background: rgba(255, 215, 0, 0.08);
+          border-color: rgba(255, 215, 0, 0.22);
+        }
+        .fg-move-pop-row.muted { color: rgba(255, 255, 255, 0.52); }
+        .fg-move-pop-row .check { margin-left: auto; color: #FFD700; }
+        .fg-move-pop-divider {
+          height: 1px;
+          background: linear-gradient(to right, transparent, rgba(255, 215, 0, 0.18), transparent);
+          margin: 6px 4px;
+        }
+
+        /* Folder filter chip bar — horizontal, scrolls on overflow. */
+        .fg-folder-bar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          padding: 0 4px;
+          margin-bottom: 22px;
+        }
+        .fg-folder-chip {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          background: rgba(10, 8, 4, 0.62);
+          border: 1px solid rgba(255, 215, 0, 0.10);
+          border-radius: 999px;
+          color: rgba(255, 255, 255, 0.82);
+          font-family: 'Syne', sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          cursor: pointer;
+          transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+          white-space: nowrap;
+        }
+        .fg-folder-chip:hover {
+          background: rgba(255, 215, 0, 0.05);
+          border-color: rgba(255, 215, 0, 0.32);
+          color: #FFD700;
+          transform: translateY(-1px);
+        }
+        .fg-folder-chip.active {
+          background: linear-gradient(135deg, rgba(255, 215, 0, 0.14), rgba(255, 165, 0, 0.05));
+          border-color: rgba(255, 215, 0, 0.55);
+          color: #FFD700;
+          box-shadow: 0 0 22px rgba(255, 215, 0, 0.18), inset 0 1px 0 rgba(255, 215, 0, 0.16);
+        }
+        .fg-folder-chip .count {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.6px;
+          color: rgba(255, 215, 0, 0.62);
+          background: rgba(255, 215, 0, 0.08);
+          padding: 2px 7px;
+          border-radius: 999px;
+        }
+        .fg-folder-chip.active .count {
+          color: #FFD700;
+          background: rgba(255, 215, 0, 0.16);
+        }
+        .fg-folder-chip-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: 4px;
+          opacity: 0;
+          max-width: 0;
+          overflow: hidden;
+          transition: opacity 0.25s ease, max-width 0.25s ease;
+        }
+        .fg-folder-chip:hover .fg-folder-chip-actions,
+        .fg-folder-chip:focus-within .fg-folder-chip-actions {
+          opacity: 1;
+          max-width: 60px;
+        }
+        .fg-folder-chip-actions button {
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.42);
+          padding: 3px;
+          border-radius: 4px;
+          cursor: pointer;
+          display: inline-flex;
+          transition: color 0.2s ease, background 0.2s ease;
+        }
+        .fg-folder-chip-actions button:hover { background: rgba(255, 215, 0, 0.10); color: #FFD700; }
+        .fg-folder-chip-actions .fg-fold-del:hover { background: rgba(255, 80, 80, 0.10); color: #ff6b6b; }
+
+        .fg-folder-new-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          background: transparent;
+          border: 1px dashed rgba(255, 215, 0, 0.32);
+          border-radius: 999px;
+          color: rgba(255, 215, 0, 0.78);
+          font-family: 'Syne', sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          cursor: pointer;
+          transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+        }
+        .fg-folder-new-pill:hover {
+          color: #FFD700;
+          border-color: rgba(255, 215, 0, 0.55);
+          background: rgba(255, 215, 0, 0.04);
+          transform: translateY(-1px);
+        }
+
+        .fg-folder-input {
+          background: rgba(10, 8, 4, 0.78);
+          border: 1px solid rgba(255, 215, 0, 0.42);
+          border-radius: 999px;
+          padding: 8px 14px;
+          color: #FFD700;
+          font-family: 'Syne', sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          outline: none;
+          width: 200px;
+          box-shadow: 0 0 22px rgba(255, 215, 0, 0.16), inset 0 1px 0 rgba(255, 215, 0, 0.12);
+        }
+        .fg-folder-input::placeholder { color: rgba(255, 215, 0, 0.42); }
+
+        /* Confirm-delete modal */
+        .fg-fav-modal-back {
+          position: fixed; inset: 0;
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          z-index: 100;
+          display: flex; align-items: center; justify-content: center;
+          padding: 24px;
+          animation: fadeIn 0.2s ease-out;
+        }
+        .fg-fav-modal {
+          width: 100%;
+          max-width: 420px;
+          background: rgba(10, 8, 4, 0.96);
+          border: 1px solid rgba(255, 215, 0, 0.22);
+          border-radius: 16px;
+          padding: 26px 28px 22px;
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), 0 0 60px rgba(255, 215, 0, 0.05);
+          animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Mobile tweaks */
+        @media (max-width: 640px) {
+          .fg-fav-card { gap: 16px !important; padding: 16px 16px 60px 14px !important; }
+          .fg-fav-card .dym-poster-wrap { width: 100px !important; height: 150px !important; }
+          .fg-fav-title { font-size: 17px !important; }
+          .fg-fav-score { font-size: 42px !important; }
+          .fg-fav-score-col { padding-right: 4px !important; }
+        }
+
+        /* Reduced-motion: kill animations on the new surfaces too */
+        @media (prefers-reduced-motion: reduce) {
+          .fg-fav-card,
+          .fg-fav-card:hover,
+          .fg-fav-card:active,
+          .fg-fav-card .dym-poster,
+          .fg-fav-score,
+          .fg-folder-chip,
+          .fg-folder-new-pill {
+            animation: none !important;
+            transform: none !important;
+            transition: none !important;
+          }
         }
 
         /* Result page — recommendation cards (premium hover) */
@@ -1815,7 +2369,7 @@ export default function FilmGlance() {
           .film-frame { width: 210px !important; padding: 22px 20px !important; }
           .film-title { font-size: 15.5px !important; }
         }
-      `}</style>
+      ` }} />
 
       {/* Header — matches /preview-landing for cross-page consistency */}
       <header
@@ -2087,71 +2641,609 @@ export default function FilmGlance() {
         </div>
       )}
 
-      {showFavs ? (
-        <div style={{ padding: "48px 18px 56px", maxWidth: 680, margin: "0 auto", animation: "fadeIn 0.5s" }}>
-          <div style={{ textAlign: "center", marginBottom: 36 }}>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(24px,4vw,36px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.5 }}>
-              Your <span style={{ color: "#FFD700" }}>Favourites</span>
-            </h2>
-          </div>
-          {favorites.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 20px", animation: "fadeIn 0.5s" }}>
-              <Film size={36} stroke="#333" strokeWidth={1} style={{ marginBottom: 16 }} />
-              <p style={{ color: "#888", fontSize: 14, marginBottom: 6 }}>No favourites yet</p>
-              <p style={{ color: "#333", fontSize: 12 }}>Search for a movie and tap the heart to save it here.</p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {favorites.map((fav, idx) => (
-                <div key={`${fav.title}-${fav.year}`} style={{
-                  display: "flex", alignItems: "center", gap: 14, padding: "14px 18px 24px 18px",
-                  background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                  borderRadius: 13, cursor: "pointer", position: "relative",
-                  animation: `slideUp 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s both`,
-                  transition: "border-color 0.2s, background 0.2s",
+      {showFavs ? (() => {
+        // Derive view state for the favourites surface.
+        const folderById = (id) => folders.find(f => f.id === id);
+        const unsortedFavs = favorites.filter(f => !f.folderId);
+        const inFolderCount = (folderId) => favorites.filter(f => f.folderId === folderId).length;
+        const visibleFavs = activeFolderId === "all"
+          ? favorites
+          : activeFolderId === "unsorted"
+            ? unsortedFavs
+            : favorites.filter(f => f.folderId === activeFolderId);
+        const activeFolderName = activeFolderId === "all"
+          ? null
+          : activeFolderId === "unsorted"
+            ? "Unsorted"
+            : (folderById(activeFolderId)?.name || null);
+        const totalCount = favorites.length;
+        const showFolderBar = totalCount > 0 || folders.length > 0 || newFolderInput !== null;
+
+        return (
+          <div style={{ padding: "32px 18px 56px", maxWidth: 760, margin: "0 auto", animation: "fadeIn 0.5s" }}>
+            <div className="dym-rail dym-rail-top" aria-hidden="true" />
+
+            {/* Header — italic Playfair gold headline + mono diagnostic line.
+                Mirrors the DYM/"Did you mean…" header pattern but tonally
+                celebratory rather than apologetic. */}
+            <div style={{ textAlign: "center", padding: "32px 12px 22px" }}>
+              <h2
+                className="dym-headline"
+                style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontStyle: "italic",
+                  fontSize: "clamp(34px, 6.4vw, 52px)",
+                  fontWeight: 600,
+                  letterSpacing: -0.9,
+                  lineHeight: 1.02,
+                  margin: 0,
+                  animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.02)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
-                onClick={() => loadFav(fav)}
+              >
+                Your Favourites
+              </h2>
+              {totalCount > 0 && (
+                <p
+                  style={{
+                    margin: "16px 0 0",
+                    color: "rgba(255, 255, 255, 0.78)",
+                    fontSize: 11.5,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 700,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    animation: "softFade 0.55s ease-out 0.18s both",
+                  }}
                 >
-                  <div style={{ width: 44, height: 66, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#111" }}>
-                    {fav.poster ? (
-                      <img src={fav.poster} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
-                    ) : (
-                      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Film size={16} style={{ color: "#333" }} />
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, fontWeight: 700, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fav.title}</p>
-                    <p style={{ color: "#888", fontSize: 11 }}>{fav.year}{fav.genre ? ` · ${fav.genre}` : ""}</p>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>{fav.score.ten}</span>
-                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>/10</span>
-                  </div>
-                  <button
-                    onClick={(e) => removeFav(fav, e)}
-                    title="Remove from favourites"
-                    style={{
-                      position: "absolute", bottom: 8, right: 10,
-                      background: "transparent", border: "none", cursor: "pointer",
-                      padding: 4, borderRadius: 6,
-                      color: "rgba(255,255,255,0.15)", transition: "color 0.2s",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.color = "#e53e3e"; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.15)"; }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+                  <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>
+                    {totalCount === 1 ? "1 film saved" : `${totalCount} films saved`}
+                  </span>
+                  {activeFolderName && (
+                    <>
+                      <span style={{ color: "rgba(255, 215, 0, 0.5)", margin: "0 10px" }}>·</span>
+                      <span style={{ color: "#fff", textTransform: "none", letterSpacing: 0.2, fontSize: 12.5 }}>
+                        {activeFolderName}
+                      </span>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
-          )}
-        </div>
-      ) : (
+
+            {/* Folder filter bar — All / Unsorted / per-folder chips / + New Folder.
+                Hidden entirely when no favourites and no folders exist. */}
+            {showFolderBar && (
+              <div className="fg-folder-bar" role="tablist" aria-label="Filter favourites by folder">
+                <button
+                  className={`fg-folder-chip${activeFolderId === "all" ? " active" : ""}`}
+                  onClick={() => setActiveFolderId("all")}
+                  role="tab"
+                  aria-selected={activeFolderId === "all"}
+                >
+                  <Library size={13} aria-hidden="true" />
+                  <span>All</span>
+                  <span className="count">{totalCount}</span>
+                </button>
+                {(folders.length > 0 || unsortedFavs.length > 0) && (
+                  <button
+                    className={`fg-folder-chip${activeFolderId === "unsorted" ? " active" : ""}`}
+                    onClick={() => setActiveFolderId("unsorted")}
+                    role="tab"
+                    aria-selected={activeFolderId === "unsorted"}
+                  >
+                    <Inbox size={13} aria-hidden="true" />
+                    <span>Unsorted</span>
+                    <span className="count">{unsortedFavs.length}</span>
+                  </button>
+                )}
+                {folders.map((fld) => {
+                  const isActive = activeFolderId === fld.id;
+                  const isRenaming = renamingFolderId === fld.id;
+                  return (
+                    <span
+                      key={fld.id}
+                      className={`fg-folder-chip${isActive ? " active" : ""}`}
+                      style={{ paddingRight: isRenaming ? 6 : undefined }}
+                    >
+                      {isRenaming ? (
+                        <>
+                          {isActive ? <FolderOpen size={13} aria-hidden="true" /> : <Folder size={13} aria-hidden="true" />}
+                          <input
+                            autoFocus
+                            value={renamingFolderName}
+                            onChange={(e) => setRenamingFolderName(e.target.value.slice(0, 60))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") renameFolder(fld.id, renamingFolderName);
+                              if (e.key === "Escape") { setRenamingFolderId(null); setRenamingFolderName(""); setFolderError(null); }
+                            }}
+                            onBlur={() => { if (renamingFolderName.trim()) renameFolder(fld.id, renamingFolderName); else { setRenamingFolderId(null); setRenamingFolderName(""); } }}
+                            className="fg-folder-input"
+                            style={{ width: 130, padding: "4px 10px", fontSize: 13 }}
+                            maxLength={60}
+                            aria-label={`Rename folder ${fld.name}`}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setActiveFolderId(fld.id)}
+                            role="tab"
+                            aria-selected={isActive}
+                            style={{ all: "unset", display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                          >
+                            {isActive ? <FolderOpen size={13} aria-hidden="true" /> : <Folder size={13} aria-hidden="true" />}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, whiteSpace: "nowrap" }}>{fld.name}</span>
+                            <span className="count">{inFolderCount(fld.id)}</span>
+                          </button>
+                          <span className="fg-folder-chip-actions" aria-hidden="false">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setRenamingFolderId(fld.id); setRenamingFolderName(fld.name); setFolderError(null); }}
+                              title={`Rename ${fld.name}`}
+                              aria-label={`Rename ${fld.name}`}
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              className="fg-fold-del"
+                              onClick={(e) => { e.stopPropagation(); setDeleteFolderTarget(fld); }}
+                              title={`Delete ${fld.name}`}
+                              aria-label={`Delete ${fld.name}`}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  );
+                })}
+                {newFolderInput !== null ? (
+                  <input
+                    autoFocus
+                    value={newFolderInput}
+                    onChange={(e) => setNewFolderInput(e.target.value.slice(0, 60))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") createFolder(newFolderInput);
+                      if (e.key === "Escape") { setNewFolderInput(null); setFolderError(null); }
+                    }}
+                    onBlur={() => { if (newFolderInput.trim()) createFolder(newFolderInput); else { setNewFolderInput(null); setFolderError(null); } }}
+                    className="fg-folder-input"
+                    placeholder="Folder name…"
+                    maxLength={60}
+                    aria-label="New folder name"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="fg-folder-new-pill"
+                    onClick={() => { setNewFolderInput(""); setFolderError(null); }}
+                    aria-label="Create new folder"
+                  >
+                    <FolderPlus size={13} aria-hidden="true" />
+                    <span>New folder</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {folderError && (
+              <p
+                role="alert"
+                style={{
+                  textAlign: "center",
+                  color: "#ff8b8b",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: 0.6,
+                  marginTop: -8,
+                  marginBottom: 14,
+                }}
+              >
+                {folderError}
+              </p>
+            )}
+
+            {/* Empty state — varies by active filter. The "no favourites at all"
+                copy preserves the spirit of the original (search → tap heart). */}
+            {visibleFavs.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "70px 20px 30px", animation: "softFade 0.55s ease-out 0.4s both" }}>
+                {totalCount === 0 ? (
+                  <>
+                    <Heart size={42} stroke="rgba(255, 215, 0, 0.32)" strokeWidth={1.2} style={{ marginBottom: 18 }} aria-hidden="true" />
+                    <p style={{
+                      fontFamily: "'Playfair Display', serif", fontStyle: "italic",
+                      fontSize: 22, fontWeight: 600, color: "rgba(255, 215, 0, 0.85)",
+                      marginBottom: 10, letterSpacing: -0.3,
+                    }}>
+                      No favourites yet.
+                    </p>
+                    <p style={{
+                      fontFamily: "'Syne', sans-serif", fontSize: 14,
+                      color: "rgba(255, 255, 255, 0.52)", lineHeight: 1.55, maxWidth: 320, margin: "0 auto",
+                    }}>
+                      Search for a film and tap the heart to keep it here.
+                    </p>
+                  </>
+                ) : activeFolderId === "unsorted" ? (
+                  <>
+                    <Inbox size={36} stroke="rgba(255, 215, 0, 0.42)" strokeWidth={1.3} style={{ marginBottom: 16 }} aria-hidden="true" />
+                    <p style={{
+                      fontFamily: "'Playfair Display', serif", fontStyle: "italic",
+                      fontSize: 20, fontWeight: 600, color: "rgba(255, 215, 0, 0.85)",
+                      marginBottom: 8, letterSpacing: -0.3,
+                    }}>
+                      Everything is filed.
+                    </p>
+                    <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: "rgba(255, 255, 255, 0.5)" }}>
+                      Nice. Every favourite lives in a folder.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Folder size={36} stroke="rgba(255, 215, 0, 0.42)" strokeWidth={1.3} style={{ marginBottom: 16 }} aria-hidden="true" />
+                    <p style={{
+                      fontFamily: "'Playfair Display', serif", fontStyle: "italic",
+                      fontSize: 20, fontWeight: 600, color: "rgba(255, 215, 0, 0.85)",
+                      marginBottom: 8, letterSpacing: -0.3,
+                    }}>
+                      No films in this folder yet.
+                    </p>
+                    <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: "rgba(255, 255, 255, 0.55)", lineHeight: 1.5, maxWidth: 320, margin: "0 auto" }}>
+                      Move a favourite here using the <FolderInput size={11} style={{ display: "inline", verticalAlign: "-1px", color: "rgba(255, 215, 0, 0.85)" }} aria-hidden="true" /> icon on any card.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 4px", marginBottom: 28 }}>
+                {visibleFavs.map((fav, i) => {
+                  const favKey = `${fav.title}-${fav.year}`;
+                  const tagFolder = fav.folderId ? folderById(fav.folderId) : null;
+                  const score = fav.score?.ten;
+                  const showScore = typeof score === "number" && score > 0;
+                  const directorMaxWidth = 240;
+                  const isMoveOpen = moveMenuFavKey === favKey;
+                  return (
+                    <div
+                      key={favKey}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${fav.title}${fav.year ? ` (${fav.year})` : ""}`}
+                      onClick={() => loadFav(fav)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadFav(fav); } }}
+                      onPointerMove={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+                        e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+                      }}
+                      className="fg-fav-card"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 22,
+                        padding: "20px 22px 20px 22px",
+                        background: "rgba(10, 8, 4, 0.62)",
+                        border: "1px solid rgba(255, 215, 0, 0.10)",
+                        borderRadius: 14,
+                        cursor: "pointer",
+                        width: "100%",
+                        textAlign: "left",
+                        position: "relative",
+                        // overflow:visible so the move-to-folder popover can
+                        // float above adjacent cards without being clipped.
+                        opacity: 0,
+                        animation: `softFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.28 + i * 0.06}s both`,
+                        transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease",
+                      }}
+                    >
+                      {/* Poster — same dimensions and treatment as DYM */}
+                      <div className="dym-poster-wrap" style={{
+                        width: 130, height: 195,
+                        borderRadius: 8,
+                        background: "rgba(255, 255, 255, 0.03)",
+                        flexShrink: 0,
+                        overflow: "hidden",
+                        position: "relative",
+                        boxShadow: "0 10px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+                      }}>
+                        {fav.poster ? (
+                          <img
+                            className="dym-poster"
+                            src={fav.poster}
+                            alt=""
+                            loading="lazy"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="dym-poster" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Film size={28} style={{ color: "rgba(255, 255, 255, 0.18)" }} aria-hidden="true" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Title block + chips + overview */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="fg-fav-title" style={{
+                          fontFamily: "'Syne', sans-serif",
+                          fontSize: 20, fontWeight: 700,
+                          color: "#fff",
+                          letterSpacing: -0.3,
+                          lineHeight: 1.22,
+                          marginBottom: 10,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {fav.title}
+                        </div>
+                        <div style={{
+                          display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+                          marginBottom: (fav.overview || fav.director || fav.runtime) ? 12 : 0,
+                        }}>
+                          {fav.year ? (
+                            <span style={{
+                              display: "inline-block",
+                              fontSize: 14, fontWeight: 700, letterSpacing: 1,
+                              color: "rgba(255, 215, 0, 0.88)",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              background: "rgba(255, 215, 0, 0.08)",
+                              padding: "5px 13px", borderRadius: 6,
+                              border: "1px solid rgba(255, 215, 0, 0.18)",
+                            }}>{fav.year}</span>
+                          ) : null}
+                          {fav.runtime ? (
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 4,
+                              fontSize: 14, fontWeight: 600, letterSpacing: 0.4,
+                              color: "rgba(255, 255, 255, 0.78)",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              background: "rgba(255, 255, 255, 0.05)",
+                              padding: "5px 13px", borderRadius: 6,
+                              border: "1px solid rgba(255, 255, 255, 0.10)",
+                            }}>
+                              {fav.runtime >= 60
+                                ? `${fav.runtime} min · ${Math.floor(fav.runtime / 60)}h ${fav.runtime % 60}m`
+                                : `${fav.runtime} min`}
+                            </span>
+                          ) : null}
+                          {fav.director ? (
+                            <span style={{
+                              fontSize: 15, fontWeight: 500,
+                              color: "rgba(255, 255, 255, 0.7)",
+                              fontFamily: "'Syne', sans-serif",
+                              letterSpacing: 0.15,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              maxWidth: directorMaxWidth,
+                            }}>
+                              <span style={{ color: "rgba(255, 215, 0, 0.62)", fontWeight: 600 }}>Directed by</span>&nbsp;{fav.director}
+                            </span>
+                          ) : null}
+                        </div>
+                        {fav.overview ? (
+                          <p style={{
+                            margin: 0,
+                            fontFamily: "'Syne', sans-serif",
+                            fontSize: 14.5,
+                            fontWeight: 400,
+                            color: "rgba(255, 255, 255, 0.72)",
+                            lineHeight: 1.55,
+                            letterSpacing: 0.1,
+                            paddingRight: 12,
+                          }}>
+                            {trimOverview(fav.overview, 180)}
+                          </p>
+                        ) : (
+                          fav.genre ? (
+                            <p style={{
+                              margin: 0,
+                              fontFamily: "'Syne', sans-serif",
+                              fontSize: 13,
+                              fontWeight: 500,
+                              color: "rgba(255, 255, 255, 0.42)",
+                              letterSpacing: 0.2,
+                            }}>
+                              {fav.genre}
+                            </p>
+                          ) : null
+                        )}
+                        {tagFolder && (
+                          <button
+                            type="button"
+                            className="fg-fav-folder-tag"
+                            onClick={(e) => { e.stopPropagation(); setActiveFolderId(tagFolder.id); }}
+                            title={`Filter to ${tagFolder.name}`}
+                            style={{ marginTop: 12 }}
+                            aria-label={`Filter favourites by folder ${tagFolder.name}`}
+                          >
+                            <FolderOpen size={11} aria-hidden="true" />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>{tagFolder.name}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Score column — replaces the DYM chevron */}
+                      <div className="fg-fav-score-col" style={{
+                        flexShrink: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingRight: 8,
+                        minWidth: 80,
+                      }}>
+                        {showScore ? (
+                          <>
+                            <span className="fg-fav-score">{Number(score).toFixed(1)}</span>
+                            <span className="fg-fav-score-suffix">out of 10</span>
+                          </>
+                        ) : (
+                          <span style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 11,
+                            color: "rgba(255, 255, 255, 0.32)",
+                            letterSpacing: 1.4,
+                            textTransform: "uppercase",
+                          }}>
+                            no score
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action cluster — bottom-right of card */}
+                      <div className="fg-fav-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="fg-fav-move"
+                          onClick={(e) => { e.stopPropagation(); setMoveMenuFavKey(isMoveOpen ? null : favKey); }}
+                          title="Move to folder"
+                          aria-label="Move to folder"
+                          aria-haspopup="menu"
+                          aria-expanded={isMoveOpen}
+                        >
+                          <FolderInput size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="fg-fav-trash"
+                          onClick={(e) => removeFav(fav, e)}
+                          title="Remove from favourites"
+                          aria-label={`Remove ${fav.title} from favourites`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      {/* Move-to-folder popover */}
+                      {isMoveOpen && (
+                        <div className="fg-move-pop" role="menu" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className={`fg-move-pop-row${!fav.folderId ? " active" : " muted"}`}
+                            onClick={() => moveFavToFolder(fav, null)}
+                            role="menuitem"
+                          >
+                            <Inbox size={14} aria-hidden="true" />
+                            <span>Unsorted</span>
+                            {!fav.folderId && <Check size={14} className="check" aria-hidden="true" />}
+                          </button>
+                          {folders.length > 0 && <div className="fg-move-pop-divider" aria-hidden="true" />}
+                          {folders.map((fld) => (
+                            <button
+                              key={fld.id}
+                              type="button"
+                              className={`fg-move-pop-row${fav.folderId === fld.id ? " active" : ""}`}
+                              onClick={() => moveFavToFolder(fav, fld.id)}
+                              role="menuitem"
+                            >
+                              {fav.folderId === fld.id ? <FolderOpen size={14} aria-hidden="true" /> : <Folder size={14} aria-hidden="true" />}
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fld.name}</span>
+                              {fav.folderId === fld.id && <Check size={14} className="check" aria-hidden="true" />}
+                            </button>
+                          ))}
+                          <div className="fg-move-pop-divider" aria-hidden="true" />
+                          <button
+                            type="button"
+                            className="fg-move-pop-row"
+                            onClick={() => { setMoveMenuFavKey(null); setNewFolderInput(""); setFolderError(null); }}
+                            role="menuitem"
+                          >
+                            <FolderPlus size={14} aria-hidden="true" />
+                            <span>New folder…</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="dym-rail dym-rail-bot" style={{ marginTop: 12 }} aria-hidden="true" />
+
+            {/* Confirm-delete folder modal */}
+            {deleteFolderTarget && (
+              <div
+                className="fg-fav-modal-back"
+                onClick={() => setDeleteFolderTarget(null)}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="fg-fav-del-title"
+              >
+                <div className="fg-fav-modal" onClick={(e) => e.stopPropagation()}>
+                  <h3
+                    id="fg-fav-del-title"
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontStyle: "italic",
+                      fontSize: 24,
+                      fontWeight: 600,
+                      color: "#FFD700",
+                      letterSpacing: -0.4,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Delete &ldquo;{deleteFolderTarget.name}&rdquo;?
+                  </h3>
+                  <p style={{
+                    fontFamily: "'Syne', sans-serif",
+                    fontSize: 14,
+                    color: "rgba(255, 255, 255, 0.72)",
+                    lineHeight: 1.55,
+                    marginBottom: 22,
+                  }}>
+                    The {inFolderCount(deleteFolderTarget.id)} {inFolderCount(deleteFolderTarget.id) === 1 ? "film" : "films"} inside will move to <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>Unsorted</span>. The folder itself can&rsquo;t be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteFolderTarget(null)}
+                      style={{
+                        padding: "10px 20px",
+                        background: "transparent",
+                        border: "1px solid rgba(255, 255, 255, 0.14)",
+                        borderRadius: 10,
+                        color: "rgba(255, 255, 255, 0.72)",
+                        fontFamily: "'Syne', sans-serif",
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        letterSpacing: 0.2,
+                        cursor: "pointer",
+                        transition: "border-color 0.25s, color 0.25s, background 0.25s",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.32)"; e.currentTarget.style.color = "#fff"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)"; e.currentTarget.style.color = "rgba(255,255,255,0.72)"; }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteFolder(deleteFolderTarget)}
+                      style={{
+                        padding: "10px 20px",
+                        background: "linear-gradient(135deg, rgba(255, 80, 80, 0.18), rgba(220, 40, 40, 0.10))",
+                        border: "1px solid rgba(255, 80, 80, 0.45)",
+                        borderRadius: 10,
+                        color: "#ff8b8b",
+                        fontFamily: "'Syne', sans-serif",
+                        fontSize: 13.5,
+                        fontWeight: 700,
+                        letterSpacing: 0.2,
+                        cursor: "pointer",
+                        transition: "background 0.25s, border-color 0.25s, color 0.25s, transform 0.25s",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255, 80, 80, 0.28), rgba(220, 40, 40, 0.14))"; e.currentTarget.style.color = "#ffb6b6"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255, 80, 80, 0.18), rgba(220, 40, 40, 0.10))"; e.currentTarget.style.color = "#ff8b8b"; e.currentTarget.style.transform = "translateY(0)"; }}
+                    >
+                      Delete folder
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        );
+      })() : (
         <main style={{ maxWidth: (result || loading) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
           {/* Search area */}
           <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>

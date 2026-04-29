@@ -1,5 +1,89 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued) — Favourites Page Redesign (v5.10.30) + Folders System
+
+### Context
+
+Session opened with the Favourites page priority from the prior chat's NEXT STEPS list. The existing favourites surface was a thin pill (44×66 poster, plain title, year, score, trash) — visually disconnected from the rest of the v5.10 brand pass. User asked for a ruthless overhaul: take the **DYM (Did You Mean…) suggestion-card** visual language as the reference, port it to favourites, plus add a folders organizational system with create/rename/delete, and a per-card "move to folder" affordance, plus an aggregated rating on the right and a trash icon bottom-right. No AI slop, max effort, no push-to-staging until 100% satisfied.
+
+### Workstream 1: Folder data model + Supabase migration
+
+New migration `011_favorite_folders.sql` applied to production via Supabase MCP after explicit user approval. Adds:
+
+- **`favorite_folders` table** — id (uuid), user_id (uuid FK profiles ON DELETE CASCADE), name (1-60 chars, unique per user), position (int for display order), created_at. RLS enabled with 4 owner-only policies (SELECT/INSERT/UPDATE/DELETE via `auth.uid() = user_id`).
+- **4 nullable columns on `favorites`:** `folder_id` (uuid FK favorite_folders ON DELETE SET NULL — folder deletion re-orphans cards to "Unsorted" rather than losing them), `runtime` (int minutes), `director` (text), `overview` (text). Older rows stay with nulls; the redesigned card renders gracefully without those chips.
+- 1 index on `favorite_folders(user_id, position, created_at)`, 1 partial index on `favorites(folder_id) WHERE folder_id IS NOT NULL`.
+- Verified post-apply via SQL probe: 4 RLS policies, RLS enabled, 4 new fav columns confirmed.
+
+### Workstream 2: Component-level folder CRUD
+
+Same optimistic-update + revert-on-error pattern as the existing `toggleFav`/`removeFav`:
+
+- `loadUserData` extended to fetch favourites + folders in parallel (`Promise.all`), maps the new fav columns onto local state.
+- `toggleFav` — when adding, also writes `runtime` (parsed from "120 min" or "2h 0m" string forms), `director`, `overview` (from `result.description`).
+- New helpers: `createFolder`, `renameFolder`, `deleteFolder` (re-orphans cards on success), `moveFavToFolder`. Each performs the optimistic local mutation, the Supabase round-trip, and reverts state if the network/RLS rejects.
+- Sign-out resets `folders`, `activeFolderId` alongside `favorites`.
+
+### Workstream 3: Card redesign (DYM-style port)
+
+The existing `.dym-card` CSS rules (cursor-tracking radial spotlight via `--mx`/`--my` CSS vars, animated rotating conic-gradient 1px ring border, lift-on-hover, poster scale 1.04) were **shared with `.fg-fav-card`** by widening each selector — no duplication, no drift. New favourites-only CSS adds:
+
+- **`.fg-fav-score` column** — 56px Playfair gold-gradient number with two-layer drop-shadow glow (24px close); hover bumps to 38+80px glow + scale 1.04. Mirrors the result-page True Movie Rating treatment, scaled down. Falls back to a "no score" mono caption when score is 0/missing.
+- **`.fg-fav-actions` cluster** — bottom-right of card. Trash button (red glow on hover) + "move to folder" button (gold glow). Idle dim → bumps to legible when card is hovered.
+- **`.fg-fav-folder-tag`** — small mono pill bottom-left of card showing the containing folder name (only rendered when `folderId` is set). Clickable shortcut to filter the chip bar to that folder.
+- **`.fg-move-pop`** — popover anchored to the move button, listing folders + "Unsorted" + "+ New folder…", with active-state checkmark, gold scrollbar on overflow, soft fade-in.
+- **`.fg-folder-chip` + `.fg-folder-new-pill` + `.fg-folder-input`** — chip-bar UI. Chips have count badge, hover lift, `.active` state with gold gradient bg + inner glow; rename/delete icon-buttons appear on hover via `max-width` transition. New-folder pill switches to an inline input with gold border and brand-coloured caret.
+- **`.fg-fav-modal`** — confirm-delete folder dialog. Italic Playfair gold heading "Delete &lsquo;X&rsquo;?", explanatory body in Syne body font ("the N films inside will move to Unsorted"), Cancel + Delete buttons in brand colours.
+
+### Workstream 4: Render block
+
+Replaced the entire `showFavs` JSX (60 lines) with a new IIFE-wrapped block (~330 lines). Order:
+
+1. Top letterbox rail (reused `.dym-rail-top`)
+2. Italic Playfair gold "Your Favourites" headline + JetBrains Mono diagnostic "// X films saved · [folder name]"
+3. Folder filter chip bar (All / Unsorted / per-folder / + New Folder)
+4. Card list (filtered by `activeFolderId`) — DYM-shape with score column, action cluster, folder tag
+5. Per-filter empty states (no favs at all → heart + invitation; Unsorted with 0 → "Everything is filed. Nice."; folder with 0 → "Move a favourite here using the &lt;icon&gt; on any card")
+6. Bottom letterbox rail
+7. Confirm-delete modal (when `deleteFolderTarget` is set)
+
+Document-level `mousedown` listener handles click-outside-to-close for the move popover (root-level fixed backdrop wouldn't work because `.fg-fav-card` has `isolation: isolate` and would render under the backdrop).
+
+### Workstream 5: Pre-existing hydration crash, found and fixed
+
+Local playwright verify caught a "Application error: a client-side exception has occurred" on /#favourites. Root cause: the `<style>{`...`}</style>` JSX text-node escaping bug — server SSR escapes `'` → `&#x27;` and `&` → `&amp;` in CSS text, but client hydration doesn't, so the `@import url('https://fonts.googleapis.com/css2?...')` CSS line breaks (browser sees `&#x27;https://...` as the URL, refuses to load, then the hydration mismatch unmounts the entire React tree, dispatching the "Missing ActionQueueContext" invariant). Fix: switch the inline style block to `<style dangerouslySetInnerHTML={{ __html: `...` }} />` — same fix `preview-landing.jsx` got in PR #37 era. After the fix, both home page and /#favourites render clean with only a stray 404 in console (likely a missing dev asset, not related).
+
+### Workstream 6: Verification artifacts
+
+Wrote `scratch/verify-favourites.mjs` (gitignored, alongside the prior `verify-loading.mjs` from PR #40). Uses temporary `playwright-core@1.55` install. Two screenshots: home idle (full landing with grid bg, hero, ticker, How It Works, film strip) and /#favourites no-auth (auth modal correctly pops). Cards-with-data verification deferred to user's signed-in session (playwright can't fake a Supabase JWT).
+
+### Workstream 7: Windows path-casing diagnostic detour
+
+`next build` repeatedly failed with `Cannot read properties of null (reading 'useContext')` during prerender. Investigated by stashing my changes and rebuilding the baseline — same error occurred. Root cause is Windows case-insensitive FS + this Bash session's lowercase cwd (`film-glance-terminal`) vs. the actual filesystem casing (`Film-Glance-Terminal`); webpack treats them as separate paths and bundles React twice. **Vercel builds on case-sensitive Linux so this artifact never reaches production.** No code change needed.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +1170 / -84 | Folder state + helpers, redesigned card render block, shared `.dym-card` CSS extension, hydration-mismatch fix |
+| `sql/migrations/011_favorite_folders.sql` | NEW | `favorite_folders` table + 4 new fav columns |
+| `tech-specs.md` | +2 rows | Change Log: new CURRENT STATE + NEXT STEPS, prior 29 Apr rows tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+| `scratch/verify-favourites.mjs` | NEW (gitignored) | Local playwright verification harness |
+
+### Key learnings
+
+1. **Reuse beats reinvention.** Sharing `.dym-card` CSS via selector lists (`.dym-card, .fg-fav-card`) instead of copy-pasting the rules kept ~120 lines of CSS DRY and means the gold spotlight + conic border stays visually identical across the two surfaces.
+2. **Optimistic-update + revert-on-error is the right pattern for collection CRUD.** Already proven by `toggleFav`/`removeFav` — extending it to folders meant zero new error UX (every helper writes a `setFolderError(...)` line on failure that the chip-bar reads).
+3. **`isolation: isolate` + popover = stacking-context trap.** Initial click-outside backdrop placed at root z-index 40 was hidden behind the popover because the card creates its own stacking context. Document-level listener is the cleaner pattern.
+4. **JSX text-node `<style>` content is dangerous.** Any apostrophe, ampersand, or `<` in the CSS becomes an HTML entity on SSR and a literal char on client → guaranteed hydration mismatch. Always use `dangerouslySetInnerHTML` for inline `<style>` blocks. The bible doc from PR #37 era already noted this; the fix wasn't applied to the main film-glance.jsx until now.
+
+### Next session
+
+User signs in to localhost dev, hits `/#favourites`, exercises: create folder, rename, delete with confirm, move card to folder, remove card, hover spotlight on card, click card → loadFav navigates to result page. If satisfied, commit and push to staging → Vercel preview → PR → merge to main. If iterations needed, capture feedback and adjust before push.
+
+---
+
 ## Session: April 28-29, 2026 — Movie Result Page Comprehensive Redesign (PRs #43, #44) + DYM Polish
 
 ### Context
