@@ -6,7 +6,7 @@ import {
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
-  Music, BookOpen
+  Music, BookOpen, Gauge
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -491,11 +491,16 @@ function ResultSidebar({ result, sections }) {
   return (
     <aside className="fg-sidebar" aria-label="Movie sections" style={{
       position: "fixed",
-      right: 12,
-      top: 80,
-      bottom: 24,
+      // Anchored to the LEFT of the main column: sidebar's right edge sits 24px
+      // from the main column's left edge. Main column is centered with max-width
+      // 720px so its left edge is at viewport-50% - 360px.
+      // Sidebar right (from viewport-right) = viewport - (50% - 360) - SIDEBAR_WIDTH(264)
+      // ... easier expressed via right anchor: 50% + 360 + 24.
+      right: "calc(50% + 384px)",
+      top: 110,
       zIndex: 30,
       width: 264,
+      maxHeight: "calc(100vh - 140px)",
       overflowY: "auto",
       overflowX: "hidden",
       background: "rgba(8,6,2,0.82)",
@@ -569,9 +574,9 @@ function HotTakeRow({ text, idx, positive, visible, delay }) {
   return (
     <div style={{
       display: "flex", alignItems: "flex-start", gap: 14,
-      padding: "16px 18px", borderRadius: 12,
+      padding: "18px 20px", borderRadius: 12,
       fontFamily: "'Syne',sans-serif",
-      fontSize: 15.5, lineHeight: 1.55, color: "rgba(255,255,255,0.9)",
+      fontSize: 17, lineHeight: 1.55, color: "rgba(255,255,255,0.92)",
       background: "rgba(0,0,0,0.42)",
       border: `1px solid rgba(${accent},0.14)`,
       borderLeft: `3px solid rgba(${accent},0.65)`,
@@ -1553,7 +1558,7 @@ export default function FilmGlance() {
         }
         .fg-trailer-cta:hover {
           background: linear-gradient(135deg, #FFE89A 0%, #FFD700 48%, #FFC300 100%) !important;
-          transform: translateY(-2px) scale(1.03);
+          transform: translateY(-2px);
           box-shadow: 0 0 36px rgba(255,215,0,0.85), 0 0 70px rgba(255,215,0,0.42), inset 0 1px 0 rgba(255,255,255,0.5) !important;
           animation-play-state: paused;
         }
@@ -1567,7 +1572,10 @@ export default function FilmGlance() {
           border-radius: 3px;
         }
         .fg-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,215,0,0.55); }
-        @media (max-width: 1279px) {
+        /* Sidebar width 264 + 24 gap + 360 (half main col) needs 648 each side
+           plus a small viewport-edge cushion. Min ~1380px viewport before the
+           left-of-main positioning has room to fit. */
+        @media (max-width: 1379px) {
           .fg-sidebar { display: none !important; }
         }
         .fg-side-link:not(.active):hover {
@@ -2267,6 +2275,7 @@ export default function FilmGlance() {
           {result && !result.notFound && !result.coming_soon && (
             <ResultSidebar result={result} sections={[
               { id: "fg-overview", label: "Movie Overview", icon: Film, show: true },
+              { id: "fg-score", label: "True Rating Score", icon: Gauge, show: result.score && typeof result.score.ten !== "undefined" },
               { id: "fg-sources", label: "Source Breakdown", icon: BarChart3, show: result.sources && result.sources.length > 0 },
               { id: "fg-hottake", label: "Good & Bad", icon: Flame, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
               { id: "fg-videos", label: "Video Reviews", icon: Youtube, show: result.video_reviews && result.video_reviews.length > 0 },
@@ -2398,21 +2407,21 @@ export default function FilmGlance() {
                           onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
                           className="fg-trailer-cta"
                           style={{
-                            display: "inline-flex", alignItems: "center", gap: 8,
-                            padding: "9px 18px", borderRadius: 8,
+                            display: "inline-flex", alignItems: "center", gap: 9,
+                            padding: "11px 22px", borderRadius: 9,
                             background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
                             border: "1px solid rgba(255,215,0,0.85)",
-                            color: "#050505",
+                            color: "#0a0a0a",
                             fontFamily: "'Syne',sans-serif",
-                            fontSize: 13, fontWeight: 800,
-                            letterSpacing: 1.2, textTransform: "uppercase",
+                            fontSize: 14, fontWeight: 700,
+                            letterSpacing: 0.5, textTransform: "uppercase",
                             cursor: "pointer",
-                            boxShadow: "0 0 16px rgba(255,215,0,0.45), 0 0 32px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,255,255,0.32)",
+                            boxShadow: "0 0 16px rgba(255,215,0,0.45), 0 0 32px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,255,255,0.3)",
                             animation: "trailerPulse 2.6s ease-in-out infinite",
-                            transition: "transform 0.3s cubic-bezier(0.16,1,0.3,1)",
+                            transition: "transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s ease",
                           }}
                         >
-                          <Play size={12} fill="#050505" stroke="#050505" />
+                          <Play size={13} fill="#0a0a0a" stroke="#0a0a0a" />
                           Watch Trailer
                         </button>
                       )}
@@ -2450,10 +2459,11 @@ export default function FilmGlance() {
                 {(() => {
                   const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
                   return (
-                    <div style={{
+                    <div id="fg-score" style={{
                       marginTop: 26,
                       padding: "22px 24px 24px",
                       borderRadius: 14,
+                      scrollMarginTop: 110,
                       background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%)",
                       border: "1px solid rgba(255,255,255,0.06)",
                       borderTop: "1px solid rgba(255,215,0,0.14)",
@@ -2472,7 +2482,7 @@ export default function FilmGlance() {
                           flexShrink: 0,
                           boxShadow: "0 0 18px rgba(255,215,0,0.12), inset 0 1px 0 rgba(255,215,0,0.18)",
                         }}>
-                          <Sparkles size={15} />
+                          <Gauge size={16} />
                         </span>
                         <h3 style={{
                           margin: 0,
@@ -2520,12 +2530,13 @@ export default function FilmGlance() {
                         </div>
                         <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
                           <p style={{
-                            fontFamily: "'Playfair Display',serif",
-                            fontStyle: "italic",
-                            fontSize: 18, color: "rgba(255,255,255,0.8)",
-                            lineHeight: 1.35, margin: 0,
-                            letterSpacing: -0.2,
-                          }}>Averaged across every major review site, normalized to a single honest score.</p>
+                            fontFamily: "'Syne',sans-serif",
+                            fontStyle: "normal",
+                            fontSize: 16, fontWeight: 500,
+                            color: "rgba(255,255,255,0.82)",
+                            lineHeight: 1.55, margin: 0,
+                            letterSpacing: 0.1,
+                          }}>Rating from the average of all major movie review sites.</p>
                           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                             <StarDisplay rating={result.score.stars} sz={22} />
                             <span style={{
@@ -2573,33 +2584,33 @@ export default function FilmGlance() {
                   <div style={{ padding: "12px 26px 28px" }}>
                     {result.hot_take.good?.length > 0 && (
                       <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 28 : 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 11,
-                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                            background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(22,163,74,0.08))",
-                            border: "1px solid rgba(34,197,94,0.4)",
-                            boxShadow: "0 0 24px rgba(34,197,94,0.18), inset 0 1px 0 rgba(34,197,94,0.22)",
-                          }}>
-                            <ThumbsUp size={19} stroke="#22c55e" strokeWidth={2.2} />
-                          </div>
-                          <div>
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                            <div style={{
+                              width: 40, height: 40, borderRadius: 11,
+                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                              background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(22,163,74,0.08))",
+                              border: "1px solid rgba(34,197,94,0.4)",
+                              boxShadow: "0 0 24px rgba(34,197,94,0.18), inset 0 1px 0 rgba(34,197,94,0.22)",
+                            }}>
+                              <ThumbsUp size={19} stroke="#22c55e" strokeWidth={2.2} />
+                            </div>
                             <span style={{
-                              display: "block",
                               fontFamily: "'Playfair Display',serif",
                               fontStyle: "italic",
-                              fontSize: 24, fontWeight: 600, letterSpacing: -0.4,
-                              color: "#22c55e", lineHeight: 1.1,
+                              fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
+                              color: "#22c55e", lineHeight: 1,
                             }}>The Good</span>
-                            <span style={{
-                              display: "block",
-                              fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 10.5, fontWeight: 600,
-                              color: "rgba(34,197,94,0.62)",
-                              letterSpacing: 1.4, textTransform: "uppercase",
-                              marginTop: 3,
-                            }}>What critics & audiences praise</span>
                           </div>
+                          <span style={{
+                            display: "block",
+                            fontFamily: "'JetBrains Mono',monospace",
+                            fontSize: 11, fontWeight: 600,
+                            color: "rgba(34,197,94,0.62)",
+                            letterSpacing: 1.4, textTransform: "uppercase",
+                            marginTop: 9,
+                            marginLeft: 54,
+                          }}>What critics & audiences praise</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.good.map((point, i) => (
@@ -2617,33 +2628,33 @@ export default function FilmGlance() {
                     )}
                     {result.hot_take.bad?.length > 0 && (
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 11,
-                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                            background: "linear-gradient(135deg, rgba(239,68,68,0.22), rgba(220,38,38,0.08))",
-                            border: "1px solid rgba(239,68,68,0.4)",
-                            boxShadow: "0 0 24px rgba(239,68,68,0.18), inset 0 1px 0 rgba(239,68,68,0.22)",
-                          }}>
-                            <ThumbsDown size={19} stroke="#ef4444" strokeWidth={2.2} />
-                          </div>
-                          <div>
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                            <div style={{
+                              width: 40, height: 40, borderRadius: 11,
+                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                              background: "linear-gradient(135deg, rgba(239,68,68,0.22), rgba(220,38,38,0.08))",
+                              border: "1px solid rgba(239,68,68,0.4)",
+                              boxShadow: "0 0 24px rgba(239,68,68,0.18), inset 0 1px 0 rgba(239,68,68,0.22)",
+                            }}>
+                              <ThumbsDown size={19} stroke="#ef4444" strokeWidth={2.2} />
+                            </div>
                             <span style={{
-                              display: "block",
                               fontFamily: "'Playfair Display',serif",
                               fontStyle: "italic",
-                              fontSize: 24, fontWeight: 600, letterSpacing: -0.4,
-                              color: "#ef4444", lineHeight: 1.1,
+                              fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
+                              color: "#ef4444", lineHeight: 1,
                             }}>The Bad</span>
-                            <span style={{
-                              display: "block",
-                              fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 10.5, fontWeight: 600,
-                              color: "rgba(239,68,68,0.62)",
-                              letterSpacing: 1.4, textTransform: "uppercase",
-                              marginTop: 3,
-                            }}>Where it falls short</span>
                           </div>
+                          <span style={{
+                            display: "block",
+                            fontFamily: "'JetBrains Mono',monospace",
+                            fontSize: 11, fontWeight: 600,
+                            color: "rgba(239,68,68,0.62)",
+                            letterSpacing: 1.4, textTransform: "uppercase",
+                            marginTop: 9,
+                            marginLeft: 54,
+                          }}>Where it falls short</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.bad.map((point, i) => (
