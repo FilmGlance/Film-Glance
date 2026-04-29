@@ -1,5 +1,48 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued, round 2) — Favourites polish (v5.10.31)
+
+After v5.10.30 hit staging the user reviewed it on the Vercel preview and gave five pieces of feedback. All addressed in v5.10.31.
+
+1. **Diagnostic line removed.** The italic Playfair "Your Favourites" headline now stands alone — the JetBrains Mono `// X films saved · folder name` slug under it was deleted per user "remove the # of films saved line" request.
+2. **Score format `8.3/10` inline.** Was a stacked `8.3` + tiny mono `OUT OF 10` underneath. Now baseline-aligned: 56px Playfair gold-gradient `8.3` + 22px Playfair gold `/10` next to it. The `.fg-fav-score-suffix` rule was rewritten from caps-letterspaced mono to a Playfair slug.
+3. **Card detail richness via two-tier enrichment.** User flagged that director + plot were missing on existing fav cards (they were saved before yesterday's metadata-columns migration, so all 18 rows had nulls). Two-tier fix:
+   - **Migration 012** — one-shot SQL backfill: `UPDATE favorites SET runtime/director/overview FROM movie_cache via search_key match`. 13/18 existing favs immediately enriched.
+   - **`/api/enrich-favorites`** — POST endpoint, Bearer-auth-gated, validates each `(title, year)` pair belongs to the authenticated user (defends against using the endpoint as a free Claude oracle), then sends a single batch prompt to **Claude Sonnet 4.6** asking for `{director, runtime_minutes, overview}` per movie. Returns the enriched data + UPDATE-writes the rows. Called silently from `loadUserData` for any rows still missing data after the cache backfill. The remaining 5 of 18 will fill in on the next sign-in.
+4. **Shiny-button replacement for all favourites-page chips.** Per the 21st.dev `aliimam/shiny-button` design. Fetched the source registry JSON (`https://21st.dev/r/aliimam/shiny-button.json`) to get the exact CSS primitives:
+   - `@property` registered `<angle>` and `<percentage>` and `<color>` for `--gradient-angle`, `--gradient-angle-offset`, `--gradient-percent`, `--gradient-shine`
+   - Triple-layered button: `padding-box` solid bg + `border-box` rotating conic-gradient (the shine sweep) + `box-shadow inset` faux double-border
+   - `::before` pseudo — radial dot pattern masked to a moving conic arc (the dotted shimmer)
+   - `::after` pseudo — linear-gradient streak masked to a radial-bottom fade (the gleam)
+   - `span::before` pseudo — inset bottom-glow with `breathe` keyframe (1→1.2 scale at 50%)
+   - Three keyframes: `gradient-angle` (rotate), `shimmer` (pseudo rotate), `breathe` (pulse)
+   
+   Recolored to Film Glance gold: `--shiny-cta-bg: #0a0805`, `--shiny-bg-sub: #1a1308`, `--shiny-hi: #FFD700`, `--shiny-hi-soft: #FFE89A`. Renamed keyframes `fgShinyAngle` / `fgShinyArc` / `fgShinyBreathe` to avoid collision with the existing `shimmer` / `breathe` keyframes elsewhere in the stylesheet. Added a `.fg-shiny-cta` modifier for primary CTAs (+ New folder, save-to-folder confirm) — brighter rest state with the animation always running. Active filter chips (`.fg-shiny.active`) use the same always-running treatment with gold text. Per-folder chips use `<span>` outer + nested `<button>` for the filter click + sibling action `<button>`s for rename/delete (avoids invalid button-in-button HTML).
+
+5. **Heart-click "Save to library" picker.** New centered modal opens when the user clicks the heart on a result page for a movie they haven't favourited yet. Lists Unsorted + each folder + a "New folder…" inline create path. Click any row → instant save with that destination + close. The "+ New folder" path expands to an inline input + Save button; on save it creates the folder, then chains the favourite insert with the new folder id (via a `createFolder` change that now returns the new id on success). The previous `toggleFav` add path inserted directly with `folder_id: null`; that was replaced by `setSaveToFolderTarget(movieResult)` which opens the picker. The actual insert now lives in a new `confirmSaveFav(folderId)` helper. Heart-click on an already-favourited movie still un-favourites instantly (no modal) — matches the user's "lean toward existing behaviour" pick.
+
+### Persistence
+
+User asked for explicit confirmation that favs + folders + folder assignments persist forever per account. Already does — `favorites.user_id` + `favorite_folders.user_id` are FKs to `auth.users.id`, RLS policies are owner-scoped (`auth.uid() = user_id` on every SELECT/INSERT/UPDATE/DELETE), `loadUserData` reloads everything on every fresh sign-in. The only thing that wasn't persisting before this session was the new metadata columns on legacy rows — fixed by migration 012 + Sonnet enrichment.
+
+### Files modified
+
+| File | Purpose |
+|------|---------|
+| `components/film-glance.jsx` | Diagnostic line removed; score `/10`; shiny-button CSS + applied to chip bar; heart-click picker modal; `confirmSaveFav` + `saveToNewFolder` helpers; `createFolder` returns id; FG_VERSION 5.10.31 |
+| `app/api/enrich-favorites/route.ts` | NEW — Sonnet 4.6 batch enrichment, Bearer auth, ownership-gated |
+| `sql/migrations/012_backfill_favorites_metadata.sql` | NEW — one-shot UPDATE from movie_cache |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Key learnings
+
+1. **Defend AI endpoints with ownership checks.** `/api/enrich-favorites` could otherwise be used as a free Claude oracle for arbitrary movie lookups. The endpoint validates that every `(title, year)` pair in the request matches a row in the caller's own favorites table before the Sonnet call fires.
+2. **`@property` registered CSS custom properties unlock real animation.** The shiny-button's rotating shine works because `--gradient-angle` is registered as `<angle>`, which makes it animatable across keyframes. Without `@property`, browser would treat it as a string and skip the interpolation.
+3. **Avoid keyframe name collisions in long-lived stylesheets.** This stylesheet already had `@keyframes shimmer` (background-position translate for landing) and there's no `breathe` yet but adjacent code might land it. Prefixing the new ones (`fgShinyAngle`, `fgShinyArc`, `fgShinyBreathe`) avoids accidental clobber.
+4. **HTML doesn't allow nested `<button>`s** — the per-folder filter chips need `<span>` outer + `<button>` inner so the chip can host both the filter click and the rename/delete action buttons. CSS `:focus-within` on the outer span makes keyboard focus on the inner button still trigger the shiny hover state.
+
+---
+
 ## Session: April 29, 2026 (continued) — Favourites Page Redesign (v5.10.30) + Folders System
 
 ### Context

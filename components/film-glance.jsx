@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.30";
+const FG_VERSION = "5.10.31";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -1089,6 +1089,9 @@ export default function FilmGlance() {
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null); // folder obj or null
   const [moveMenuFavKey, setMoveMenuFavKey] = useState(null); // `${title}-${year}` of fav whose move-menu is open
   const [folderError, setFolderError] = useState(null);
+  // Heart-click → "Save to library" modal: the movieResult being added (null = closed).
+  const [saveToFolderTarget, setSaveToFolderTarget] = useState(null);
+  const [saveToFolderNewName, setSaveToFolderNewName] = useState(null); // null when not adding a new folder, "" when input open
   const [plan, setPlan] = useState("free");
   const [searches, setSearches] = useState(0);
   const [showSug, setShowSug] = useState(false);
@@ -1170,6 +1173,43 @@ export default function FilmGlance() {
         setFolders(folderRes.data.map(fld => ({
           id: fld.id, name: fld.name, position: fld.position,
         })));
+      }
+
+      // After the cache backfill (migration 012), any favourite still missing
+      // director / runtime / overview is one whose movie isn't in our cache.
+      // Fire a single Sonnet batch enrichment in the background and patch
+      // local state when it returns. Silent on failure — these columns are
+      // optional and the cards render gracefully without them.
+      if (favRes.data) {
+        const stale = favRes.data.filter((f) =>
+          !f.director || f.runtime == null || !f.overview
+        );
+        if (stale.length > 0) {
+          const items = stale.slice(0, 20).map((f) => ({ title: f.title, year: f.year }));
+          const token = session.access_token;
+          fetch("/api/enrich-favorites", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ items }),
+          })
+            .then((res) => res.ok ? res.json() : null)
+            .then((data) => {
+              if (!data || !Array.isArray(data.enriched)) return;
+              setFavorites((prev) => prev.map((fav) => {
+                const hit = data.enriched.find((e) =>
+                  e.title === fav.title && (e.year ?? null) === (fav.year ?? null)
+                );
+                if (!hit) return fav;
+                return {
+                  ...fav,
+                  director: fav.director || hit.director,
+                  runtime: fav.runtime != null ? fav.runtime : hit.runtime,
+                  overview: fav.overview || hit.overview,
+                };
+              }));
+            })
+            .catch((err) => console.warn("[enrich-favorites] background fetch failed:", err.message));
+        }
       }
     } catch (e) { console.error("loadUserData error:", e); }
   };
@@ -1452,58 +1492,87 @@ export default function FilmGlance() {
     // Normalize values for DB
     const title = String(movieResult.title || "");
     const year = typeof movieResult.year === 'string' ? parseInt(movieResult.year) || 0 : (movieResult.year || 0);
-    const genre = Array.isArray(movieResult.genre) ? movieResult.genre.join(" · ") : String(movieResult.genre || "");
-    
+
     const exists = favorites.find(f => f.title === title && f.year === year);
     if (exists) {
-      // Remove favorite
+      // Remove favourite — unchanged path.
       const prevFavs = [...favorites];
       setFavorites(prev => prev.filter(f => !(f.title === title && f.year === year)));
       try {
         const { error } = await supabase.from("favorites").delete().eq("user_id", user.id).eq("title", title).eq("year", year);
         if (error) { console.error("Remove fav error:", error); setFavorites(prevFavs); }
       } catch (e) { console.error("Remove fav exception:", e); setFavorites(prevFavs); }
-    } else {
-      // Add favorite — also persist runtime / director / overview so the
-      // redesigned Favourites card can render rich detail without re-fetching.
-      // Runtime arrives as either an int (minutes) or a string ("120 min" or
-      // "2h 0m") depending on source — coerce to int minutes for storage.
-      const runtimeMin = (() => {
-        const r = movieResult.runtime;
-        if (typeof r === "number" && r > 0) return Math.round(r);
-        if (typeof r === "string") {
-          const m = r.match(/(\d+)\s*min/i);
-          if (m) return parseInt(m[1], 10);
-          const hm = r.match(/(\d+)\s*h\s*(\d+)?/i);
-          if (hm) return parseInt(hm[1], 10) * 60 + (parseInt(hm[2] || "0", 10));
-        }
-        return null;
-      })();
-      const director = typeof movieResult.director === "string" && movieResult.director.trim()
-        ? movieResult.director.trim()
-        : null;
-      const overview = typeof movieResult.description === "string" && movieResult.description.trim()
-        ? movieResult.description.trim()
-        : null;
-      const newFav = {
-        title, year, genre,
-        poster: movieResult.poster || "",
-        score: movieResult.score || { ten: 0, stars: 0 },
-        searchKey: title.toLowerCase(),
-        folderId: null, runtime: runtimeMin, director, overview,
-      };
-      const prevFavs = [...favorites];
-      setFavorites(prev => [...prev, newFav]);
-      try {
-        const { error } = await supabase.from("favorites").insert({
-          user_id: user.id, title, year,
-          genre, poster_url: movieResult.poster || "",
-          score_ten: movieResult.score?.ten || 0, score_stars: movieResult.score?.stars || 0,
-          search_key: title.toLowerCase(),
-          runtime: runtimeMin, director, overview,
-        });
-        if (error) { console.error("Add fav error:", error, "Data:", { title, year, genre }); setFavorites(prevFavs); }
-      } catch (e) { console.error("Add fav exception:", e); setFavorites(prevFavs); }
+      return;
+    }
+    // Add path — open the "Save to library" picker so the user can choose
+    // a destination folder (Unsorted, an existing folder, or a brand-new
+    // folder created inline). Actual DB insert happens in confirmSaveFav.
+    setFolderError(null);
+    setSaveToFolderNewName(null);
+    setSaveToFolderTarget(movieResult);
+  };
+
+  // Performs the actual insert for the movie that's currently in the
+  // Save-to-library picker. folderId === null routes the fav to "Unsorted".
+  const confirmSaveFav = async (folderId) => {
+    const movieResult = saveToFolderTarget;
+    if (!movieResult || !user) return;
+    const title = String(movieResult.title || "");
+    const year = typeof movieResult.year === 'string' ? parseInt(movieResult.year) || 0 : (movieResult.year || 0);
+    const genre = Array.isArray(movieResult.genre) ? movieResult.genre.join(" · ") : String(movieResult.genre || "");
+
+    // Coerce runtime to int minutes regardless of upstream shape.
+    const runtimeMin = (() => {
+      const r = movieResult.runtime;
+      if (typeof r === "number" && r > 0) return Math.round(r);
+      if (typeof r === "string") {
+        const m = r.match(/(\d+)\s*min/i);
+        if (m) return parseInt(m[1], 10);
+        const hm = r.match(/(\d+)\s*h\s*(\d+)?/i);
+        if (hm) return parseInt(hm[1], 10) * 60 + (parseInt(hm[2] || "0", 10));
+      }
+      return null;
+    })();
+    const director = typeof movieResult.director === "string" && movieResult.director.trim()
+      ? movieResult.director.trim()
+      : null;
+    const overview = typeof movieResult.description === "string" && movieResult.description.trim()
+      ? movieResult.description.trim()
+      : null;
+
+    const newFav = {
+      title, year, genre,
+      poster: movieResult.poster || "",
+      score: movieResult.score || { ten: 0, stars: 0 },
+      searchKey: title.toLowerCase(),
+      folderId: folderId || null,
+      runtime: runtimeMin, director, overview,
+    };
+    const prevFavs = [...favorites];
+    setFavorites(prev => [...prev, newFav]);
+    setSaveToFolderTarget(null);
+    setSaveToFolderNewName(null);
+    try {
+      const { error } = await supabase.from("favorites").insert({
+        user_id: user.id, title, year,
+        genre, poster_url: movieResult.poster || "",
+        score_ten: movieResult.score?.ten || 0, score_stars: movieResult.score?.stars || 0,
+        search_key: title.toLowerCase(),
+        folder_id: folderId || null,
+        runtime: runtimeMin, director, overview,
+      });
+      if (error) { console.error("Add fav error:", error, "Data:", { title, year, genre, folderId }); setFavorites(prevFavs); }
+    } catch (e) { console.error("Add fav exception:", e); setFavorites(prevFavs); }
+  };
+
+  // "Save to a brand-new folder" path inside the heart-click picker.
+  // Creates the folder first, then chains the favourite insert with the
+  // returned folder id. If folder creation fails (validation, duplicate,
+  // RLS) we surface the error and leave the modal open.
+  const saveToNewFolder = async (rawName) => {
+    const newId = await createFolder(rawName);
+    if (newId) {
+      await confirmSaveFav(newId);
     }
   };
 
@@ -1536,13 +1605,16 @@ export default function FilmGlance() {
   // the UI always reflects the user's intent immediately and self-heals if
   // the network or RLS rejects the write.
 
+  // Returns the new folder's id on success (so callers can chain — e.g. the
+  // heart-click "Save to new folder" flow). Returns null on validation
+  // failure or RLS rejection.
   const createFolder = async (rawName) => {
-    if (!user) return;
+    if (!user) return null;
     const name = (rawName || "").trim().slice(0, 60);
-    if (!name) { setFolderError("Folder name can't be empty."); return; }
+    if (!name) { setFolderError("Folder name can't be empty."); return null; }
     if (folders.some(f => f.name.toLowerCase() === name.toLowerCase())) {
       setFolderError("You already have a folder with that name.");
-      return;
+      return null;
     }
     setFolderError(null);
     const tempId = `temp-${Date.now()}`;
@@ -1560,15 +1632,17 @@ export default function FilmGlance() {
         console.error("Create folder error:", error);
         setFolders(prev);
         setFolderError(error.code === "23505" ? "You already have a folder with that name." : "Couldn't create folder.");
-        return;
+        return null;
       }
       setFolders(curr => curr.map(f => f.id === tempId ? { id: data.id, name: data.name, position: data.position } : f));
       setActiveFolderId(data.id);
       setNewFolderInput(null);
+      return data.id;
     } catch (e) {
       console.error("Create folder exception:", e);
       setFolders(prev);
       setFolderError("Couldn't create folder.");
+      return null;
     }
   };
 
@@ -1875,13 +1949,13 @@ export default function FilmGlance() {
           transform: scale(1.04);
         }
         .fg-fav-score-suffix {
-          color: rgba(255, 255, 255, 0.32);
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
+          color: rgba(255, 215, 0, 0.42);
+          font-family: 'Playfair Display', serif;
+          font-size: 22px;
           font-weight: 600;
-          letter-spacing: 1.4px;
-          text-transform: uppercase;
-          margin-top: 6px;
+          letter-spacing: -0.4px;
+          margin-left: 2px;
+          align-self: baseline;
         }
 
         /* Card-bottom action row — trash + move button. Idle: dim. Hover the
@@ -2005,59 +2079,218 @@ export default function FilmGlance() {
           margin: 6px 4px;
         }
 
-        /* Folder filter chip bar — horizontal, scrolls on overflow. */
+        /* ─── Shiny chip system (favourites page) ─────────────────────────
+           Adapted from aliimam/shiny-button (21st.dev). Same layered
+           conic-gradient border + dotted ::before shimmer + ::after arc
+           gleam + span::before breathe pulse, recolored to Film Glance
+           gold. Applied to every folder-related chip on the favourites
+           surface (filter bar + new-folder pill + the heart-click folder
+           picker buttons). */
+        @property --fg-shiny-angle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        @property --fg-shiny-offset {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        @property --fg-shiny-pct {
+          syntax: '<percentage>';
+          initial-value: 5%;
+          inherits: false;
+        }
+        @property --fg-shiny-shine {
+          syntax: '<color>';
+          initial-value: #FFFFFF;
+          inherits: false;
+        }
+        @keyframes fgShinyAngle { to { --fg-shiny-angle: 360deg; } }
+        @keyframes fgShinyArc   { to { rotate: 360deg; } }
+        @keyframes fgShinyBreathe { from, to { scale: 1; } 50% { scale: 1.2; } }
+
+        /* Bar layout */
         .fg-folder-bar {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           flex-wrap: wrap;
           padding: 0 4px;
           margin-bottom: 22px;
         }
-        .fg-folder-chip {
+
+        /* Base shiny chip — used by filter chips, +New folder pill, and the
+           folder-picker rows on the result page. */
+        .fg-shiny {
+          --shiny-bg: #0a0805;
+          --shiny-bg-sub: #1a1308;
+          --shiny-fg: rgba(255, 255, 255, 0.86);
+          --shiny-hi: #FFD700;
+          --shiny-hi-soft: #FFE89A;
+          --shiny-anim: fgShinyAngle linear infinite;
+          --shiny-dur: 3s;
+          --shiny-ring: 1.5px;
+          --shiny-trans: 600ms cubic-bezier(0.25, 1, 0.5, 1);
+          isolation: isolate;
           position: relative;
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          padding: 8px 14px;
-          background: rgba(10, 8, 4, 0.62);
-          border: 1px solid rgba(255, 215, 0, 0.10);
-          border-radius: 999px;
-          color: rgba(255, 255, 255, 0.82);
+          padding: 8px 16px;
           font-family: 'Syne', sans-serif;
           font-size: 13px;
           font-weight: 600;
           letter-spacing: 0.2px;
+          line-height: 1.2;
+          color: var(--shiny-fg);
+          border: 1px solid transparent;
+          border-radius: 999px;
           cursor: pointer;
-          transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
           white-space: nowrap;
+          overflow: hidden;
+          background:
+            linear-gradient(var(--shiny-bg), var(--shiny-bg)) padding-box,
+            conic-gradient(
+              from calc(var(--fg-shiny-angle) - var(--fg-shiny-offset)),
+              transparent,
+              var(--shiny-hi) var(--fg-shiny-pct),
+              var(--fg-shiny-shine) calc(var(--fg-shiny-pct) * 2),
+              var(--shiny-hi) calc(var(--fg-shiny-pct) * 3),
+              transparent calc(var(--fg-shiny-pct) * 4)
+            ) border-box;
+          box-shadow: inset 0 0 0 1px var(--shiny-bg-sub);
+          transition: var(--shiny-trans);
+          transition-property: --fg-shiny-offset, --fg-shiny-pct, --fg-shiny-shine, color, transform;
         }
-        .fg-folder-chip:hover {
-          background: rgba(255, 215, 0, 0.05);
-          border-color: rgba(255, 215, 0, 0.32);
+        .fg-shiny > * { position: relative; z-index: 1; }
+        .fg-shiny:active { translate: 0 1px; }
+
+        /* Dotted shimmer — slow rotating arc of dots inside the chip. */
+        .fg-shiny::before,
+        .fg-shiny::after,
+        .fg-shiny .fg-shiny-label::before {
+          content: '';
+          pointer-events: none;
+          position: absolute;
+          inset-inline-start: 50%;
+          inset-block-start: 50%;
+          translate: -50% -50%;
+          z-index: -1;
+        }
+        .fg-shiny::before {
+          --size: calc(100% - 6px);
+          --pos: 2px;
+          --space: calc(var(--pos) * 2);
+          width: var(--size);
+          height: var(--size);
+          background: radial-gradient(
+            circle at var(--pos) var(--pos),
+            rgba(255, 240, 180, 0.95) calc(var(--pos) / 4),
+            transparent 0
+          ) padding-box;
+          background-size: var(--space) var(--space);
+          background-repeat: space;
+          mask-image: conic-gradient(
+            from calc(var(--fg-shiny-angle) + 45deg),
+            black,
+            transparent 12% 88%,
+            black
+          );
+          border-radius: inherit;
+          opacity: 0.32;
+        }
+
+        /* Inner gleam — soft gold streak rotating slowly. */
+        .fg-shiny::after {
+          width: 140%;
+          aspect-ratio: 1;
+          background: linear-gradient(
+            -50deg,
+            transparent 32%,
+            var(--shiny-hi) 50%,
+            transparent 68%
+          );
+          mask-image: radial-gradient(circle at bottom, transparent 38%, black);
+          opacity: 0.42;
+          animation: fgShinyArc linear infinite var(--shiny-dur);
+        }
+        .fg-shiny .fg-shiny-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          z-index: 1;
+        }
+        .fg-shiny .fg-shiny-label::before {
+          --size: calc(100% + 0.6rem);
+          width: var(--size);
+          height: var(--size);
+          box-shadow: inset 0 -1.6ex 1.4rem 3px var(--shiny-hi);
+          border-radius: inherit;
+          opacity: 0;
+          transition: opacity var(--shiny-trans);
+          animation: calc(var(--shiny-dur) * 1.5) fgShinyBreathe linear infinite;
+        }
+        .fg-shiny,
+        .fg-shiny::before,
+        .fg-shiny::after {
+          animation: var(--shiny-anim) var(--shiny-dur),
+            var(--shiny-anim) calc(var(--shiny-dur) / 0.4) reverse paused;
+          animation-composition: add;
+        }
+        .fg-shiny:is(:hover, :focus-visible, :focus-within) {
+          --fg-shiny-pct: 18%;
+          --fg-shiny-offset: 90deg;
+          --fg-shiny-shine: var(--shiny-hi-soft);
+          color: #FFFFFF;
+        }
+        .fg-shiny:is(:hover, :focus-visible, :focus-within),
+        .fg-shiny:is(:hover, :focus-visible, :focus-within)::before,
+        .fg-shiny:is(:hover, :focus-visible, :focus-within)::after {
+          animation-play-state: running;
+        }
+        .fg-shiny:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0.65; }
+
+        /* Active filter chip — brighter, animation always running, gold text. */
+        .fg-shiny.active {
+          --shiny-fg: #FFD700;
+          --fg-shiny-pct: 14%;
+          --fg-shiny-shine: var(--shiny-hi-soft);
+          --shiny-bg-sub: #2a1d04;
           color: #FFD700;
-          transform: translateY(-1px);
         }
-        .fg-folder-chip.active {
-          background: linear-gradient(135deg, rgba(255, 215, 0, 0.14), rgba(255, 165, 0, 0.05));
-          border-color: rgba(255, 215, 0, 0.55);
+        .fg-shiny.active,
+        .fg-shiny.active::before,
+        .fg-shiny.active::after { animation-play-state: running; }
+        .fg-shiny.active .fg-shiny-label::before { opacity: 0.55; }
+
+        /* Primary CTA variant (+ New folder, save-to-folder confirm) — even
+           brighter rest state with a more prominent shine sweep. */
+        .fg-shiny.fg-shiny-cta {
+          --shiny-bg-sub: #2a1d04;
+          --fg-shiny-pct: 10%;
           color: #FFD700;
-          box-shadow: 0 0 22px rgba(255, 215, 0, 0.18), inset 0 1px 0 rgba(255, 215, 0, 0.16);
         }
-        .fg-folder-chip .count {
+        .fg-shiny.fg-shiny-cta,
+        .fg-shiny.fg-shiny-cta::before,
+        .fg-shiny.fg-shiny-cta::after { animation-play-state: running; }
+        .fg-shiny.fg-shiny-cta .fg-shiny-label::before { opacity: 0.42; }
+
+        /* Count badge inside a chip */
+        .fg-shiny .count {
           font-family: 'JetBrains Mono', monospace;
           font-size: 11px;
           font-weight: 700;
           letter-spacing: 0.6px;
-          color: rgba(255, 215, 0, 0.62);
-          background: rgba(255, 215, 0, 0.08);
+          color: rgba(255, 215, 0, 0.78);
+          background: rgba(255, 215, 0, 0.10);
           padding: 2px 7px;
           border-radius: 999px;
+          line-height: 1;
         }
-        .fg-folder-chip.active .count {
-          color: #FFD700;
-          background: rgba(255, 215, 0, 0.16);
-        }
+        .fg-shiny.active .count { color: #FFD700; background: rgba(255, 215, 0, 0.20); }
+
+        /* Hover-revealed rename + delete actions on folder chips */
         .fg-folder-chip-actions {
           display: inline-flex;
           align-items: center;
@@ -2068,50 +2301,28 @@ export default function FilmGlance() {
           overflow: hidden;
           transition: opacity 0.25s ease, max-width 0.25s ease;
         }
-        .fg-folder-chip:hover .fg-folder-chip-actions,
-        .fg-folder-chip:focus-within .fg-folder-chip-actions {
+        .fg-shiny:hover .fg-folder-chip-actions,
+        .fg-shiny:focus-within .fg-folder-chip-actions {
           opacity: 1;
           max-width: 60px;
         }
         .fg-folder-chip-actions button {
           background: transparent;
           border: none;
-          color: rgba(255, 255, 255, 0.42);
+          color: rgba(255, 255, 255, 0.52);
           padding: 3px;
           border-radius: 4px;
           cursor: pointer;
           display: inline-flex;
           transition: color 0.2s ease, background 0.2s ease;
         }
-        .fg-folder-chip-actions button:hover { background: rgba(255, 215, 0, 0.10); color: #FFD700; }
-        .fg-folder-chip-actions .fg-fold-del:hover { background: rgba(255, 80, 80, 0.10); color: #ff6b6b; }
+        .fg-folder-chip-actions button:hover { background: rgba(255, 215, 0, 0.14); color: #FFD700; }
+        .fg-folder-chip-actions .fg-fold-del:hover { background: rgba(255, 80, 80, 0.14); color: #ff6b6b; }
 
-        .fg-folder-new-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 14px;
-          background: transparent;
-          border: 1px dashed rgba(255, 215, 0, 0.32);
-          border-radius: 999px;
-          color: rgba(255, 215, 0, 0.78);
-          font-family: 'Syne', sans-serif;
-          font-size: 13px;
-          font-weight: 600;
-          letter-spacing: 0.2px;
-          cursor: pointer;
-          transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
-        }
-        .fg-folder-new-pill:hover {
-          color: #FFD700;
-          border-color: rgba(255, 215, 0, 0.55);
-          background: rgba(255, 215, 0, 0.04);
-          transform: translateY(-1px);
-        }
-
+        /* Inline rename / new-folder input — styled to match the shiny chips */
         .fg-folder-input {
-          background: rgba(10, 8, 4, 0.78);
-          border: 1px solid rgba(255, 215, 0, 0.42);
+          background: #0a0805;
+          border: 1px solid rgba(255, 215, 0, 0.55);
           border-radius: 999px;
           padding: 8px 14px;
           color: #FFD700;
@@ -2121,7 +2332,7 @@ export default function FilmGlance() {
           letter-spacing: 0.2px;
           outline: none;
           width: 200px;
-          box-shadow: 0 0 22px rgba(255, 215, 0, 0.16), inset 0 1px 0 rgba(255, 215, 0, 0.12);
+          box-shadow: 0 0 22px rgba(255, 215, 0, 0.22), inset 0 1px 0 rgba(255, 215, 0, 0.18);
         }
         .fg-folder-input::placeholder { color: rgba(255, 215, 0, 0.42); }
 
@@ -2163,8 +2374,10 @@ export default function FilmGlance() {
           .fg-fav-card:active,
           .fg-fav-card .dym-poster,
           .fg-fav-score,
-          .fg-folder-chip,
-          .fg-folder-new-pill {
+          .fg-shiny,
+          .fg-shiny::before,
+          .fg-shiny::after,
+          .fg-shiny .fg-shiny-label::before {
             animation: none !important;
             transform: none !important;
             transition: none !important;
@@ -2549,6 +2762,147 @@ export default function FilmGlance() {
         </div>
       )}
 
+      {/* "Save to library" — heart-click folder picker (v5.10.31).
+          Always available regardless of view, so user can favourite from
+          the result page or anywhere with a heart button. Click any row to
+          save instantly to that destination; "+ New folder…" reveals an
+          inline input that creates the folder + saves in one step. */}
+      {saveToFolderTarget && (
+        <div
+          className="fg-fav-modal-back"
+          onClick={() => { setSaveToFolderTarget(null); setSaveToFolderNewName(null); setFolderError(null); }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="fg-save-fav-title"
+        >
+          <div className="fg-fav-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <h3
+              id="fg-save-fav-title"
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontStyle: "italic",
+                fontSize: 26,
+                fontWeight: 600,
+                color: "#FFD700",
+                letterSpacing: -0.5,
+                marginBottom: 6,
+                lineHeight: 1.1,
+              }}
+            >
+              Save to library
+            </h3>
+            <p style={{
+              fontFamily: "'Syne', sans-serif",
+              fontSize: 13,
+              color: "rgba(255, 255, 255, 0.62)",
+              marginBottom: 4,
+            }}>
+              Choose where <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>{saveToFolderTarget.title}</span> should live.
+            </p>
+            {folderError && (
+              <p style={{
+                color: "#ff8b8b",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                letterSpacing: 0.6,
+                margin: "10px 0 0",
+              }}>{folderError}</p>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+              <button
+                type="button"
+                className="fg-shiny"
+                onClick={() => confirmSaveFav(null)}
+                style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+              >
+                <span className="fg-shiny-label" style={{ width: "100%" }}>
+                  <Inbox size={14} aria-hidden="true" />
+                  <span>Unsorted</span>
+                </span>
+              </button>
+              {folders.map((fld) => (
+                <button
+                  key={fld.id}
+                  type="button"
+                  className="fg-shiny"
+                  onClick={() => confirmSaveFav(fld.id)}
+                  style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+                >
+                  <span className="fg-shiny-label" style={{ width: "100%" }}>
+                    <Folder size={14} aria-hidden="true" />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{fld.name}</span>
+                  </span>
+                </button>
+              ))}
+              {saveToFolderNewName === null ? (
+                <button
+                  type="button"
+                  className="fg-shiny fg-shiny-cta"
+                  onClick={() => { setSaveToFolderNewName(""); setFolderError(null); }}
+                  style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+                >
+                  <span className="fg-shiny-label" style={{ width: "100%" }}>
+                    <FolderPlus size={14} aria-hidden="true" />
+                    <span>New folder…</span>
+                  </span>
+                </button>
+              ) : (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  <input
+                    autoFocus
+                    value={saveToFolderNewName}
+                    onChange={(e) => setSaveToFolderNewName(e.target.value.slice(0, 60))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && saveToFolderNewName.trim()) saveToNewFolder(saveToFolderNewName);
+                      if (e.key === "Escape") { setSaveToFolderNewName(null); setFolderError(null); }
+                    }}
+                    className="fg-folder-input"
+                    placeholder="Folder name…"
+                    maxLength={60}
+                    style={{ flex: 1, width: "auto" }}
+                    aria-label="New folder name"
+                  />
+                  <button
+                    type="button"
+                    className="fg-shiny fg-shiny-cta"
+                    onClick={() => { if (saveToFolderNewName.trim()) saveToNewFolder(saveToFolderNewName); }}
+                    style={{ padding: "8px 16px" }}
+                  >
+                    <span className="fg-shiny-label">
+                      <Check size={13} aria-hidden="true" />
+                      <span>Save</span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSaveToFolderTarget(null); setSaveToFolderNewName(null); setFolderError(null); }}
+              style={{
+                marginTop: 18,
+                width: "100%",
+                padding: "10px 18px",
+                background: "transparent",
+                border: "1px solid rgba(255, 255, 255, 0.10)",
+                borderRadius: 999,
+                color: "rgba(255, 255, 255, 0.62)",
+                fontFamily: "'Syne', sans-serif",
+                fontSize: 12.5,
+                fontWeight: 600,
+                letterSpacing: 0.4,
+                cursor: "pointer",
+                transition: "border-color 0.25s, color 0.25s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.28)"; e.currentTarget.style.color = "rgba(255,255,255,0.92)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)"; e.currentTarget.style.color = "rgba(255,255,255,0.62)"; }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Notification Banner */}
       {authNotice && (
         <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 1100, background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 12, padding: "14px 24px", maxWidth: 420, display: "flex", alignItems: "center", gap: 10, animation: "slideUp 0.4s", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
@@ -2682,32 +3036,6 @@ export default function FilmGlance() {
               >
                 Your Favourites
               </h2>
-              {totalCount > 0 && (
-                <p
-                  style={{
-                    margin: "16px 0 0",
-                    color: "rgba(255, 255, 255, 0.78)",
-                    fontSize: 11.5,
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontWeight: 700,
-                    letterSpacing: 1.6,
-                    textTransform: "uppercase",
-                    animation: "softFade 0.55s ease-out 0.18s both",
-                  }}
-                >
-                  <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>
-                    {totalCount === 1 ? "1 film saved" : `${totalCount} films saved`}
-                  </span>
-                  {activeFolderName && (
-                    <>
-                      <span style={{ color: "rgba(255, 215, 0, 0.5)", margin: "0 10px" }}>·</span>
-                      <span style={{ color: "#fff", textTransform: "none", letterSpacing: 0.2, fontSize: 12.5 }}>
-                        {activeFolderName}
-                      </span>
-                    </>
-                  )}
-                </p>
-              )}
             </div>
 
             {/* Folder filter bar — All / Unsorted / per-folder chips / + New Folder.
@@ -2715,38 +3043,49 @@ export default function FilmGlance() {
             {showFolderBar && (
               <div className="fg-folder-bar" role="tablist" aria-label="Filter favourites by folder">
                 <button
-                  className={`fg-folder-chip${activeFolderId === "all" ? " active" : ""}`}
+                  type="button"
+                  className={`fg-shiny${activeFolderId === "all" ? " active" : ""}`}
                   onClick={() => setActiveFolderId("all")}
                   role="tab"
                   aria-selected={activeFolderId === "all"}
                 >
-                  <Library size={13} aria-hidden="true" />
-                  <span>All</span>
-                  <span className="count">{totalCount}</span>
+                  <span className="fg-shiny-label">
+                    <Library size={13} aria-hidden="true" />
+                    <span>All</span>
+                    <span className="count">{totalCount}</span>
+                  </span>
                 </button>
                 {(folders.length > 0 || unsortedFavs.length > 0) && (
                   <button
-                    className={`fg-folder-chip${activeFolderId === "unsorted" ? " active" : ""}`}
+                    type="button"
+                    className={`fg-shiny${activeFolderId === "unsorted" ? " active" : ""}`}
                     onClick={() => setActiveFolderId("unsorted")}
                     role="tab"
                     aria-selected={activeFolderId === "unsorted"}
                   >
-                    <Inbox size={13} aria-hidden="true" />
-                    <span>Unsorted</span>
-                    <span className="count">{unsortedFavs.length}</span>
+                    <span className="fg-shiny-label">
+                      <Inbox size={13} aria-hidden="true" />
+                      <span>Unsorted</span>
+                      <span className="count">{unsortedFavs.length}</span>
+                    </span>
                   </button>
                 )}
                 {folders.map((fld) => {
                   const isActive = activeFolderId === fld.id;
                   const isRenaming = renamingFolderId === fld.id;
+                  // Outer is a <span>, not a <button>, so we can nest the
+                  // rename + delete <button> children without violating the
+                  // "no button-in-button" HTML rule. The inner button hosts
+                  // the filter click and is the .fg-shiny-label so the
+                  // breathe pulse ::before still anchors there.
                   return (
                     <span
                       key={fld.id}
-                      className={`fg-folder-chip${isActive ? " active" : ""}`}
+                      className={`fg-shiny${isActive ? " active" : ""}`}
                       style={{ paddingRight: isRenaming ? 6 : undefined }}
                     >
                       {isRenaming ? (
-                        <>
+                        <span className="fg-shiny-label">
                           {isActive ? <FolderOpen size={13} aria-hidden="true" /> : <Folder size={13} aria-hidden="true" />}
                           <input
                             autoFocus
@@ -2762,11 +3101,12 @@ export default function FilmGlance() {
                             maxLength={60}
                             aria-label={`Rename folder ${fld.name}`}
                           />
-                        </>
+                        </span>
                       ) : (
                         <>
                           <button
                             type="button"
+                            className="fg-shiny-label"
                             onClick={() => setActiveFolderId(fld.id)}
                             role="tab"
                             aria-selected={isActive}
@@ -2818,12 +3158,14 @@ export default function FilmGlance() {
                 ) : (
                   <button
                     type="button"
-                    className="fg-folder-new-pill"
+                    className="fg-shiny fg-shiny-cta"
                     onClick={() => { setNewFolderInput(""); setFolderError(null); }}
                     aria-label="Create new folder"
                   >
-                    <FolderPlus size={13} aria-hidden="true" />
-                    <span>New folder</span>
+                    <span className="fg-shiny-label">
+                      <FolderPlus size={13} aria-hidden="true" />
+                      <span>New folder</span>
+                    </span>
                   </button>
                 )}
               </div>
@@ -3065,16 +3407,15 @@ export default function FilmGlance() {
                       <div className="fg-fav-score-col" style={{
                         flexShrink: 0,
                         display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
+                        alignItems: "baseline",
                         justifyContent: "center",
                         paddingRight: 8,
-                        minWidth: 80,
+                        minWidth: 92,
                       }}>
                         {showScore ? (
                           <>
                             <span className="fg-fav-score">{Number(score).toFixed(1)}</span>
-                            <span className="fg-fav-score-suffix">out of 10</span>
+                            <span className="fg-fav-score-suffix">/10</span>
                           </>
                         ) : (
                           <span style={{
