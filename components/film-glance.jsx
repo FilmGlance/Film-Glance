@@ -398,10 +398,10 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
   const showRank = rank && rank !== "#N/A" && rank !== "N/A";
   const formatted = formatBoxOfficeVal(val, label);
   const lbl = label.toLowerCase();
-  const isHero = lbl.includes("worldwide") || lbl.includes("budget") || lbl.includes("roi");
   const isROIPositive = lbl.includes("roi") && /^\d+%/.test(formatted) && parseInt(formatted) >= 100;
-  const valColor = isROIPositive ? "#22c55e" : isHero ? "#FFD700" : "#fff";
-  // Pick a Lucide icon based on the label
+  // Every row treated identically — no gold tint variants. Positive ROI keeps
+  // its green semantic color, everything else is white-on-dark, consistent.
+  const valColor = isROIPositive ? "#22c55e" : "rgba(255,255,255,0.94)";
   const Icon = lbl.includes("budget") ? DollarSign
     : lbl.includes("opening") ? Sparkles
     : lbl.includes("per-theater") || lbl.includes("pta") ? BarChart3
@@ -415,47 +415,138 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
-      padding: "16px 18px", borderRadius: 11,
+      padding: "18px 20px", borderRadius: 11,
       background: idx % 2 === 0 ? "rgba(255,255,255,0.022)" : "transparent",
-      borderLeft: isHero ? "3px solid rgba(255,215,0,0.55)" : "3px solid transparent",
       opacity: visible ? 1 : 0,
       transform: visible ? "translateY(0)" : "translateY(8px)",
       transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04}s`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 13, minWidth: 0, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
         <div style={{
-          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          width: 38, height: 38, borderRadius: 10, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: isHero ? "linear-gradient(135deg, rgba(255,215,0,0.14), rgba(255,165,0,0.04))" : "rgba(255,255,255,0.04)",
-          border: `1px solid ${isHero ? "rgba(255,215,0,0.28)" : "rgba(255,255,255,0.07)"}`,
-          color: isHero ? "#FFD700" : "rgba(255,255,255,0.62)",
-          boxShadow: isHero ? "0 0 16px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.10)" : "none",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "rgba(255,255,255,0.72)",
         }}>
-          <Icon size={15} />
+          <Icon size={17} />
         </div>
         <span style={{
           fontFamily: "'Syne',sans-serif",
-          fontSize: 15,
-          color: isHero ? "rgba(255,215,0,0.85)" : "rgba(255,255,255,0.7)",
-          fontWeight: isHero ? 700 : 500,
+          fontSize: 16,
+          color: "rgba(255,255,255,0.82)",
+          fontWeight: 600,
           letterSpacing: 0.2,
           minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
         }}>{label}</span>
       </div>
       <span style={{
         fontFamily: "'JetBrains Mono',monospace",
-        fontSize: isHero ? 18 : 16,
+        fontSize: 17,
         color: valColor,
         fontWeight: 700,
         letterSpacing: 0.4,
-        textShadow: isHero ? "0 0 14px rgba(255,215,0,0.22)" : "none",
         whiteSpace: "nowrap",
         flexShrink: 0,
       }}>
         {formatted}
-        {showRank && <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 12.5, marginLeft: 7 }}>/ {rank}</span>}
+        {showRank && <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {rank}</span>}
       </span>
     </div>
+  );
+}
+
+/* Floating section navigator — appears on the left edge of the result page,
+   lists every populated section, scrolls smoothly to the section on click,
+   and highlights the active section as the user scrolls (IntersectionObserver).
+   Hidden under 1280px viewport (no room beside the centered 720px main column). */
+function ResultSidebar({ result, sections }) {
+  const [active, setActive] = useState(sections[0]?.id || "");
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter(e => e.isIntersecting);
+        if (visible.length === 0) return;
+        const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        setActive(top.target.id);
+      },
+      { rootMargin: "-120px 0px -55% 0px", threshold: [0, 0.1, 0.5] }
+    );
+    sections.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.title, sections.length]);
+
+  const scrollTo = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const offset = 110;
+    const top = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top, behavior: "smooth" });
+  };
+
+  return (
+    <aside className="fg-sidebar" aria-label="Movie sections" style={{
+      position: "fixed",
+      left: 28, top: "50%",
+      transform: "translateY(-50%)",
+      zIndex: 30,
+      width: 244,
+      maxHeight: "calc(100vh - 140px)",
+      overflowY: "auto",
+      background: "rgba(8,6,2,0.78)",
+      backdropFilter: "blur(28px) saturate(1.1)",
+      WebkitBackdropFilter: "blur(28px) saturate(1.1)",
+      border: "1px solid rgba(255,215,0,0.10)",
+      borderRadius: 16,
+      padding: "16px 10px",
+      boxShadow: "0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,215,0,0.04)",
+      animation: "softFade 0.55s cubic-bezier(0.16,1,0.3,1) 0.35s both",
+    }}>
+      <p style={{
+        fontFamily: "'JetBrains Mono',monospace",
+        fontSize: 10, fontWeight: 700, letterSpacing: 2,
+        color: "rgba(255,215,0,0.6)",
+        textTransform: "uppercase",
+        padding: "4px 14px 12px",
+        margin: 0,
+        borderBottom: "1px solid rgba(255,215,0,0.08)",
+        marginBottom: 8,
+      }}>Sections</p>
+      <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {sections.map(s => {
+          const Icon = s.icon;
+          const isActive = active === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => scrollTo(s.id)}
+              className={`fg-side-link ${isActive ? "active" : ""}`}
+              style={{
+                display: "flex", alignItems: "center", gap: 11,
+                padding: "11px 13px", borderRadius: 10,
+                background: isActive ? "linear-gradient(135deg, rgba(255,215,0,0.13), rgba(255,165,0,0.04))" : "transparent",
+                border: `1px solid ${isActive ? "rgba(255,215,0,0.30)" : "transparent"}`,
+                color: isActive ? "#FFD700" : "rgba(255,255,255,0.62)",
+                fontFamily: "'Syne',sans-serif",
+                fontSize: 13.5, fontWeight: isActive ? 700 : 500,
+                letterSpacing: 0.2,
+                textAlign: "left", cursor: "pointer",
+                transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
+                boxShadow: isActive ? "0 0 22px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              <Icon size={14} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
   );
 }
 
@@ -737,6 +828,20 @@ function Skeleton() {
   );
 }
 
+function cleanSourceType(t) {
+  if (!t) return t;
+  let s = String(t).trim();
+  // Strip noise words the user explicitly didn't want shown
+  s = s.replace(/\b(score|rating|percentage|pct|source|rank)\b/gi, "")
+       .replace(/\s+/g, " ").trim();
+  // Map quirky leftovers to clean labels
+  if (/^meta$/i.test(s)) s = "Critics";
+  if (/^tomato(meter)?$/i.test(s)) s = "Critics";
+  if (/^popcorn(meter)?$/i.test(s)) s = "Audience";
+  if (/^user[s]?$/i.test(s)) s = "Audience";
+  return s || t.replace(/\b(source|score|rating|percentage)\b/gi, "").trim() || "Rating";
+}
+
 function SourceRow({ source, idx, visible }) {
   const score = typeof source.score === 'string' ? parseFloat(source.score) : source.score;
   const max = typeof source.max === 'string' ? parseFloat(source.max) : source.max;
@@ -781,11 +886,11 @@ function SourceRow({ source, idx, visible }) {
           <Film size={14} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.4)" }} />
         )}
       </div>
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: h ? "#FFD700" : "rgba(255,255,255,0.94)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "rgba(255,255,255,0.45)", letterSpacing: 0.9, textTransform: "uppercase" }}>{source.type}</span>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: h ? "#FFD700" : "rgba(255,255,255,0.96)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "rgba(255,255,255,0.5)", letterSpacing: 1, textTransform: "uppercase" }}>{cleanSourceType(source.type)}</span>
       </div>
-      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 17, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 19, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
         {source.score}<span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>/{source.max}</span>
       </div>
       <div style={{ position: "relative", height: 7, borderRadius: 3.5, background: "rgba(0,0,0,0.6)", overflow: "hidden", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.6)" }}>
@@ -802,12 +907,13 @@ function SourceRow({ source, idx, visible }) {
   );
 }
 
-function Accordion({ icon, label, count, open, toggle, children }) {
+function Accordion({ id, icon, label, count, open, toggle, children }) {
   return (
-    <div style={{
+    <div id={id} style={{
       borderTop: "1px solid rgba(255,215,0,0.06)",
       background: open ? "linear-gradient(180deg, rgba(255,215,0,0.018) 0%, transparent 40%)" : "transparent",
       transition: "background 0.4s ease",
+      scrollMarginTop: 110,
     }}>
       <button onClick={toggle} style={{
         width: "100%", padding: "20px 28px", background: "none", border: "none",
@@ -1442,6 +1548,19 @@ export default function FilmGlance() {
           box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 0 40px rgba(255,215,0,0.5) !important;
         }
         .fg-vid-card:focus-visible { outline: none; border-color: rgba(255,215,0,0.6) !important; }
+
+        /* Floating section nav — visibility + scrollbar styling */
+        .fg-sidebar { display: block; }
+        .fg-sidebar::-webkit-scrollbar { width: 0; }
+        .fg-sidebar { scrollbar-width: none; }
+        @media (max-width: 1279px) {
+          .fg-sidebar { display: none !important; }
+        }
+        .fg-side-link:not(.active):hover {
+          background: rgba(255,215,0,0.05) !important;
+          border-color: rgba(255,215,0,0.14) !important;
+          color: rgba(255,215,0,0.9) !important;
+        }
 
         /* Result-page meta chips — dark at rest, gold-glow on hover
            (matches the .newl-how-card behavior on the landing). */
@@ -2094,7 +2213,7 @@ export default function FilmGlance() {
 
               {/* Streaming / Where to Watch if available */}
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                <Accordion id="fg-watch" icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
@@ -2132,7 +2251,20 @@ export default function FilmGlance() {
 
           {/* Normal result — Released Movie */}
           {result && !result.notFound && !result.coming_soon && (
-            <div className="fg-result-card" style={{
+            <ResultSidebar result={result} sections={[
+              { id: "fg-overview", label: "Overview", icon: Film, show: true },
+              { id: "fg-sources", label: "Source Breakdown", icon: BarChart3, show: result.sources && result.sources.length > 0 },
+              { id: "fg-hottake", label: "Good & Bad", icon: Flame, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
+              { id: "fg-videos", label: "Video Reviews", icon: Youtube, show: result.video_reviews && result.video_reviews.length > 0 },
+              { id: "fg-cast", label: "Cast", icon: Users, show: result.cast && result.cast.length > 0 },
+              { id: "fg-awards", label: "Awards", icon: Trophy, show: result.awards && result.awards.length > 0 },
+              { id: "fg-boxoffice", label: "Production & Run", icon: DollarSign, show: !!result.boxOffice },
+              { id: "fg-watch", label: "Where to Watch", icon: Tv, show: result.streaming && result.streaming.length > 0 },
+              { id: "fg-recs", label: "You Might Also Like", icon: Sparkles, show: result.recommendations && result.recommendations.length > 0 },
+            ].filter(s => s.show)} />
+          )}
+          {result && !result.notFound && !result.coming_soon && (
+            <div id="fg-overview" className="fg-result-card" style={{
               background: "linear-gradient(180deg, rgba(14,11,4,0.72) 0%, rgba(8,6,2,0.78) 100%)",
               border: "1px solid rgba(255,215,0,0.10)",
               borderRadius: 18, overflow: "hidden",
@@ -2271,73 +2403,118 @@ export default function FilmGlance() {
                       }}>{result.description}</p>
                     )}
 
-                    {/* Score panel — the one place gold treatment is meaningful (it's THE score) */}
-                    <div style={{
-                      padding: "20px 22px",
-                      borderRadius: 14,
-                      background: "linear-gradient(135deg, rgba(255,215,0,0.06) 0%, rgba(255,215,0,0.018) 100%)",
-                      border: "1px solid rgba(255,215,0,0.18)",
-                      boxShadow: "inset 0 1px 0 rgba(255,215,0,0.08)",
-                      animation: "fadeIn 0.5s 0.32s both",
-                    }}>
-                      <p style={{
-                        fontFamily: "'JetBrains Mono',monospace",
-                        fontSize: 11, letterSpacing: 1.8, color: "rgba(255,215,0,0.78)",
-                        textTransform: "uppercase", fontWeight: 700,
-                        marginBottom: 10,
-                      }}>Averaged Across Major Review Sites</p>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 18, flexWrap: "wrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 7, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
-                          <span style={{
-                            fontFamily: "'Playfair Display',serif",
-                            fontSize: 72, fontWeight: 700,
-                            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 38%, #E8A000 78%, #FFD700 100%)",
-                            backgroundSize: "220% auto",
-                            WebkitBackgroundClip: "text", backgroundClip: "text",
-                            WebkitTextFillColor: "transparent", color: "transparent",
-                            lineHeight: 0.95,
-                            textShadow: "0 0 30px rgba(255,215,0,0.2)",
-                            letterSpacing: -2.4,
-                          }}>{result.score.ten}</span>
-                          <span style={{ color: "rgba(255,255,255,0.46)", fontSize: 26, fontWeight: 600, fontFamily: "'Playfair Display',serif" }}>/ 10</span>
+                    {/* Score panel v2 — circular gauge with label rail and CTA */}
+                    {(() => {
+                      const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
+                      return (
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: 24,
+                          padding: "22px 24px",
+                          borderRadius: 16,
+                          background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.4)",
+                          animation: "fadeIn 0.5s 0.32s both",
+                          flexWrap: "wrap",
+                          position: "relative",
+                          overflow: "hidden",
+                        }}>
+                          {/* Circular gauge */}
+                          <div style={{
+                            position: "relative", width: 124, height: 124, flexShrink: 0,
+                            borderRadius: "50%",
+                            background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.045) ${pct}% 100%)`,
+                            boxShadow: `0 0 36px rgba(255,215,0,${0.06 + pct * 0.0018}), inset 0 0 0 1px rgba(255,255,255,0.04)`,
+                            animation: "fadeIn 0.6s 0.4s both",
+                          }}>
+                            <div style={{
+                              position: "absolute", inset: 8,
+                              borderRadius: "50%",
+                              background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
+                              border: "1px solid rgba(255,255,255,0.05)",
+                              display: "flex", flexDirection: "column",
+                              alignItems: "center", justifyContent: "center",
+                              gap: 1,
+                            }}>
+                              <span style={{
+                                fontFamily: "'Playfair Display',serif",
+                                fontSize: 44, fontWeight: 700,
+                                background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
+                                WebkitBackgroundClip: "text", backgroundClip: "text",
+                                WebkitTextFillColor: "transparent", color: "transparent",
+                                lineHeight: 1,
+                                letterSpacing: -1.5,
+                              }}>{result.score.ten}</span>
+                              <span style={{
+                                fontFamily: "'JetBrains Mono',monospace",
+                                fontSize: 11, fontWeight: 700,
+                                color: "rgba(255,255,255,0.45)",
+                                letterSpacing: 1.4,
+                              }}>/ 10</span>
+                            </div>
+                          </div>
+
+                          {/* Right column: label, stars, CTA */}
+                          <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
+                            <div>
+                              <p style={{
+                                fontFamily: "'JetBrains Mono',monospace",
+                                fontSize: 11, letterSpacing: 2, color: "rgba(255,215,0,0.7)",
+                                textTransform: "uppercase", fontWeight: 700,
+                                marginBottom: 6,
+                              }}>Film Glance Score</p>
+                              <p style={{
+                                fontFamily: "'Playfair Display',serif",
+                                fontStyle: "italic",
+                                fontSize: 17, color: "rgba(255,255,255,0.78)",
+                                lineHeight: 1.3, margin: 0,
+                                letterSpacing: -0.2,
+                              }}>Averaged across every major review site.</p>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                              <StarDisplay rating={result.score.stars} sz={22} />
+                              <span style={{
+                                color: "rgba(255,255,255,0.7)",
+                                fontSize: 14, fontWeight: 700,
+                                fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4,
+                              }}>{result.score.stars}/5</span>
+                            </div>
+                            {result.trailer_key && (
+                              <button
+                                onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                                className="fg-trailer-btn"
+                                style={{
+                                  alignSelf: "flex-start",
+                                  display: "inline-flex", alignItems: "center", gap: 10,
+                                  padding: "13px 24px", borderRadius: 11,
+                                  background: "rgba(0,0,0,0.5)",
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                  color: "rgba(255,255,255,0.94)",
+                                  fontFamily: "'Syne',sans-serif",
+                                  fontSize: 14, fontWeight: 700,
+                                  letterSpacing: 1.1, textTransform: "uppercase",
+                                  cursor: "pointer",
+                                  transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
+                                  boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.55)"; e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.55), 0 0 32px rgba(255,215,0,0.22), inset 0 1px 0 rgba(255,215,0,0.14)"; e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.color = "#FFD700"; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.5)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.color = "rgba(255,255,255,0.94)"; }}
+                              >
+                                <Play size={14} fill="currentColor" stroke="currentColor" />
+                                Watch Trailer
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 }}>
-                          <StarDisplay rating={result.score.stars} sz={20} />
-                          <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12.5, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4 }}>{result.score.stars}/5 stars</span>
-                        </div>
-                        {result.trailer_key && (
-                          <button
-                            onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
-                            className="fg-trailer-btn"
-                            style={{
-                              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 9,
-                              padding: "12px 22px", borderRadius: 11,
-                              background: "rgba(0,0,0,0.45)",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              color: "rgba(255,255,255,0.92)",
-                              fontFamily: "'Syne',sans-serif",
-                              fontSize: 13, fontWeight: 700,
-                              letterSpacing: 1.1, textTransform: "uppercase",
-                              cursor: "pointer",
-                              transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
-                              boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.55)"; e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.55), 0 0 32px rgba(255,215,0,0.22), inset 0 1px 0 rgba(255,215,0,0.14)"; e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.color = "#FFD700"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.45)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.color = "rgba(255,255,255,0.92)"; }}
-                          >
-                            <Play size={13} fill="currentColor" stroke="currentColor" />
-                            Watch Trailer
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
 
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
-              <Accordion icon={<BarChart3 size={14} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
+              <Accordion id="fg-sources" icon={<BarChart3 size={14} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
                 <div style={{ padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...result.sources].sort((a, b) => {
                     const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
@@ -2363,7 +2540,7 @@ export default function FilmGlance() {
 
               {/* Movie Hot Take */}
               {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
-                <Accordion icon={<Flame size={14} />} label="The Good & The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
+                <Accordion id="fg-hottake" icon={<Flame size={14} />} label="The Good & The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
                   <div style={{ padding: "12px 26px 28px" }}>
                     {result.hot_take.good?.length > 0 && (
                       <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 28 : 0 }}>
@@ -2456,7 +2633,7 @@ export default function FilmGlance() {
 
               {/* Video Reviews — bigger thumbnails, refined play affordance */}
               {result.video_reviews && result.video_reviews.length > 0 && (
-                <Accordion icon={<Youtube size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                <Accordion id="fg-videos" icon={<Youtube size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
                   <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
@@ -2511,7 +2688,7 @@ export default function FilmGlance() {
               )}
 
               {result.cast && result.cast.length > 0 && (
-                <Accordion icon={<Users size={14} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
+                <Accordion id="fg-cast" icon={<Users size={14} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
                   {(() => {
                     const count = result.cast.length;
                     const canEvenRows = count % 4 === 0 || count % 3 === 0;
@@ -2532,9 +2709,14 @@ export default function FilmGlance() {
               )}
 
               {result.awards && result.awards.length > 0 && (
-                <Accordion icon={<Trophy size={14} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
+                <Accordion id="fg-awards" icon={<Trophy size={14} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
                   <div style={{ padding: "8px 26px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    {result.awards.map((a, idx) => {
+                    {/* Sort: Wins first, Nominations after — preserves original order within each group */}
+                    {[...result.awards].sort((a, b) => {
+                      const aw = a.result === "Won" ? 0 : 1;
+                      const bw = b.result === "Won" ? 0 : 1;
+                      return aw - bw;
+                    }).map((a, idx) => {
                       const won = a.result === "Won";
                       return (
                         <div key={`${a.award}-${a.result}-${idx}`} style={{
@@ -2575,7 +2757,7 @@ export default function FilmGlance() {
               )}
 
               {result.boxOffice && (
-                <Accordion icon={<DollarSign size={14} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
+                <Accordion id="fg-boxoffice" icon={<DollarSign size={14} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
                   <div style={{ padding: "10px 22px 22px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
@@ -2599,7 +2781,7 @@ export default function FilmGlance() {
               )}
 
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                <Accordion id="fg-watch" icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
                   <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
@@ -2610,7 +2792,7 @@ export default function FilmGlance() {
                   (was 16/9 which cropped most of the image off). Spotlight hover
                   matching the Did-You-Mean card pattern. */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <Accordion icon={<Sparkles size={14} />} label="You Might Also Like" open={true} toggle={() => {}}>
+                <Accordion id="fg-recs" icon={<Sparkles size={14} />} label="You Might Also Like" open={true} toggle={() => {}}>
                   <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 14 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
