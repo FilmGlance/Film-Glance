@@ -1,5 +1,149 @@
 # Film Glance — Conversation Summary
 
+## Session: April 28-29, 2026 — Movie Result Page Comprehensive Redesign (PRs #43, #44) + DYM Polish
+
+### Context
+
+Multi-day arc completing the **three-pass design series** (landing → DYM → movie result). PR #42 merged the landing redesign. This session opened PR #43 (Did-You-Mean) and PR #44 (movie result page) — both merged. The result-page work alone took **~13 polish iterations** as the user gave round-by-round feedback on every section. 16 commits in PR #44, ~1,000 net insertions, single component file (`components/film-glance.jsx`) plus a one-line `app/api/search/route.ts` prompt change.
+
+### Workstream 1: Did-You-Mean redesign (PR #43)
+
+Replaced the old "No results" panel (orange `AlertCircle`, dark-gray-on-dark unreadable headings) with a state-aware discovery surface:
+
+- **Headline branches** by failure type: `suggestions.length > 0` → "Did you mean…", rate-limit → "Hold on a moment", timeout → "Connection slow", default miss → "We couldn't find that"
+- **Suggestion cards** with 130×195 posters, runtime + director chips, 3-line synopsis trimmed to ~200 chars at sentence boundary, gold left accent bar, hover spotlight effect (cursor-following gold radial via CSS vars + animated rotating conic-gradient border)
+- **Letterbox rails** top + bottom of the panel (echoes film-strip motif from the landing)
+- Italic Playfair gold "Did you mean…" headline, mono `// searched: "query"` diagnostic
+- Released-first sort puts unreleased films at the bottom with formatted release date or **"Release Date TBD"**
+- Out-of-scope keyword icon picker for hot-take rows was reused later for result page
+
+**Suggestion data architecture rewrite**:
+- Two-tier merged lookup: TMDB exact-token search + Postgres pg_trgm fuzzy match against `movie_cache` (5,810+ titles) running in **parallel**, then merged
+- "Star Wars problem" fixed — `star wr` was returning Star Wreck/Star Trek from TMDB tokens and never reaching fuzzy. Merge architecture surfaces Star Wars at sim 0.5 #1 via popularity ranking (TMDB blockbusters score 100+, fuzzy uses sim×200)
+- TMDB enrichment: parallel `/movie/{id}?append_to_response=credits` per result for runtime + director (search payload alone doesn't include them)
+- Backfill pass: any top-5 result missing overview/poster/release_date fires a TMDB title-lookup to fill the gap (older cache rows often have null overview)
+
+**Supabase migrations 005-010** applied to production:
+- 005 `pg_trgm` extension + GIN trigram index on `lower(data->>'title')` + `fuzzy_movie_suggestions` RPC
+- 006 fix `OPERATOR(extensions.%)` qualification through PostgREST/RPC
+- 007 `anonymous_search_whitelist` table + modified `check_anonymous_limit` to skip cap for whitelisted IPs (owner's IP `99.230.83.61` seeded)
+- 008 add `overview` to function return
+- 009 add `runtime`, `director`, `release_date`
+- 010 replace `ROW_NUMBER` dedup with `GROUP BY lower(title)` + `array_agg FILTER (WHERE … IS NOT NULL)` so multiple cache rows per title coalesce into one rich record (fixed "Shrek shows only year" bug)
+
+### Workstream 2: Movie Result Page Comprehensive Redesign (PR #44)
+
+Top-to-bottom rebuild. Each major section iterated until user signed off.
+
+**Hero card**:
+- Poster 130×195 → **210×315** desktop / 178×267 mobile, with gold-glow on hover (lift + scale + 100px gold halo)
+- Tagline: real curly quotes (`&ldquo;…&rdquo;`), italic dropped, gold-tinted Playfair
+- Title in serif gradient text-fill, bigger clamp(26-40px), tighter letter-spacing
+- Meta chips dark-at-rest gold-on-hover ("How It Works" landing pattern): year (Calendar), runtime in dual format `120 min · 2h 0m` (Clock), `Directed by NAME`
+- **Pulsing Watch Trailer CTA** in the meta row — gold gradient, 16-32px halo pulsing to 28-56px on a 2.6s loop, lifts on hover
+
+**True Movie Rating Score** (most-iterated section):
+- Initial circular conic-gradient gauge with score inside — "score not centered" feedback
+- Optical-center attempt with absolute positioning + `translate(-50%, calc(-50% + 4px))` — still off
+- Speedometer arc with 5 colored bands (Unwatchable → Must Watch in gold) + qualitative label — user rejected ("looks absolutely horrible") and asked for **immediate rollback**
+- Settled on **massive 124px Playfair gold-gradient number** with two-layer drop-shadow glow (28px close + 80px wide) replacing the gauge entirely. Right column kept tagline + StarDisplay row. User: "gorgeous"
+
+**Source Breakdown**:
+- Site favicons via Google `/s2/favicons` service (extracts domain from `source.url`, no asset hosting needed)
+- `cleanSourceType()` strips noise words: Score, Rating, Percentage, Source, Rank, Points, Stars, Votes; maps quirky types to clean labels (Tomatometer → Critics, Audience Score → Audience, Metascore → Critics)
+- Bigger rows (16/16/19px), gradient progress bar with glow
+
+**Thumbs Up & Thumbs Down** (formerly "Hot Take"):
+- Section-level Roger-Ebert branding ("Thumbs Up & Thumbs Down" accordion title with thumb icon)
+- **Per-row icons are contextual** to each statement via `pickHotTakeIcon()` keyword matching with compound-phrase priority: "visual effects" → Wand2 before generic "visual"; "X to watch" → Eye; "middle/first/second act" → Clock not Acting; "philosophical premise" → Lightbulb (premise removed from Plot regex); "hope and friendship" → Heart; etc.
+- Sub-headers: "The Good" (green) / "The Bad" (red) in italic Playfair, sub-labels "What works" / "What doesn't work"
+- Caught a runtime crash mid-session: `Drama` icon (theater masks) was added to lucide-react in v0.281, this project has v0.263.1, so importing Drama returned undefined. Swapped acting/cast/performance category Drama → Users.
+
+**Cast**: 54×54 → **96×96** headshots, gold ring on hover, lift + scale, name in Syne 13/700 + character in italic Playfair 12.
+
+**Awards**: sorted wins-first via `[...awards].sort()`, gold left bar + ambient glow on Won rows, Trophy icon in pill.
+
+**Production & Theatrical Run**:
+- Icon per row by label (DollarSign for Budget, Sparkles for Opening, Globe for International/Worldwide, TrendingUp for ROI, Calendar for Days, Tv for Theater Count, Flame for Domestic, BarChart3 for PTA)
+- All rows visually identical (no gold-tinted hero rows for consistency)
+- `formatRank()` frontend normalizer wraps bare-number ranks (cached movies returning `1` for openingRank) into `#1 all-time` / `#X widest release` / `#X longest run` form
+- Blank slot when no rank available (no "Unranked" placeholder per user)
+- Claude prompt rewrite with mandatory rank-format rules: complete phrases only, no bare numbers, brackets like "Top 5%" preferred over null
+
+**Where to Watch**: bigger StreamingBadge pills (13/19 padding), 26px logos, dark at rest with gold-glow on hover.
+
+**You Might Also Like**:
+- **FIXED aspect-ratio bug** — was `16/9` cropping most of every poster off; corrected to `2/3` portrait
+- TMDB w300 → w342, hover: gold border + 32px gold glow + lifted card; poster scales 1.06; title overlay with bottom gradient
+- Auto-fit grid (`minmax(118px, 1fr)`)
+
+**Video Reviews**: auto-fit grid, 48px refined gold-gradient play button with 28% gold halo, title visible (was only channel), hover bumps everything.
+
+**Accordion chrome**: section labels italic Playfair 19px (was Syne 12.5), gold-bordered icon chips that glow on open, soft top-down gradient on open state.
+
+**Floating section sidebar (NEW)**:
+- `ResultSidebar` component fixed at `right: calc(50% + 384px)` so it always sits 24px to the left of the centered 720px main column regardless of viewport width
+- Auto-height; lists every populated section dynamically (Movie Overview, True Rating Score, Source Breakdown, Thumbs Up & Down, Video Reviews, Cast, Awards, Production & Run, Where to Watch, You Might Also Like)
+- Click → smooth scroll with 110px sticky-header offset
+- Active section highlighted via IntersectionObserver as user scrolls
+- Hover on inactive items: gold border + glow
+- Hidden under 1380px viewport, thin gold scrollbar when overflows
+
+**Landing-page boot animations REMOVED**:
+- LetterLine per-letter `letterIn` removed — "Every Film." renders fully visible at first paint
+- Hero `<h1>` `fadeIn 0.7s` removed
+- "One True Rating Score." italic span `softFade 1.2s 0.9s forwards` removed (now opacity:1 from first paint)
+- `.bg-spotlight` `spotlightWarm 2.8s` keyframe + animation entirely removed
+- Source ticker section boot `softFade 1.2s 2.2s forwards` removed
+- Continuous decorative animations preserved (`goldShimmer`, `haloBreathe`, `tickerScroll`, `filmScroll`)
+- Italic span line-height bumped to 1.18 + `paddingBottom: 0.08em` to stop the `g` descender clipping
+
+### Workstream 3: VPS Forum Import Status
+
+Checked once mid-session. PID 2644 still running on KVM 4. **~1,487 unique boards complete (~45%)** of 3,308 total as of Apr 29 morning. Currently processing "New York, New York" board. Pace consistent. ETA mid-May. Doubled-line cosmetic logging still present (queued fix).
+
+### Files Modified
+
+| File | PR | Purpose |
+|------|----|---------|
+| `components/film-glance.jsx` | #43, #44 | DYM redesign + result-page comprehensive overhaul (~1,200 line touched in PR #44) |
+| `app/api/suggest/route.ts` | #43 | Two-tier merged TMDB + fuzzy lookup, popularity ranking, enrichment + backfill |
+| `app/api/search/route.ts` | #44 | Box office prompt rewrite with mandatory rank-format rules |
+| Supabase migrations 005-010 | #43 (data) | pg_trgm + fuzzy function + IP whitelist (production DB) |
+
+### Key Learnings
+
+1. **Iterate visually with the user.** The result-page redesign needed 13+ rounds because design feedback is fundamentally subjective. Quick push-and-iterate is faster than long up-front planning when the user has strong opinions and is engaged.
+2. **Verify lucide-react icons against the installed version.** `Drama` was added in v0.281; this project has v0.263.1. Use `node -e "const l = require('./node_modules/lucide-react'); console.log(typeof l.Drama)"` to verify before importing.
+3. **Optical centering of text inside circles is hard.** Multiple attempts (flex-baseline, absolute+translate with optical-correction) didn't satisfy the user. The path of least surprise was to abandon the inner-circle text entirely and render the score as a free-standing big number with glow.
+4. **Compound-phrase regex priority matters.** "visual effects" needs to match VFX → Wand2 BEFORE generic "visual" → Palette. Order the keyword ladder from most-specific to least-specific.
+5. **Roll back fearlessly when a design experiment fails.** The speedometer arc took ~30 minutes to build. User rejected it in one message. `git revert` is the right tool — don't try to defend the work.
+6. **`formatRank()` covers cached-data degradation.** When changing an LLM prompt to ask for richer output, existing cache won't have the new fields for the cache TTL window. Frontend normalization wrapped in a helper handles the transition gracefully without forced cache busting.
+
+### Next Steps (For Next Chat)
+
+In priority order per user direction at session end:
+
+1. **Polish the Favourites page** — `showFavs` view in `components/film-glance.jsx` with the FavoriteRow cards. Apply the same brand polish patterns established across the three-pass design series: gold-on-black, glow-on-hover, italic Playfair section headers, Syne body, dark-at-rest pills, gold-tinted accent borders. Likely needs improved card design, empty-state polish, hover spotlight effects, possibly a "Recently watched" / "Highest rated" sort toggle.
+2. **Last-minute movie page fixes** — user has flagged additional small fixes from real-world testing of v5.10.29 in production. Details to be captured at start of next session.
+3. **VPS forum import status check** — `ssh filmglance@147.93.113.39 "ps -ef | grep import_filmboards | grep -v grep; echo '---'; grep -c '✓ Board done' /root/filmboards-crawl/import.log; tail -5 /root/filmboards-crawl/import.log"`. Remember the doubled-line cosmetic — divide grep -c by 2. ETA still mid-May.
+4. **Plan a brand-new Box Office Totals page** — entirely new top-level page. Requirements TBD with user. Likely involves a curated all-time top-N display, sortable/filterable columns (worldwide, domestic, opening, ROI, budget), maybe a year/decade filter, with the same brand chrome as the rest of the app. Will need a new route (e.g. `/box-office`), backend data source decision (cached top-N from Claude prompt? scraped from BoxOfficeMojo? curated dataset?), and design discovery before implementation.
+
+Lower-priority queue (carried forward):
+- Post-import cleanup: delete `components/ui/floating-particles.tsx` + drop `three` dep, remove `components/preview-landing.jsx`
+- Doubled-log fix on next clean import stop (`run_import.sh` redirect change)
+- KVM 4 → KVM 2 downgrade after import completes (~$15/mo savings)
+- Post-import forum queue (GDPR removal, mobile audit, API health, Discuss links, staging cleanup, Capacitor mobile app)
+- 6 Dependabot vulnerabilities (3 high, 3 moderate)
+- Rotate Supabase PAT before Apr 17, 2027
+- Delete dead `YOUTUBE_API_KEY` from Vercel
+- Reconstruct missing `003_anonymous_searches.sql` migration
+- Full Stripe teardown (optional)
+- 2026-05-12 13:00 UTC scheduled cleanup agent (`trig_01XgUj4SH6z6d9vSp9Betg8R`) fires
+- Restart Claude Code to activate `huashu-design` skill (personal use only)
+
+---
+
 ## Session: April 28, 2026 (afternoon) — v5.10.5 Landing Redesign Pass 1: Grid Background + Sticky Header Fix
 
 ### Context
