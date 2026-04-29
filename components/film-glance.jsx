@@ -54,7 +54,7 @@ function LetterLine({ text, offset = 0, className, style }) {
       {text.split("").map((ch, i) => (
         <span
           key={i}
-          style={{ display: "inline-block", opacity: 0, animation: `letterIn 0.85s cubic-bezier(0.16, 1, 0.3, 1) ${offset + i * 0.028}s forwards` }}
+          style={{ display: "inline-block" }}
         >
           {ch === " " ? "\u00A0" : ch}
         </span>
@@ -396,7 +396,8 @@ function formatBoxOfficeVal(val, label) {
 }
 
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
-  const showRank = rank && rank !== "#N/A" && rank !== "N/A";
+  const hasVal = val && val !== "N/A" && val !== "$N/A";
+  const hasRank = rank && rank !== "#N/A" && rank !== "N/A" && String(rank).trim().length > 0;
   const formatted = formatBoxOfficeVal(val, label);
   const lbl = label.toLowerCase();
   const isROIPositive = lbl.includes("roi") && /^\d+%/.test(formatted) && parseInt(formatted) >= 100;
@@ -451,7 +452,11 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
         flexShrink: 0,
       }}>
         {formatted}
-        {showRank && <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {rank}</span>}
+        {hasVal && (
+          hasRank
+            ? <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {rank}</span>
+            : <span style={{ color: "rgba(255,255,255,0.28)", fontWeight: 500, fontSize: 12, marginLeft: 7, fontStyle: "italic" }}>/ Unranked</span>
+        )}
       </span>
     </div>
   );
@@ -556,69 +561,70 @@ function ResultSidebar({ result, sections }) {
 function pickHotTakeIcon(text, positive) {
   const t = (text || "").toLowerCase();
 
-  // ── HIGHLY SPECIFIC compound phrases first ──
-  // Visual effects / VFX / CGI → Wand2 (matched before general "visual")
-  if (/\b(visual ?effects?|v ?fx|cgi|special effects?|practical effects?|computer.generated|set piece[s]?|spectacle)\b/.test(t)) return Wand2;
-  // Action choreography / fight / chase → Swords (matched before general visual/style)
-  if (/\b(action(?: choreograph| sequence)?|chase|fight(ing)?|stunt|battle|combat|brawl|gunplay|shootout|martial.arts)\b/.test(t)) return Swords;
-  // Sound design (specific, before generic music)
-  if (/\b(sound ?design|sound ?effects?|sound ?mixing|sonic)\b/.test(t)) return Mic;
-  // Dialogue (specific, before generic plot/script)
-  if (/\b(dialog(ue)?|line[s]? of|quip|monolog|conversation|banter|exposit(ion|ory)?|heavy.handed)\b/.test(t)) return MessageSquare;
+  // ── HIGH-PRIORITY COMPOUND PHRASES (must run before generic single-word matches) ──
+  // "X to watch" → Eye (viewing experience)
+  if (/\b((un)?comfortable|hard|difficult|easy|painful|tough|joy|joyful) to watch\b/.test(t)) return Eye;
+  // Visual effects / VFX / CGI → Wand2
+  if (/\b(visual ?effects?|v ?fx|cgi|special effects?|practical effects?|computer.generated|set ?piece[s]?|spectacle)\b/.test(t)) return Wand2;
+  // Action choreography / fight / chase → Swords
+  if (/\b(action(?: choreograph| sequence)?|chase|fight(ing|s)?|stunt|battle|combat|brawl|gunplay|shootout|martial.arts|swordplay)\b/.test(t)) return Swords;
+  // Sound design (before music)
+  if (/\b(sound ?design|sound ?effects?|sound ?mixing|sonic|audio (mix|design))\b/.test(t)) return Mic;
+  // Dialogue
+  if (/\b(dialog(ue)?|line[s]?\s+(?:of|are|feel)|quip|monolog|conversation|banter|exposit(ion|ory)?|heavy.handed)\b/.test(t)) return MessageSquare;
 
-  // ── ROLE / CRAFT categories ──
-  // Acting / performance / cast / chemistry → Users (the installed
-  // lucide-react 0.263 doesn't have Drama yet; Users represents the
-  // ensemble/cast and reads as "people performing")
-  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble)\b/.test(t)) return Users;
-  // Direction / filmmaking / vision → Film
+  // ── ROLE / CRAFT ──
+  // Acting / performance / cast / chemistry → Users
+  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble|on.screen|charisma)\b/.test(t)) return Users;
+  // Directing → Film
   if (/\b(direct(or|ion|ed|ing|ors)?|filmmak(er|ers|ing)?|auteur|helm(ed|ing)?)\b/.test(t)) return Film;
-  // Cinematography / camera work → Camera
+  // Cinematography → Camera
   if (/\b(cinematograph(y|er)?|camera ?(work)?|shot[s]?|fram(e|ed|ing)|lens|composition)\b/.test(t)) return Camera;
-  // Music / score / soundtrack → Music
+  // Music / score → Music
   if (/\b(music(al)?|score|soundtrack|composer|song|theme ?song|orchestra)\b/.test(t)) return Music;
-  // Plot / story / script / narrative → Scroll (before "writing" generic).
-  // Note: "premise" intentionally NOT here — it's more about ideas/concept,
-  // see the Theme/Lightbulb block below.
-  if (/\b(plot|story(line|telling)?|script|screenplay|narrative|structure|arc[s]?|twist|writing)\b/.test(t)) return Scroll;
+  // Plot / story / script (no "premise" — that's Lightbulb)
+  if (/\b(plot|story(line|telling)?|script|screenplay|narrative|structure|arc[s]?|twist|writing|prose)\b/.test(t)) return Scroll;
 
-  // ── EXPERIENCE / GENRE qualifiers ──
+  // ── EMOTION / HEART (broad — also catches hope/friendship/love themes) ──
+  if (/\b(emotion(al|s)?|heart(felt|breaking|warming|wrenching)?|moving|touching|tear|love|romance|romantic|tender|poignant|relat(e|able)|hope(ful)?|friendship|brotherhood|sisterhood|kindness|compassion|humanity|courage|faith|redemption|bond|connection|forgive(ness)?|grief|loss|family)\b/.test(t)) return Heart;
+
+  // ── EXPERIENCE / TONE qualifiers ──
   // Pacing / runtime → Clock
-  if (/\b(pac(e|ing|ed)|rhythm|drag(s|ged|ging)?|slow|sluggish|brisk|momentum|runtime|drawn.out|overstay|act\s)\b/.test(t)) return Clock;
+  if (/\b(pac(e|ing|ed)|rhythm|drag(s|ged|ging)?|slow|sluggish|brisk|momentum|runtime|drawn.out|overstay|sluggish|too long|too short)\b/.test(t)) return Clock;
+  // Horror / dark / disturbing → Ghost
+  if (/\b(scary|terrify|fright|horror|haunt|chilling|dread|disturb(ing)?|macabre|grisly|gore|gory|nightmare|sinister)\b/.test(t)) return Ghost;
   // Tension / thrill / suspense → Zap
-  if (/\b(tension|thrill|suspense|edge.of|adrenaline|gripping|riveting|propuls)\b/.test(t)) return Zap;
-  // Horror / scary / dark → Ghost
-  if (/\b(scary|terrify|fright|horror|haunt|chilling|dread|disturb|macabre|grisly|gore)\b/.test(t)) return Ghost;
-  // Comedy / humor / wit → Sparkles (specifically humor — distinct from "originality" which also gets Sparkles below)
-  if (/\b(comed(y|ic)?|funny|laugh|hilari|humou?r(ous)?|joke|wit(ty)?|charming|amusing)\b/.test(t)) return Sparkles;
-  // Emotion / heart / moving → Heart
-  if (/\b(emotion(al|s)?|heart(felt|breaking|warming)?|moving|touching|tear|love|romance|tender|poignant|relat(e|able))\b/.test(t)) return Heart;
+  if (/\b(tension|thrill(er|ing)?|suspense(ful)?|edge.of|adrenaline|gripping|riveting|propuls|electrifying|intense|nail.biting)\b/.test(t)) return Zap;
+  // Comedy / humor / wit / charm → Sparkles
+  if (/\b(comed(y|ic)?|funny|laugh|hilari|humou?r(ous)?|joke|wit(ty)?|charming|amusing|delightful|whimsical)\b/.test(t)) return Sparkles;
 
   // ── INTELLECT / IDEAS ──
-  // Theme / commentary / philosophy / message → Lightbulb
-  if (/\b(theme|philosoph(y|ical)?|commentary|metaphor|allegory|symbolism|ideology|message|nuance|provocat|though(t|tful)|meditation|exploration|examin|consciousness)\b/.test(t)) return Lightbulb;
-  // Originality / innovation → Sparkles
-  if (/\b(original(ity)?|innovat|unique|fresh|inventive|trailblaz|groundbreak|paradigm|reinvent|revolutionary|defin(ed|es) a generation)\b/.test(t)) return Sparkles;
+  // Theme / philosophy / commentary / consciousness / transcendent
+  if (/\b(theme[s]?|philosoph(y|ical)?|commentary|metaphor|allegory|symbolism|ideology|message|nuance|provocat|though(t|tful)|meditation|exploration|examin|consciousness|transcend(ent|s)?|existential|profound|insight)\b/.test(t)) return Lightbulb;
+  // Originality / classic / timeless
+  if (/\b(original(ity)?|innovat|unique|fresh|inventive|trailblaz|groundbreak|paradigm|reinvent|revolutionary|defin(ed|es) a generation|timeless|classic|enduring|ageless|stand(s)? the test)\b/.test(t)) return Sparkles;
 
   // ── EXTERNAL / META ──
-  // Awards → Trophy
-  if (/\b(award|oscar|nomin|emmy|golden ?globe|prestige|critic.darling|festival)\b/.test(t)) return Trophy;
-  // Box office / commercial → DollarSign
+  // Awards
+  if (/\b(award|oscar|nomin|emmy|golden ?globe|prestige|critic.darling|festival|bafta|cannes)\b/.test(t)) return Trophy;
+  // Box office / commercial
   if (/\b(box office|gross|opening|million|billion|blockbuster|hit|flop|commercial|revenue|earn(ed|ings))\b/.test(t)) return DollarSign;
-  // Cultural / social commentary → Globe
+  // Cultural / social
   if (/\b(cultur(e|al)|social|society|generation|consumer|masculin|feminin|gender|race|class|identity|political|polariz|divisive|controvers|timely|dated|aged|critique)\b/.test(t)) return Globe;
-  // Audience / fan / popular reception → Users
+  // Audience / fan reception
   if (/\b(audience|viewer|fan(s)?|crowd|popular|reception|demographic|embraced|appeal)\b/.test(t)) return Users;
 
-  // ── BROAD / ATMOSPHERIC (last so they don't pre-empt specific) ──
-  // Tone / mood / atmosphere → Activity
-  if (/\b(tone|mood|atmosphere|vibe|ambien|energy)\b/.test(t)) return Activity;
-  // Visual style / aesthetic / color (general) → Palette
-  if (/\b(visual|aesthetic|colou?r|stylized|imagery|set design|production design|art direction|costume)\b/.test(t)) return Palette;
-  // Subtle nuanced details → Eye
+  // ── ATMOSPHERIC / BROAD (last) ──
+  // Setting/location/scene/world → Eye (visual content)
+  if (/\b(scene[s]?|setting|location|world.building|world|backdrop|vista|landscape|prison|hospital|school|courtroom|battlefield|wilderness|desert|island|space|underwater)\b/.test(t)) return Eye;
+  // Tone / mood / atmosphere / discomfort → Activity
+  if (/\b(tone|mood|atmosphere|atmospheric|vibe|ambien|energy|uncomfortable|unsettl|intens|brood)\b/.test(t)) return Activity;
+  // Visual style / aesthetic / color → Palette
+  if (/\b(visual|aesthetic|colou?r|stylized|style|imagery|set design|production design|art direction|costume)\b/.test(t)) return Palette;
+  // Subtle / nuanced detail → Eye
   if (/\b(subtle|nuanced|layered|texture|rich(ness)?|depth|observ|detail)\b/.test(t)) return Eye;
 
-  // Default — sentiment thumb
+  // Default → sentiment thumb
   return positive ? ThumbsUp : ThumbsDown;
 }
 
@@ -1695,11 +1701,6 @@ export default function FilmGlance() {
           transform: translateX(-50%);
           background: radial-gradient(ellipse 55% 48% at 50% 0%, rgba(255, 220, 120, 0.13) 0%, rgba(232, 160, 0, 0.06) 22%, rgba(232, 160, 0, 0.02) 42%, transparent 65%);
           pointer-events: none; z-index: 1;
-          animation: spotlightWarm 2.8s ease-out both;
-        }
-        @keyframes spotlightWarm {
-          from { opacity: 0; transform: translateX(-50%) scale(1.04); filter: blur(12px); }
-          to   { opacity: 1; transform: translateX(-50%) scale(1); filter: blur(0); }
         }
         .bg-vignette {
           position: fixed; inset: 0;
@@ -2114,11 +2115,11 @@ export default function FilmGlance() {
           {/* Search area */}
           <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
             {!result && !loading && (
-              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44, animation: "fadeIn 0.7s" }}>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44 }}>
                 <LetterLine text="Every Film." offset={0.15} />
                 <span
                   className="hero-accent"
-                  style={{ fontStyle: "italic", display: "block", opacity: 0, animation: "softFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards" }}
+                  style={{ fontStyle: "italic", display: "block" }}
                 >
                   One True Rating Score.
                 </span>
@@ -2556,7 +2557,12 @@ export default function FilmGlance() {
                           position: "relative", width: 132, height: 132, flexShrink: 0,
                           borderRadius: "50%",
                           background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.04) ${pct}% 100%)`,
-                          boxShadow: `0 0 40px rgba(255,215,0,${0.06 + pct * 0.0018}), inset 0 0 0 1px rgba(255,255,255,0.04)`,
+                          boxShadow: `
+                            0 0 28px rgba(255,215,0,${0.32 + pct * 0.003}),
+                            0 0 64px rgba(255,215,0,${0.14 + pct * 0.0018}),
+                            inset 0 0 0 1px rgba(255,255,255,0.04)
+                          `,
+                          filter: `drop-shadow(0 0 10px rgba(255,215,0,${0.35 + pct * 0.0024}))`,
                           animation: "fadeIn 0.6s 0.4s both",
                         }}>
                           <div style={{
@@ -2655,7 +2661,7 @@ export default function FilmGlance() {
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#22c55e", lineHeight: 1,
-                            }}>Thumbs Up</span>
+                            }}>The Good</span>
                           </div>
                           <span style={{
                             display: "block",
@@ -2665,7 +2671,7 @@ export default function FilmGlance() {
                             letterSpacing: 1.4, textTransform: "uppercase",
                             marginTop: 9,
                             marginLeft: 54,
-                          }}>What earns the thumbs up</span>
+                          }}>What works</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.good.map((point, i) => (
@@ -2699,7 +2705,7 @@ export default function FilmGlance() {
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#ef4444", lineHeight: 1,
-                            }}>Thumbs Down</span>
+                            }}>The Bad</span>
                           </div>
                           <span style={{
                             display: "block",
@@ -2709,7 +2715,7 @@ export default function FilmGlance() {
                             letterSpacing: 1.4, textTransform: "uppercase",
                             marginTop: 9,
                             marginLeft: 54,
-                          }}>What earns the thumbs down</span>
+                          }}>What doesn't</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.bad.map((point, i) => (
@@ -2856,13 +2862,13 @@ export default function FilmGlance() {
                   <div style={{ padding: "10px 22px 22px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={null} idx={2} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={result.boxOffice.ptaRank} idx={2} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Domestic Gross" val={result.boxOffice.domestic} rank={result.boxOffice.domesticRank} idx={3} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="International Gross" val={result.boxOffice.international} rank={null} idx={4} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="International Gross" val={result.boxOffice.international} rank={result.boxOffice.internationalRank} idx={4} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Worldwide Gross" val={result.boxOffice.worldwide} rank={result.boxOffice.worldwideRank} idx={5} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Estimated ROI" val={result.boxOffice.roi} rank={null} idx={6} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Theater Count (Widest)" val={result.boxOffice.theaterCount} rank={null} idx={7} visible={boxOfficeOpen} />
-                    <BoxOfficeRow label="Days in Theater" val={result.boxOffice.daysInTheater || result.boxOffice.daysInRelease} rank={null} idx={8} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Estimated ROI" val={result.boxOffice.roi} rank={result.boxOffice.roiRank} idx={6} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Theater Count (Widest)" val={result.boxOffice.theaterCount} rank={result.boxOffice.theaterCountRank} idx={7} visible={boxOfficeOpen} />
+                    <BoxOfficeRow label="Days in Theater" val={result.boxOffice.daysInTheater || result.boxOffice.daysInRelease} rank={result.boxOffice.daysInTheaterRank} idx={8} visible={boxOfficeOpen} />
                     {!result.boxOffice.openingRank && !result.boxOffice.domesticRank && !result.boxOffice.worldwideRank && !result.boxOffice.budgetRank && (
                       <p style={{
                         fontSize: 10, color: "#555", fontStyle: "italic", marginTop: 12,
@@ -3233,7 +3239,7 @@ export default function FilmGlance() {
                   borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
                   background: "rgba(10, 10, 10, 0.42)",
                   backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-                  opacity: 0, animation: "softFade 1.2s ease-out 2.2s forwards",
+                  opacity: 1,
                 }}
               >
                 <div style={{ textAlign: "center", marginBottom: 18, fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 600, fontStyle: "italic", letterSpacing: -0.2, color: "rgba(255, 215, 0, 0.78)" }}>
