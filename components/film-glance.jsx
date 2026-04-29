@@ -2344,47 +2344,47 @@ export default function FilmGlance() {
                               {!isUnreleased && s.year && (
                                 <span style={{
                                   display: "inline-block",
-                                  fontSize: 12, fontWeight: 700, letterSpacing: 1,
-                                  color: "rgba(255, 215, 0, 0.85)",
+                                  fontSize: 14, fontWeight: 700, letterSpacing: 1,
+                                  color: "rgba(255, 215, 0, 0.88)",
                                   fontFamily: "'JetBrains Mono', monospace",
-                                  background: "rgba(255, 215, 0, 0.07)",
-                                  padding: "4px 11px", borderRadius: 5,
-                                  border: "1px solid rgba(255, 215, 0, 0.16)",
+                                  background: "rgba(255, 215, 0, 0.08)",
+                                  padding: "5px 13px", borderRadius: 6,
+                                  border: "1px solid rgba(255, 215, 0, 0.18)",
                                 }}>{s.year}</span>
                               )}
                               {isUnreleased && releaseLabel && (
                                 <span style={{
                                   display: "inline-block",
-                                  fontSize: 11.5, fontWeight: 700, letterSpacing: 0.9,
+                                  fontSize: 13, fontWeight: 700, letterSpacing: 0.9,
                                   color: "rgba(255, 215, 0, 0.95)",
                                   fontFamily: "'JetBrains Mono', monospace",
-                                  background: "rgba(255, 215, 0, 0.10)",
-                                  padding: "4px 11px", borderRadius: 5,
-                                  border: "1px solid rgba(255, 215, 0, 0.24)",
+                                  background: "rgba(255, 215, 0, 0.11)",
+                                  padding: "5px 13px", borderRadius: 6,
+                                  border: "1px solid rgba(255, 215, 0, 0.26)",
                                   textTransform: "uppercase",
                                 }}>{releaseLabel}</span>
                               )}
                               {s.runtime && (
                                 <span style={{
                                   display: "inline-flex", alignItems: "center", gap: 4,
-                                  fontSize: 12, fontWeight: 600, letterSpacing: 0.4,
-                                  color: "rgba(255, 255, 255, 0.7)",
+                                  fontSize: 14, fontWeight: 600, letterSpacing: 0.4,
+                                  color: "rgba(255, 255, 255, 0.78)",
                                   fontFamily: "'JetBrains Mono', monospace",
-                                  background: "rgba(255, 255, 255, 0.04)",
-                                  padding: "4px 11px", borderRadius: 5,
-                                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                                  background: "rgba(255, 255, 255, 0.05)",
+                                  padding: "5px 13px", borderRadius: 6,
+                                  border: "1px solid rgba(255, 255, 255, 0.10)",
                                 }}>{s.runtime}</span>
                               )}
                               {s.director && (
                                 <span style={{
-                                  fontSize: 13, fontWeight: 500,
-                                  color: "rgba(255, 255, 255, 0.62)",
+                                  fontSize: 15, fontWeight: 500,
+                                  color: "rgba(255, 255, 255, 0.7)",
                                   fontFamily: "'Syne', sans-serif",
                                   letterSpacing: 0.15,
                                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                  maxWidth: 280,
+                                  maxWidth: 320,
                                 }}>
-                                  <span style={{ color: "rgba(255, 215, 0, 0.55)", fontWeight: 600 }}>Directed by</span>&nbsp;{s.director}
+                                  <span style={{ color: "rgba(255, 215, 0, 0.62)", fontWeight: 600 }}>Directed by</span>&nbsp;{s.director}
                                 </span>
                               )}
                             </div>
@@ -2392,9 +2392,9 @@ export default function FilmGlance() {
                               <p style={{
                                 margin: 0,
                                 fontFamily: "'Syne', sans-serif",
-                                fontSize: 14,
+                                fontSize: 15,
                                 fontWeight: 400,
-                                color: "rgba(255, 255, 255, 0.66)",
+                                color: "rgba(255, 255, 255, 0.72)",
                                 lineHeight: 1.55,
                                 letterSpacing: 0.1,
                                 display: "-webkit-box",
