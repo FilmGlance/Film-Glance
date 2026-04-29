@@ -546,29 +546,12 @@ function ResultSidebar({ result, sections }) {
   );
 }
 
-/* Pick a Lucide icon based on keywords in the hot-take bullet text.
-   Falls back to ThumbsUp/Down. The mapping is intentionally broad — we
-   don't want every row sharing one icon (the prior version was visually
-   uniform and felt like one boring list). */
-function pickHotTakeIcon(text, positive) {
-  const t = (text || "").toLowerCase();
-  if (/\b(act(ing|or|ress)|perform(ance|er)|cast|chemistry|lead)\b/.test(t)) return Users;
-  if (/\b(direct(or|ion|ed)|filmmak|vision)\b/.test(t)) return Film;
-  if (/\b(visual|cinematograph|shot|cinema|image|colou?r|frame|composition)\b/.test(t)) return Eye;
-  if (/\b(score|music|soundtrack|composer|theme song)\b/.test(t)) return Music;
-  if (/\b(plot|story|script|writing|screenplay|narrative|dialog|pacing|structure)\b/.test(t)) return BookOpen;
-  if (/\b(emotion|heart|feel|moving|powerful|touching|sentiment|tear)\b/.test(t)) return Heart;
-  if (/\b(action|chase|fight|stunt|sequence|set piece|climax|battle)\b/.test(t)) return Zap;
-  if (/\b(award|oscar|nomin|win|win\s)\b/.test(t)) return Trophy;
-  if (/\b(box office|gross|opening|million|billion|hit|flop)\b/.test(t)) return DollarSign;
-  if (/\b(comedy|funny|laugh|hilarious|humour|humor|joke)\b/.test(t)) return Sparkles;
-  if (/\b(scary|terrify|thrill|tension|suspense|fright|horror)\b/.test(t)) return Flame;
-  if (/\b(audience|viewer|fan|crowd|popular|reception)\b/.test(t)) return Users;
-  return positive ? ThumbsUp : ThumbsDown;
-}
-
 function HotTakeRow({ text, idx, positive, visible, delay }) {
-  const Icon = pickHotTakeIcon(text, positive);
+  // Roger Ebert-style branding: every Good row is a literal Thumbs Up,
+  // every Bad row is a literal Thumbs Down. Earlier per-row keyword icon
+  // matching was unreliable (e.g. positive 'consumerism' bullet getting
+  // a thumbs-up was correct, but other rows got mismatched icons).
+  const Icon = positive ? ThumbsUp : ThumbsDown;
   const accent = positive ? "34,197,94" : "239,68,68";
   const accentHex = positive ? "#22c55e" : "#ef4444";
   return (
@@ -793,13 +776,15 @@ function calcScore(sources) {
    ═══════════════════════════════════════════════════════════════════════════ */
 function StarDisplay({ rating, sz = 18 }) {
   const out = [];
+  // Filled stars get a gold drop-shadow glow; empty stars stay flat dim gold.
+  const glow = { filter: "drop-shadow(0 0 6px rgba(255,215,0,0.65))" };
   for (let i = 1; i <= 5; i++) {
-    if (i <= Math.floor(rating)) out.push(<Star key={i} size={sz} fill="#FFD700" stroke="#FFD700" />);
+    if (i <= Math.floor(rating)) out.push(<Star key={i} size={sz} fill="#FFD700" stroke="#FFD700" style={glow} />);
     else if (i - 0.5 <= rating) out.push(
       <span key={i} style={{ position: "relative", display: "inline-block", width: sz, height: sz }}>
         <Star size={sz} fill="none" stroke="rgba(255,215,0,0.25)" style={{ position: "absolute" }} />
         <span style={{ position: "absolute", overflow: "hidden", width: "50%" }}>
-          <Star size={sz} fill="#FFD700" stroke="#FFD700" />
+          <Star size={sz} fill="#FFD700" stroke="#FFD700" style={glow} />
         </span>
       </span>
     );
@@ -2277,7 +2262,7 @@ export default function FilmGlance() {
               { id: "fg-overview", label: "Movie Overview", icon: Film, show: true },
               { id: "fg-score", label: "True Rating Score", icon: Gauge, show: result.score && typeof result.score.ten !== "undefined" },
               { id: "fg-sources", label: "Source Breakdown", icon: BarChart3, show: result.sources && result.sources.length > 0 },
-              { id: "fg-hottake", label: "Good & Bad", icon: Flame, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
+              { id: "fg-hottake", label: "Thumbs Up & Down", icon: ThumbsUp, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
               { id: "fg-videos", label: "Video Reviews", icon: Youtube, show: result.video_reviews && result.video_reviews.length > 0 },
               { id: "fg-cast", label: "Cast", icon: Users, show: result.cast && result.cast.length > 0 },
               { id: "fg-awards", label: "Awards", icon: Trophy, show: result.awards && result.awards.length > 0 },
@@ -2319,16 +2304,14 @@ export default function FilmGlance() {
                     {result.tagline && (
                       <p style={{
                         fontFamily: "'Playfair Display',serif",
-                        fontSize: 14, fontStyle: "italic",
-                        color: "rgba(255,215,0,0.6)",
+                        fontSize: 14,
+                        color: "rgba(255,215,0,0.65)",
                         letterSpacing: 0.2,
                         marginBottom: 11,
                         animation: "fadeIn 0.6s 0.1s both",
                         overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-                        display: "inline-flex", alignItems: "center", gap: 6,
                       }}>
-                        <Quote size={12} style={{ color: "rgba(255,215,0,0.45)", transform: "scaleX(-1) translateY(-1px)" }} />
-                        {result.tagline}
+                        &ldquo;{result.tagline}&rdquo;
                       </p>
                     )}
 
@@ -2407,21 +2390,21 @@ export default function FilmGlance() {
                           onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
                           className="fg-trailer-cta"
                           style={{
-                            display: "inline-flex", alignItems: "center", gap: 9,
-                            padding: "11px 22px", borderRadius: 9,
+                            display: "inline-flex", alignItems: "center", gap: 8,
+                            padding: "8px 16px", borderRadius: 8,
                             background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
                             border: "1px solid rgba(255,215,0,0.85)",
                             color: "#0a0a0a",
                             fontFamily: "'Syne',sans-serif",
-                            fontSize: 14, fontWeight: 700,
+                            fontSize: 12, fontWeight: 700,
                             letterSpacing: 0.5, textTransform: "uppercase",
                             cursor: "pointer",
-                            boxShadow: "0 0 16px rgba(255,215,0,0.45), 0 0 32px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,255,255,0.3)",
+                            boxShadow: "0 0 14px rgba(255,215,0,0.42), 0 0 28px rgba(255,215,0,0.16), inset 0 1px 0 rgba(255,255,255,0.3)",
                             animation: "trailerPulse 2.6s ease-in-out infinite",
                             transition: "transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s ease",
                           }}
                         >
-                          <Play size={13} fill="#0a0a0a" stroke="#0a0a0a" />
+                          <Play size={11} fill="#0a0a0a" stroke="#0a0a0a" />
                           Watch Trailer
                         </button>
                       )}
@@ -2532,11 +2515,11 @@ export default function FilmGlance() {
                           <p style={{
                             fontFamily: "'Syne',sans-serif",
                             fontStyle: "normal",
-                            fontSize: 16, fontWeight: 500,
-                            color: "rgba(255,255,255,0.82)",
-                            lineHeight: 1.55, margin: 0,
-                            letterSpacing: 0.1,
-                          }}>Rating from the average of all major movie review sites.</p>
+                            fontSize: 19, fontWeight: 500,
+                            color: "rgba(255,255,255,0.88)",
+                            lineHeight: 1.45, margin: 0,
+                            letterSpacing: 0.05,
+                          }}>Rating score comes from the average of all major movie review sites.</p>
                           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                             <StarDisplay rating={result.score.stars} sz={22} />
                             <span style={{
@@ -2580,7 +2563,7 @@ export default function FilmGlance() {
 
               {/* Movie Hot Take */}
               {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
-                <Accordion id="fg-hottake" icon={<Flame size={14} />} label="The Good & The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
+                <Accordion id="fg-hottake" icon={<ThumbsUp size={14} />} label="Thumbs Up & Thumbs Down" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
                   <div style={{ padding: "12px 26px 28px" }}>
                     {result.hot_take.good?.length > 0 && (
                       <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 28 : 0 }}>
@@ -2600,7 +2583,7 @@ export default function FilmGlance() {
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#22c55e", lineHeight: 1,
-                            }}>The Good</span>
+                            }}>Thumbs Up</span>
                           </div>
                           <span style={{
                             display: "block",
@@ -2610,7 +2593,7 @@ export default function FilmGlance() {
                             letterSpacing: 1.4, textTransform: "uppercase",
                             marginTop: 9,
                             marginLeft: 54,
-                          }}>What critics & audiences praise</span>
+                          }}>What earns the thumbs up</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.good.map((point, i) => (
@@ -2644,7 +2627,7 @@ export default function FilmGlance() {
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#ef4444", lineHeight: 1,
-                            }}>The Bad</span>
+                            }}>Thumbs Down</span>
                           </div>
                           <span style={{
                             display: "block",
@@ -2654,7 +2637,7 @@ export default function FilmGlance() {
                             letterSpacing: 1.4, textTransform: "uppercase",
                             marginTop: 9,
                             marginLeft: 54,
-                          }}>Where it falls short</span>
+                          }}>What earns the thumbs down</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.bad.map((point, i) => (
