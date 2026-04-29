@@ -7,7 +7,7 @@ import {
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
   Music, BookOpen, Gauge,
-  Drama, Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic
+  Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -567,8 +567,10 @@ function pickHotTakeIcon(text, positive) {
   if (/\b(dialog(ue)?|line[s]? of|quip|monolog|conversation|banter|exposit(ion|ory)?|heavy.handed)\b/.test(t)) return MessageSquare;
 
   // ── ROLE / CRAFT categories ──
-  // Acting / performance / cast / chemistry → Drama (theater masks)
-  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble)\b/.test(t)) return Drama;
+  // Acting / performance / cast / chemistry → Users (the installed
+  // lucide-react 0.263 doesn't have Drama yet; Users represents the
+  // ensemble/cast and reads as "people performing")
+  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble)\b/.test(t)) return Users;
   // Direction / filmmaking / vision → Film
   if (/\b(direct(or|ion|ed|ing|ors)?|filmmak(er|ers|ing)?|auteur|helm(ed|ing)?)\b/.test(t)) return Film;
   // Cinematography / camera work → Camera
