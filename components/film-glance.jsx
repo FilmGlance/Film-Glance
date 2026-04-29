@@ -491,31 +491,21 @@ function ResultSidebar({ result, sections }) {
   return (
     <aside className="fg-sidebar" aria-label="Movie sections" style={{
       position: "fixed",
-      left: 28, top: "50%",
+      right: 28, top: "50%",
       transform: "translateY(-50%)",
       zIndex: 30,
-      width: 244,
+      width: 268,
       maxHeight: "calc(100vh - 140px)",
       overflowY: "auto",
-      background: "rgba(8,6,2,0.78)",
+      background: "rgba(8,6,2,0.82)",
       backdropFilter: "blur(28px) saturate(1.1)",
       WebkitBackdropFilter: "blur(28px) saturate(1.1)",
       border: "1px solid rgba(255,215,0,0.10)",
       borderRadius: 16,
-      padding: "16px 10px",
+      padding: "12px 10px",
       boxShadow: "0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,215,0,0.04)",
       animation: "softFade 0.55s cubic-bezier(0.16,1,0.3,1) 0.35s both",
     }}>
-      <p style={{
-        fontFamily: "'JetBrains Mono',monospace",
-        fontSize: 10, fontWeight: 700, letterSpacing: 2,
-        color: "rgba(255,215,0,0.6)",
-        textTransform: "uppercase",
-        padding: "4px 14px 12px",
-        margin: 0,
-        borderBottom: "1px solid rgba(255,215,0,0.08)",
-        marginBottom: 8,
-      }}>Sections</p>
       <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {sections.map(s => {
           const Icon = s.icon;
@@ -829,17 +819,18 @@ function Skeleton() {
 }
 
 function cleanSourceType(t) {
-  if (!t) return t;
+  if (!t) return null;
   let s = String(t).trim();
-  // Strip noise words the user explicitly didn't want shown
-  s = s.replace(/\b(score|rating|percentage|pct|source|rank)\b/gi, "")
+  // Strip every noise word the user called out
+  s = s.replace(/\b(score|rating|percentage|pct|source|rank|points?|stars?|votes?)\b/gi, "")
        .replace(/\s+/g, " ").trim();
   // Map quirky leftovers to clean labels
   if (/^meta$/i.test(s)) s = "Critics";
   if (/^tomato(meter)?$/i.test(s)) s = "Critics";
   if (/^popcorn(meter)?$/i.test(s)) s = "Audience";
   if (/^user[s]?$/i.test(s)) s = "Audience";
-  return s || t.replace(/\b(source|score|rating|percentage)\b/gi, "").trim() || "Rating";
+  // Empty or just one-letter junk → don't render a type at all
+  return s.length >= 2 ? s : null;
 }
 
 function SourceRow({ source, idx, visible }) {
@@ -888,7 +879,12 @@ function SourceRow({ source, idx, visible }) {
       </div>
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: h ? "#FFD700" : "rgba(255,255,255,0.96)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "rgba(255,255,255,0.5)", letterSpacing: 1, textTransform: "uppercase" }}>{cleanSourceType(source.type)}</span>
+        {(() => {
+          const t = cleanSourceType(source.type);
+          return t ? (
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "rgba(255,255,255,0.5)", letterSpacing: 1, textTransform: "uppercase" }}>{t}</span>
+          ) : null;
+        })()}
       </div>
       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 19, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
         {source.score}<span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>/{source.max}</span>
@@ -1549,10 +1545,15 @@ export default function FilmGlance() {
         }
         .fg-vid-card:focus-visible { outline: none; border-color: rgba(255,215,0,0.6) !important; }
 
-        /* Floating section nav — visibility + scrollbar styling */
-        .fg-sidebar { display: block; }
-        .fg-sidebar::-webkit-scrollbar { width: 0; }
-        .fg-sidebar { scrollbar-width: none; }
+        /* Floating section nav — visibility + thin gold scrollbar */
+        .fg-sidebar { display: block; scrollbar-width: thin; scrollbar-color: rgba(255,215,0,0.32) transparent; }
+        .fg-sidebar::-webkit-scrollbar { width: 5px; }
+        .fg-sidebar::-webkit-scrollbar-track { background: transparent; }
+        .fg-sidebar::-webkit-scrollbar-thumb {
+          background: rgba(255,215,0,0.32);
+          border-radius: 3px;
+        }
+        .fg-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,215,0,0.55); }
         @media (max-width: 1279px) {
           .fg-sidebar { display: none !important; }
         }
@@ -2252,7 +2253,7 @@ export default function FilmGlance() {
           {/* Normal result — Released Movie */}
           {result && !result.notFound && !result.coming_soon && (
             <ResultSidebar result={result} sections={[
-              { id: "fg-overview", label: "Overview", icon: Film, show: true },
+              { id: "fg-overview", label: "Movie Overview", icon: Film, show: true },
               { id: "fg-sources", label: "Source Breakdown", icon: BarChart3, show: result.sources && result.sources.length > 0 },
               { id: "fg-hottake", label: "Good & Bad", icon: Flame, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
               { id: "fg-videos", label: "Video Reviews", icon: Youtube, show: result.video_reviews && result.video_reviews.length > 0 },
@@ -2403,113 +2404,114 @@ export default function FilmGlance() {
                       }}>{result.description}</p>
                     )}
 
-                    {/* Score panel v2 — circular gauge with label rail and CTA */}
-                    {(() => {
-                      const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
-                      return (
-                        <div style={{
-                          display: "flex", alignItems: "center", gap: 24,
-                          padding: "22px 24px",
-                          borderRadius: 16,
-                          background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%)",
-                          border: "1px solid rgba(255,255,255,0.06)",
-                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.4)",
-                          animation: "fadeIn 0.5s 0.32s both",
-                          flexWrap: "wrap",
-                          position: "relative",
-                          overflow: "hidden",
-                        }}>
-                          {/* Circular gauge */}
-                          <div style={{
-                            position: "relative", width: 124, height: 124, flexShrink: 0,
-                            borderRadius: "50%",
-                            background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.045) ${pct}% 100%)`,
-                            boxShadow: `0 0 36px rgba(255,215,0,${0.06 + pct * 0.0018}), inset 0 0 0 1px rgba(255,255,255,0.04)`,
-                            animation: "fadeIn 0.6s 0.4s both",
-                          }}>
-                            <div style={{
-                              position: "absolute", inset: 8,
-                              borderRadius: "50%",
-                              background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
-                              border: "1px solid rgba(255,255,255,0.05)",
-                              display: "flex", flexDirection: "column",
-                              alignItems: "center", justifyContent: "center",
-                              gap: 1,
-                            }}>
-                              <span style={{
-                                fontFamily: "'Playfair Display',serif",
-                                fontSize: 44, fontWeight: 700,
-                                background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
-                                WebkitBackgroundClip: "text", backgroundClip: "text",
-                                WebkitTextFillColor: "transparent", color: "transparent",
-                                lineHeight: 1,
-                                letterSpacing: -1.5,
-                              }}>{result.score.ten}</span>
-                              <span style={{
-                                fontFamily: "'JetBrains Mono',monospace",
-                                fontSize: 11, fontWeight: 700,
-                                color: "rgba(255,255,255,0.45)",
-                                letterSpacing: 1.4,
-                              }}>/ 10</span>
-                            </div>
-                          </div>
-
-                          {/* Right column: label, stars, CTA */}
-                          <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
-                            <div>
-                              <p style={{
-                                fontFamily: "'JetBrains Mono',monospace",
-                                fontSize: 11, letterSpacing: 2, color: "rgba(255,215,0,0.7)",
-                                textTransform: "uppercase", fontWeight: 700,
-                                marginBottom: 6,
-                              }}>Film Glance Score</p>
-                              <p style={{
-                                fontFamily: "'Playfair Display',serif",
-                                fontStyle: "italic",
-                                fontSize: 17, color: "rgba(255,255,255,0.78)",
-                                lineHeight: 1.3, margin: 0,
-                                letterSpacing: -0.2,
-                              }}>Averaged across every major review site.</p>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                              <StarDisplay rating={result.score.stars} sz={22} />
-                              <span style={{
-                                color: "rgba(255,255,255,0.7)",
-                                fontSize: 14, fontWeight: 700,
-                                fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4,
-                              }}>{result.score.stars}/5</span>
-                            </div>
-                            {result.trailer_key && (
-                              <button
-                                onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
-                                className="fg-trailer-btn"
-                                style={{
-                                  alignSelf: "flex-start",
-                                  display: "inline-flex", alignItems: "center", gap: 10,
-                                  padding: "13px 24px", borderRadius: 11,
-                                  background: "rgba(0,0,0,0.5)",
-                                  border: "1px solid rgba(255,255,255,0.12)",
-                                  color: "rgba(255,255,255,0.94)",
-                                  fontFamily: "'Syne',sans-serif",
-                                  fontSize: 14, fontWeight: 700,
-                                  letterSpacing: 1.1, textTransform: "uppercase",
-                                  cursor: "pointer",
-                                  transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
-                                  boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.55)"; e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.55), 0 0 32px rgba(255,215,0,0.22), inset 0 1px 0 rgba(255,215,0,0.14)"; e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.color = "#FFD700"; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.5)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.color = "rgba(255,255,255,0.94)"; }}
-                              >
-                                <Play size={14} fill="currentColor" stroke="currentColor" />
-                                Watch Trailer
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
                 </div>
+
+                {/* Score panel — full-width row across the bottom of the hero card */}
+                {(() => {
+                  const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
+                  return (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 28,
+                      marginTop: 24,
+                      padding: "24px 28px",
+                      borderRadius: 14,
+                      background: "linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.4) 100%)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 36px rgba(0,0,0,0.45)",
+                      animation: "fadeIn 0.5s 0.32s both",
+                      flexWrap: "wrap",
+                      position: "relative",
+                    }}>
+                      {/* Circular gauge */}
+                      <div style={{
+                        position: "relative", width: 132, height: 132, flexShrink: 0,
+                        borderRadius: "50%",
+                        background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.04) ${pct}% 100%)`,
+                        boxShadow: `0 0 40px rgba(255,215,0,${0.06 + pct * 0.0018}), inset 0 0 0 1px rgba(255,255,255,0.04)`,
+                        animation: "fadeIn 0.6s 0.4s both",
+                      }}>
+                        <div style={{
+                          position: "absolute", inset: 9,
+                          borderRadius: "50%",
+                          background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                          display: "flex", flexDirection: "column",
+                          alignItems: "center", justifyContent: "center",
+                          gap: 1,
+                        }}>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontSize: 48, fontWeight: 700,
+                            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
+                            WebkitBackgroundClip: "text", backgroundClip: "text",
+                            WebkitTextFillColor: "transparent", color: "transparent",
+                            lineHeight: 1, letterSpacing: -1.6,
+                          }}>{result.score.ten}</span>
+                          <span style={{
+                            fontFamily: "'JetBrains Mono',monospace",
+                            fontSize: 11, fontWeight: 700,
+                            color: "rgba(255,255,255,0.45)",
+                            letterSpacing: 1.4,
+                          }}>/ 10</span>
+                        </div>
+                      </div>
+
+                      {/* Center: label + tagline + stars */}
+                      <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div>
+                          <p style={{
+                            fontFamily: "'JetBrains Mono',monospace",
+                            fontSize: 11.5, letterSpacing: 2.2, color: "rgba(255,215,0,0.75)",
+                            textTransform: "uppercase", fontWeight: 700,
+                            marginBottom: 6,
+                          }}>True Movie Rating Score</p>
+                          <p style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontStyle: "italic",
+                            fontSize: 18, color: "rgba(255,255,255,0.8)",
+                            lineHeight: 1.3, margin: 0,
+                            letterSpacing: -0.2,
+                          }}>Averaged across every major review site.</p>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                          <StarDisplay rating={result.score.stars} sz={22} />
+                          <span style={{
+                            color: "rgba(255,255,255,0.7)",
+                            fontSize: 14, fontWeight: 700,
+                            fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4,
+                          }}>{result.score.stars}/5</span>
+                        </div>
+                      </div>
+
+                      {/* Right: Trailer CTA */}
+                      {result.trailer_key && (
+                        <button
+                          onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                          className="fg-trailer-btn"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 10,
+                            padding: "13px 24px", borderRadius: 11,
+                            background: "rgba(0,0,0,0.5)",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            color: "rgba(255,255,255,0.94)",
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 14, fontWeight: 700,
+                            letterSpacing: 1.1, textTransform: "uppercase",
+                            cursor: "pointer", flexShrink: 0,
+                            transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
+                            boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.55)"; e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.55), 0 0 32px rgba(255,215,0,0.22), inset 0 1px 0 rgba(255,215,0,0.14)"; e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.color = "#FFD700"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.5)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.color = "rgba(255,255,255,0.94)"; }}
+                        >
+                          <Play size={14} fill="currentColor" stroke="currentColor" />
+                          Watch Trailer
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
 
