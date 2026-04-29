@@ -2551,12 +2551,34 @@ export default function FilmGlance() {
                   </div>
                 </div>
 
-                {/* Score block — section-header style (icon + italic Playfair title)
-                    matching the rest of the page's accordion sections, then the
-                    visual gauge + stars below. Trailer button has moved into the
-                    hero meta row above. */}
+                {/* Score block — speedometer arc with qualitative label + side stats */}
                 {(() => {
-                  const pct = Math.max(0, Math.min(100, (result.score.ten / 10) * 100));
+                  const score = Math.max(0, Math.min(10, result.score.ten || 0));
+                  // Speedometer geometry. cx, cy = needle pivot; r = arc radius.
+                  const cx = 130, cy = 130, r = 100;
+                  // 5 bands across the half circle. Score 0 → 180°, score 10 → 0°.
+                  // Top band (8-10) intentionally uses Film Glance gold so a
+                  // 'Must Watch' film literally hits our brand color.
+                  const bands = [
+                    { from: 180, to: 144, color: "#dc2626", label: "Unwatchable" },
+                    { from: 144, to: 108, color: "#f97316", label: "Poor" },
+                    { from: 108, to: 72,  color: "#eab308", label: "Mixed" },
+                    { from: 72,  to: 36,  color: "#84cc16", label: "Good" },
+                    { from: 36,  to: 0,   color: "#FFD700", label: "Must Watch" },
+                  ];
+                  const scoreAngle = 180 - (score / 10) * 180;
+                  const activeBand = bands.find(b => scoreAngle <= b.from && scoreAngle >= b.to) || bands[0];
+                  const arcPoint = (deg, radius) => {
+                    const a = (deg * Math.PI) / 180;
+                    return [cx + Math.cos(a) * radius, cy - Math.sin(a) * radius];
+                  };
+                  const arcPath = (fromDeg, toDeg, radius) => {
+                    const [x1, y1] = arcPoint(fromDeg, radius);
+                    const [x2, y2] = arcPoint(toDeg, radius);
+                    return `M ${x1} ${y1} A ${radius} ${radius} 0 0 0 ${x2} ${y2}`;
+                  };
+                  const needleR = 78;
+                  const [needleX, needleY] = arcPoint(scoreAngle, needleR);
                   return (
                     <div id="fg-score" style={{
                       marginTop: 26,
@@ -2594,77 +2616,91 @@ export default function FilmGlance() {
                         }}>True Movie Rating Score</h3>
                       </div>
 
-                      {/* Body — gauge + tagline + stars in one horizontal row */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 26, flexWrap: "wrap" }}>
-                        <div style={{
-                          position: "relative", width: 132, height: 132, flexShrink: 0,
-                          borderRadius: "50%",
-                          background: `conic-gradient(from -90deg, #FFE27A 0%, #FFD700 ${pct * 0.4}%, #E8A000 ${pct}%, rgba(255,255,255,0.04) ${pct}% 100%)`,
-                          boxShadow: `
-                            0 0 28px rgba(255,215,0,${0.32 + pct * 0.003}),
-                            0 0 64px rgba(255,215,0,${0.14 + pct * 0.0018}),
-                            inset 0 0 0 1px rgba(255,255,255,0.04)
-                          `,
-                          filter: `drop-shadow(0 0 10px rgba(255,215,0,${0.35 + pct * 0.0024}))`,
-                          animation: "fadeIn 0.6s 0.4s both",
-                        }}>
-                          <div style={{
-                            position: "absolute", inset: 8,
-                            borderRadius: "50%",
-                            background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
-                            border: "1px solid rgba(255,255,255,0.05)",
-                            overflow: "hidden",
-                          }}>
-                            {/* Absolute-centered wrapper. translate(-50%, calc(-50% + 4px))
-                                puts the wrapper's geometric center 4px BELOW the parent's
-                                geometric center — Playfair digits sit visually higher than
-                                their bounding box center (because the box reserves descender
-                                space below the baseline), so this 4px optical correction
-                                lands the digit's visual center at the circle's center. */}
-                            <div style={{
-                              position: "absolute",
-                              top: "50%", left: "50%",
-                              transform: "translate(-50%, calc(-50% + 4px))",
-                              display: "inline-flex",
-                              alignItems: "baseline",
-                              whiteSpace: "nowrap",
-                              lineHeight: 1,
-                            }}>
-                              <span style={{
-                                fontFamily: "'Playfair Display',serif",
-                                fontSize: 44, fontWeight: 700,
-                                background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
-                                WebkitBackgroundClip: "text", backgroundClip: "text",
-                                WebkitTextFillColor: "transparent", color: "transparent",
-                                lineHeight: 1, letterSpacing: -1.4,
-                              }}>{result.score.ten}</span>
-                              <span style={{
-                                fontFamily: "'JetBrains Mono',monospace",
-                                fontSize: 12, fontWeight: 700,
-                                color: "rgba(255,255,255,0.5)",
-                                letterSpacing: 0.3,
-                                marginLeft: 2,
-                              }}>/10</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
+                      {/* Body — speedometer left, stats right */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 28, flexWrap: "wrap", justifyContent: "center" }}>
+                        {/* Speedometer + qualitative label */}
+                        <div style={{ flexShrink: 0, textAlign: "center", animation: "fadeIn 0.6s 0.4s both" }}>
+                          <svg width="260" height="160" viewBox="0 0 260 160" style={{ display: "block", overflow: "visible" }} aria-label={`Score ${score} out of 10 — ${activeBand.label}`}>
+                            {/* Background track */}
+                            <path d={arcPath(180, 0, r)}
+                                  stroke="rgba(255,255,255,0.05)" strokeWidth="22" fill="none" strokeLinecap="butt" />
+                            {/* Colored bands — active band glows */}
+                            {bands.map(b => {
+                              const isActive = b.label === activeBand.label;
+                              return (
+                                <path key={b.label}
+                                      d={arcPath(b.from, b.to, r)}
+                                      stroke={b.color}
+                                      strokeWidth="22"
+                                      fill="none"
+                                      strokeLinecap="butt"
+                                      opacity={isActive ? 0.96 : 0.32}
+                                      style={isActive ? { filter: `drop-shadow(0 0 10px ${b.color})` } : undefined} />
+                              );
+                            })}
+                            {/* Tick marks at band boundaries */}
+                            {[180, 144, 108, 72, 36, 0].map(angle => {
+                              const [x1, y1] = arcPoint(angle, 90);
+                              const [x2, y2] = arcPoint(angle, 114);
+                              return <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2}
+                                           stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />;
+                            })}
+                            {/* Needle */}
+                            <line x1={cx} y1={cy} x2={needleX} y2={needleY}
+                                  stroke="#FFD700" strokeWidth="3" strokeLinecap="round"
+                                  style={{ filter: "drop-shadow(0 0 8px rgba(255,215,0,0.85))" }} />
+                            {/* Needle hub */}
+                            <circle cx={cx} cy={cy} r="11" fill="#0a0a0a"
+                                    stroke="#FFD700" strokeWidth="2"
+                                    style={{ filter: "drop-shadow(0 0 8px rgba(255,215,0,0.5))" }} />
+                            <circle cx={cx} cy={cy} r="4" fill="#FFD700" />
+                          </svg>
+                          {/* Qualitative band label */}
                           <p style={{
-                            fontFamily: "'Syne',sans-serif",
-                            fontStyle: "normal",
-                            fontSize: 19, fontWeight: 500,
-                            color: "rgba(255,255,255,0.88)",
-                            lineHeight: 1.45, margin: 0,
-                            letterSpacing: 0.05,
-                          }}>Rating score comes from the average of all major movie review sites.</p>
-                          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                            margin: "4px 0 0",
+                            fontFamily: "'Playfair Display', serif",
+                            fontStyle: "italic",
+                            fontSize: 26, fontWeight: 700,
+                            color: activeBand.color,
+                            letterSpacing: -0.4,
+                            lineHeight: 1.1,
+                            textShadow: `0 0 18px ${activeBand.color}66, 0 0 36px ${activeBand.color}33`,
+                          }}>{activeBand.label}</p>
+                        </div>
+
+                        {/* Right column — score, stars, tagline */}
+                        <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
+                          <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, lineHeight: 1 }}>
+                            <span style={{
+                              fontFamily: "'Playfair Display',serif",
+                              fontSize: 64, fontWeight: 700,
+                              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
+                              WebkitBackgroundClip: "text", backgroundClip: "text",
+                              WebkitTextFillColor: "transparent", color: "transparent",
+                              lineHeight: 1, letterSpacing: -2,
+                              textShadow: "0 0 28px rgba(255,215,0,0.18)",
+                            }}>{result.score.ten}</span>
+                            <span style={{
+                              fontFamily: "'Playfair Display',serif",
+                              fontSize: 22, fontWeight: 600,
+                              color: "rgba(255,255,255,0.46)",
+                            }}>/ 10</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                             <StarDisplay rating={result.score.stars} sz={22} />
                             <span style={{
                               color: "rgba(255,255,255,0.72)",
-                              fontSize: 15, fontWeight: 700,
+                              fontSize: 14, fontWeight: 700,
                               fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4,
                             }}>{result.score.stars}/5</span>
                           </div>
+                          <p style={{
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 16, fontWeight: 500,
+                            color: "rgba(255,255,255,0.82)",
+                            lineHeight: 1.5, margin: 0,
+                            letterSpacing: 0.05,
+                          }}>Rating score comes from the average of all major movie review sites.</p>
                         </div>
                       </div>
                     </div>
