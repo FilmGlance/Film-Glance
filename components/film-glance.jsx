@@ -2261,14 +2261,14 @@ export default function FilmGlance() {
                       const currentYear = new Date().getFullYear();
                       const isUnreleased = s.release_date
                         ? s.release_date > todayStr
-                        : (s.year != null && s.year > currentYear);
+                        : (s.year == null || s.year > currentYear);
                       let releaseLabel = null;
                       if (isUnreleased) {
                         if (s.release_date) {
                           const d = new Date(s.release_date);
                           releaseLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                         } else {
-                          releaseLabel = "Release date TBA";
+                          releaseLabel = "Release Date TBD";
                         }
                       }
                       return (
@@ -2344,47 +2344,47 @@ export default function FilmGlance() {
                               {!isUnreleased && s.year && (
                                 <span style={{
                                   display: "inline-block",
-                                  fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
-                                  color: "rgba(255, 215, 0, 0.82)",
+                                  fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                                  color: "rgba(255, 215, 0, 0.85)",
                                   fontFamily: "'JetBrains Mono', monospace",
-                                  background: "rgba(255, 215, 0, 0.06)",
-                                  padding: "3px 9px", borderRadius: 4,
-                                  border: "1px solid rgba(255, 215, 0, 0.14)",
+                                  background: "rgba(255, 215, 0, 0.07)",
+                                  padding: "4px 11px", borderRadius: 5,
+                                  border: "1px solid rgba(255, 215, 0, 0.16)",
                                 }}>{s.year}</span>
                               )}
                               {isUnreleased && releaseLabel && (
                                 <span style={{
                                   display: "inline-block",
-                                  fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
-                                  color: "rgba(255, 215, 0, 0.92)",
+                                  fontSize: 11.5, fontWeight: 700, letterSpacing: 0.9,
+                                  color: "rgba(255, 215, 0, 0.95)",
                                   fontFamily: "'JetBrains Mono', monospace",
                                   background: "rgba(255, 215, 0, 0.10)",
-                                  padding: "3px 9px", borderRadius: 4,
-                                  border: "1px solid rgba(255, 215, 0, 0.22)",
+                                  padding: "4px 11px", borderRadius: 5,
+                                  border: "1px solid rgba(255, 215, 0, 0.24)",
                                   textTransform: "uppercase",
                                 }}>{releaseLabel}</span>
                               )}
                               {s.runtime && (
                                 <span style={{
                                   display: "inline-flex", alignItems: "center", gap: 4,
-                                  fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4,
-                                  color: "rgba(255, 255, 255, 0.62)",
+                                  fontSize: 12, fontWeight: 600, letterSpacing: 0.4,
+                                  color: "rgba(255, 255, 255, 0.7)",
                                   fontFamily: "'JetBrains Mono', monospace",
-                                  background: "rgba(255, 255, 255, 0.03)",
-                                  padding: "3px 9px", borderRadius: 4,
-                                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: "rgba(255, 255, 255, 0.04)",
+                                  padding: "4px 11px", borderRadius: 5,
+                                  border: "1px solid rgba(255, 255, 255, 0.08)",
                                 }}>{s.runtime}</span>
                               )}
                               {s.director && (
                                 <span style={{
-                                  fontSize: 11, fontWeight: 500,
-                                  color: "rgba(255, 255, 255, 0.5)",
+                                  fontSize: 13, fontWeight: 500,
+                                  color: "rgba(255, 255, 255, 0.62)",
                                   fontFamily: "'Syne', sans-serif",
-                                  letterSpacing: 0.1,
+                                  letterSpacing: 0.15,
                                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                  maxWidth: 220,
+                                  maxWidth: 280,
                                 }}>
-                                  <span style={{ color: "rgba(255, 215, 0, 0.45)", fontWeight: 600 }}>dir.</span>&nbsp;{s.director}
+                                  <span style={{ color: "rgba(255, 215, 0, 0.55)", fontWeight: 600 }}>Directed by</span>&nbsp;{s.director}
                                 </span>
                               )}
                             </div>
@@ -2392,10 +2392,10 @@ export default function FilmGlance() {
                               <p style={{
                                 margin: 0,
                                 fontFamily: "'Syne', sans-serif",
-                                fontSize: 12.5,
+                                fontSize: 14,
                                 fontWeight: 400,
-                                color: "rgba(255, 255, 255, 0.58)",
-                                lineHeight: 1.5,
+                                color: "rgba(255, 255, 255, 0.66)",
+                                lineHeight: 1.55,
                                 letterSpacing: 0.1,
                                 display: "-webkit-box",
                                 WebkitLineClamp: 3,

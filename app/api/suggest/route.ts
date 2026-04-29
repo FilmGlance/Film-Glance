@@ -113,8 +113,10 @@ function sortReleasedFirst(items: Suggestion[]): Suggestion[] {
   const currentYear = new Date().getFullYear();
   const isUnreleased = (s: Suggestion) => {
     if (s.release_date) return s.release_date > today;
-    // No release_date but year is in future → also unreleased
-    return s.year !== null && s.year > currentYear;
+    if (s.year !== null) return s.year > currentYear;
+    // No release_date AND no year — TMDB only reaches this state for
+    // unannounced future films. Treat as unreleased.
+    return true;
   };
   const released: Suggestion[] = [];
   const unreleased: Suggestion[] = [];
