@@ -395,9 +395,32 @@ function formatBoxOfficeVal(val, label) {
   return s;
 }
 
+/* Normalize whatever Claude/cache returned for a rank field into a clean
+   '#N all-time' / 'Top X%' / etc. display form. Cached older entries
+   sometimes return just '1' (no context) or numeric ranks — wrap them. */
+function formatRank(rank, label) {
+  if (rank === null || rank === undefined) return null;
+  const s = String(rank).trim();
+  if (!s || s === "0" || /^n\.?a\.?$/i.test(s) || s === "#N/A" || /^(unknown|none|null|unranked|not ?ranked)$/i.test(s) || /^[—–-]+$/.test(s)) return null;
+  // Already prefixed with # or contains "all-time" / "top" / "widest" / "longest" / a percent → return as-is
+  if (s.startsWith("#") || /\b(all.time|top\s*\d|widest|longest)\b/i.test(s) || /%/.test(s)) return s;
+  // Bare number → format based on what kind of stat the row is
+  if (/^\d{1,5}$/.test(s)) {
+    const lbl = (label || "").toLowerCase();
+    if (lbl.includes("theater count")) return `#${s} widest release`;
+    if (lbl.includes("days")) return `#${s} longest run`;
+    return `#${s} all-time`;
+  }
+  // Numeric with comma → "1,200" → "#1,200 all-time"
+  if (/^\d{1,3}(,\d{3})+$/.test(s)) return `#${s} all-time`;
+  // Anything else (descriptive phrase) → return as-is
+  return s;
+}
+
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
   const hasVal = val && val !== "N/A" && val !== "$N/A";
-  const hasRank = rank && rank !== "#N/A" && rank !== "N/A" && String(rank).trim().length > 0;
+  const cleanRank = formatRank(rank, label);
+  const hasRank = !!cleanRank;
   const formatted = formatBoxOfficeVal(val, label);
   const lbl = label.toLowerCase();
   const isROIPositive = lbl.includes("roi") && /^\d+%/.test(formatted) && parseInt(formatted) >= 100;
@@ -454,7 +477,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
         {formatted}
         {hasVal && (
           hasRank
-            ? <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {rank}</span>
+            ? <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 500, fontSize: 13, marginLeft: 7 }}>/ {cleanRank}</span>
             : <span style={{ color: "rgba(255,255,255,0.28)", fontWeight: 500, fontSize: 12, marginLeft: 7, fontStyle: "italic" }}>/ Unranked</span>
         )}
       </span>
@@ -564,6 +587,11 @@ function pickHotTakeIcon(text, positive) {
   // ── HIGH-PRIORITY COMPOUND PHRASES (must run before generic single-word matches) ──
   // "X to watch" → Eye (viewing experience)
   if (/\b((un)?comfortable|hard|difficult|easy|painful|tough|joy|joyful) to watch\b/.test(t)) return Eye;
+  // Character writing / motivation / development → Scroll (script weakness/strength)
+  // Catches "Villain motivation could be more developed", "Underwritten antagonist", etc.
+  if (/\b(motivation[s]?|under(developed|written)|character (?:develop|arc|writing|motivation)|villain|protagonist|antagonist|hero[s']*)\b/.test(t)) return Scroll;
+  // "middle act" / "third act" / "first act" → Clock (story-pacing context, not "act" as in acting)
+  if (/\b(middle|first|second|third|final|opening|closing)\s+act\b/.test(t)) return Clock;
   // Visual effects / VFX / CGI → Wand2
   if (/\b(visual ?effects?|v ?fx|cgi|special effects?|practical effects?|computer.generated|set ?piece[s]?|spectacle)\b/.test(t)) return Wand2;
   // Action choreography / fight / chase → Swords
@@ -575,11 +603,16 @@ function pickHotTakeIcon(text, positive) {
 
   // ── ROLE / CRAFT ──
   // Acting / performance / cast / chemistry → Users
-  if (/\b(act(ing|or|ress|s)?|perform(ance|er|ed|ances|ers)?|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble|on.screen|charisma)\b/.test(t)) return Users;
+  // (Bare "act" intentionally NOT here — too many false positives like
+  // "middle act" pacing references; specific compound act-pacing match
+  // already fires above. Acting here requires explicit suffix.)
+  if (/\b(acting|actor|actress|actors|actresses|perform(ance|er|ed|ances|ers)|cast(ing)?|chemistry|leads?|portray(al|ed|ing)?|ensemble|on.screen|charisma)\b/.test(t)) return Users;
   // Directing → Film
   if (/\b(direct(or|ion|ed|ing|ors)?|filmmak(er|ers|ing)?|auteur|helm(ed|ing)?)\b/.test(t)) return Film;
   // Cinematography → Camera
   if (/\b(cinematograph(y|er)?|camera ?(work)?|shot[s]?|fram(e|ed|ing)|lens|composition)\b/.test(t)) return Camera;
+  // Animation / character design / production design / costume design / art direction → Palette
+  if (/\b(animat(ion|ed)|character design|costume design|production design|set design|art direction|hand.drawn)\b/.test(t)) return Palette;
   // Music / score → Music
   if (/\b(music(al)?|score|soundtrack|composer|song|theme ?song|orchestra)\b/.test(t)) return Music;
   // Plot / story / script (no "premise" — that's Lightbulb)
@@ -1658,10 +1691,20 @@ export default function FilmGlance() {
         }
         .fg-meta-chip:hover svg { color: #FFD700; }
 
+        /* Hero poster — gold glow on hover */
+        .fg-hero-poster:hover {
+          transform: translateY(-4px) scale(1.015) !important;
+          box-shadow:
+            0 28px 72px rgba(0,0,0,0.7),
+            0 0 100px rgba(255,215,0,0.32),
+            0 0 0 1px rgba(255,215,0,0.55),
+            inset 0 0 0 1px rgba(255,215,0,0.18) !important;
+        }
+
         /* Mobile: hero stacks vertically with smaller poster */
         @media (max-width: 640px) {
           .fg-hero-grid { flex-direction: column !important; gap: 18px !important; align-items: center !important; }
-          .fg-hero-poster { width: 156px !important; height: 234px !important; }
+          .fg-hero-poster { width: 178px !important; height: 267px !important; }
           .fg-hero-meta { justify-content: center !important; }
         }
 
@@ -2364,11 +2407,13 @@ export default function FilmGlance() {
               <div style={{ padding: "32px 30px 28px", position: "relative", zIndex: 1 }}>
                 <div className="fg-hero-grid" style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
                   <div className="fg-hero-poster" style={{
-                    width: 180, height: 270,
+                    width: 210, height: 315,
                     borderRadius: 14, overflow: "hidden", flexShrink: 0,
                     boxShadow: "0 18px 56px rgba(0,0,0,0.65), 0 0 60px rgba(255,215,0,0.08), 0 0 0 1px rgba(255,215,0,0.10), inset 0 0 0 1px rgba(255,255,255,0.04)",
                     animation: "fadeIn 0.5s both",
                     position: "relative",
+                    cursor: "default",
+                    transition: "all 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
                   }}>
                     <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
                   </div>
@@ -2570,23 +2615,22 @@ export default function FilmGlance() {
                             borderRadius: "50%",
                             background: "radial-gradient(circle at 50% 30%, #14110a 0%, #050505 100%)",
                             border: "1px solid rgba(255,255,255,0.05)",
-                            display: "flex", flexDirection: "column",
-                            alignItems: "center", justifyContent: "center", gap: 1,
+                            display: "flex", alignItems: "baseline", justifyContent: "center", gap: 2,
                           }}>
                             <span style={{
                               fontFamily: "'Playfair Display',serif",
-                              fontSize: 48, fontWeight: 700,
+                              fontSize: 42, fontWeight: 700,
                               background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 50%, #E8A000 100%)",
                               WebkitBackgroundClip: "text", backgroundClip: "text",
                               WebkitTextFillColor: "transparent", color: "transparent",
-                              lineHeight: 1, letterSpacing: -1.6,
+                              lineHeight: 1, letterSpacing: -1.4,
                             }}>{result.score.ten}</span>
                             <span style={{
                               fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: 11, fontWeight: 700,
-                              color: "rgba(255,255,255,0.45)",
-                              letterSpacing: 1.4,
-                            }}>/ 10</span>
+                              fontSize: 13, fontWeight: 700,
+                              color: "rgba(255,255,255,0.5)",
+                              letterSpacing: 0.4,
+                            }}>/10</span>
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2715,7 +2759,7 @@ export default function FilmGlance() {
                             letterSpacing: 1.4, textTransform: "uppercase",
                             marginTop: 9,
                             marginLeft: 54,
-                          }}>What doesn't</span>
+                          }}>What doesn't work</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {result.hot_take.bad.map((point, i) => (
