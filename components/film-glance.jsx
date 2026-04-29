@@ -4,7 +4,8 @@ import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
-  MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles
+  MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
+  ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
@@ -188,19 +189,21 @@ function CastMember({ name, character, img, idx, visible }) {
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0) scale(1)" : "translateY(10px) scale(0.95)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04 + 0.05}s`,
-        minWidth: 78, maxWidth: 90, flexShrink: 0, width: "calc(25% - 6px)"
+        minWidth: 96, maxWidth: 110, flexShrink: 0, width: "calc(25% - 8px)"
       }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
       <div style={{
-        width: 54, height: 54, borderRadius: "50%", overflow: "hidden",
+        width: 72, height: 72, borderRadius: "50%", overflow: "hidden",
         background: `linear-gradient(135deg, hsl(${hue},22%,13%), hsl(${hue},28%,22%))`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        border: `2px solid ${hov ? "rgba(255,215,0,0.4)" : `hsla(${hue},20%,30%,0.3)`}`,
-        transition: "all 0.3s",
-        transform: hov ? "scale(1.1)" : "scale(1)",
-        boxShadow: hov ? "0 4px 20px rgba(255,215,0,0.1)" : "none",
+        border: `2px solid ${hov ? "rgba(255,215,0,0.55)" : `hsla(${hue},20%,32%,0.35)`}`,
+        transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
+        transform: hov ? "scale(1.08) translateY(-2px)" : "scale(1)",
+        boxShadow: hov
+          ? "0 10px 32px rgba(255,215,0,0.18), 0 0 0 4px rgba(255,215,0,0.06), inset 0 0 0 1px rgba(255,215,0,0.2)"
+          : "0 4px 14px rgba(0,0,0,0.45)",
         position: "relative"
       }}>
         {hasImg && !imgFail && (
@@ -217,22 +220,25 @@ function CastMember({ name, character, img, idx, visible }) {
         )}
         {!imgOk && (
           <span style={{
-            fontSize: 16, fontWeight: 700,
-            color: hov ? "#FFD700" : `hsl(${hue},18%,52%)`,
+            fontSize: 20, fontWeight: 700,
+            color: hov ? "#FFD700" : `hsl(${hue},18%,55%)`,
             fontFamily: "'Playfair Display',serif",
-            transition: "color 0.2s", letterSpacing: 1, zIndex: 1
+            transition: "color 0.2s", letterSpacing: 1.2, zIndex: 1
           }}>{initials}</span>
         )}
       </div>
-      <div style={{ textAlign: "center", lineHeight: 1.2, width: "100%" }}>
+      <div style={{ textAlign: "center", lineHeight: 1.25, width: "100%", marginTop: 4 }}>
         <div style={{
-          fontSize: 10, fontWeight: 600,
-          color: hov ? "#FFD700" : "#bbb",
-          transition: "color 0.2s",
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 11.5, fontWeight: 700,
+          letterSpacing: 0.2,
+          color: hov ? "#FFD700" : "rgba(255,255,255,0.88)",
+          transition: "color 0.25s",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{name}</div>
         <div style={{
-          fontSize: 9, color: "#4a4a4a", marginTop: 1, fontStyle: "italic",
+          fontFamily: "'Playfair Display',serif",
+          fontSize: 10.5, color: "rgba(255,255,255,0.42)", marginTop: 2, fontStyle: "italic",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{character}</div>
       </div>
@@ -253,28 +259,45 @@ function StreamingBadge({ platform, url, type, logo_path, idx, visible, title })
       href={href} target="_blank" rel="noopener noreferrer"
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
-        display: "inline-flex", alignItems: "center", gap: 8,
-        padding: "9px 16px", borderRadius: 10,
-        background: hov ? "rgba(255,215,0,0.1)" : "rgba(255,215,0,0.04)",
-        border: `1px solid ${hov ? "rgba(255,215,0,0.3)" : "rgba(255,215,0,0.12)"}`,
+        display: "inline-flex", alignItems: "center", gap: 11,
+        padding: "11px 18px", borderRadius: 12,
+        background: hov
+          ? "linear-gradient(135deg, rgba(255,215,0,0.14), rgba(255,165,0,0.06))"
+          : "rgba(10,8,4,0.65)",
+        border: `1px solid ${hov ? "rgba(255,215,0,0.42)" : "rgba(255,215,0,0.16)"}`,
+        boxShadow: hov
+          ? "0 10px 26px rgba(0,0,0,0.5), 0 0 22px rgba(255,215,0,0.14), inset 0 1px 0 rgba(255,215,0,0.12)"
+          : "0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)",
         textDecoration: "none", cursor: "pointer",
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(8px)",
-        transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
+        transform: visible ? (hov ? "translateY(-2px)" : "translateY(0)") : "translateY(8px)",
+        transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s, transform 0.3s cubic-bezier(0.16,1,0.3,1)`,
       }}
     >
       {logoUrl ? (
-        <img src={logoUrl} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
+        <img src={logoUrl} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} onError={e => e.target.style.display = "none"} />
       ) : (
-        <Play size={11} fill="#FFD700" stroke="#FFD700" style={{ opacity: hov ? 1 : 0.7, transition: "opacity 0.2s" }} />
+        <div style={{ width: 24, height: 24, borderRadius: 5, background: "rgba(255,215,0,0.08)", border: "1px solid rgba(255,215,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Play size={11} fill="#FFD700" stroke="#FFD700" />
+        </div>
       )}
       <span style={{
-        fontSize: 11.5, fontWeight: 600, color: "#FFD700",
-        opacity: hov ? 1 : 0.8, transition: "opacity 0.2s",
+        fontFamily: "'Syne',sans-serif",
+        fontSize: 13.5, fontWeight: 700, color: "#FFD700",
+        letterSpacing: 0.2,
         whiteSpace: "nowrap",
       }}>{platform}</span>
-      {typeLabel && <span style={{ fontSize: 9, color: "#FFD700", opacity: 0.5, fontWeight: 500 }}>{typeLabel}</span>}
-      <ExternalLink size={9} style={{ color: "#FFD700", opacity: hov ? 0.6 : 0.25, transition: "opacity 0.2s" }} />
+      {typeLabel && (
+        <span style={{
+          fontFamily: "'JetBrains Mono',monospace",
+          fontSize: 10, color: "rgba(255,215,0,0.7)", fontWeight: 700,
+          letterSpacing: 0.8, textTransform: "uppercase",
+          padding: "2px 7px", borderRadius: 4,
+          background: "rgba(255,215,0,0.06)",
+          border: "1px solid rgba(255,215,0,0.14)",
+        }}>{typeLabel}</span>
+      )}
+      <ExternalLink size={11} style={{ color: "#FFD700", opacity: hov ? 0.85 : 0.35, transition: "opacity 0.25s, transform 0.25s", transform: hov ? "translate(2px,-2px)" : "translate(0,0)" }} />
     </a>
   );
 }
@@ -369,18 +392,32 @@ function formatBoxOfficeVal(val, label) {
 function BoxOfficeRow({ label, val, rank, idx, visible }) {
   const showRank = rank && rank !== "#N/A" && rank !== "N/A";
   const formatted = formatBoxOfficeVal(val, label);
+  // Highlight key rows (worldwide gross, ROI, budget) in gold
+  const lbl = label.toLowerCase();
+  const isHero = lbl.includes("worldwide") || lbl.includes("budget") || lbl.includes("roi");
+  const isROIPositive = lbl.includes("roi") && /^\d+%/.test(formatted) && parseInt(formatted) >= 100;
+  const valColor = isROIPositive ? "#22c55e" : isHero ? "#FFD700" : "#fff";
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "9px 13px", borderRadius: 9,
-      background: idx % 2 === 0 ? "rgba(255,255,255,0.018)" : "transparent",
+      padding: "12px 16px", borderRadius: 10,
+      background: idx % 2 === 0 ? "rgba(255,255,255,0.022)" : "transparent",
+      borderLeft: isHero ? "2px solid rgba(255,215,0,0.45)" : "2px solid transparent",
       opacity: visible ? 1 : 0,
       transform: visible ? "translateY(0)" : "translateY(8px)",
       transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04}s`,
     }}>
-      <span style={{ fontSize: 11.5, color: "#888", fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.3 }}>
-        {formatted}{showRank && <span style={{ color: "#777", fontWeight: 500, fontSize: 11 }}> / {rank}</span>}
+      <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 13, color: isHero ? "rgba(255,215,0,0.78)" : "rgba(255,255,255,0.62)", fontWeight: isHero ? 700 : 500, letterSpacing: 0.2 }}>{label}</span>
+      <span style={{
+        fontFamily: "'JetBrains Mono',monospace",
+        fontSize: isHero ? 15 : 13.5,
+        color: valColor,
+        fontWeight: 700,
+        letterSpacing: 0.4,
+        textShadow: isHero ? "0 0 12px rgba(255,215,0,0.18)" : "none",
+      }}>
+        {formatted}
+        {showRank && <span style={{ color: "rgba(255,255,255,0.42)", fontWeight: 500, fontSize: 11, marginLeft: 6 }}>/ {rank}</span>}
       </span>
     </div>
   );
@@ -599,54 +636,79 @@ function SourceRow({ source, idx, visible }) {
   return (
     <a href={source.url} target="_blank" rel="noopener noreferrer"
       style={{
-        display: "grid", gridTemplateColumns: "1fr 68px 1fr 24px", alignItems: "center", gap: 10,
-        padding: "10px 13px", borderRadius: 9,
-        background: h ? "rgba(255,215,0,0.045)" : "rgba(255,255,255,0.018)",
-        border: `1px solid ${h ? "rgba(255,215,0,0.1)" : "rgba(255,255,255,0.035)"}`,
+        display: "grid", gridTemplateColumns: "1fr 78px 1fr 28px", alignItems: "center", gap: 12,
+        padding: "13px 16px", borderRadius: 10,
+        background: h ? "rgba(255,215,0,0.05)" : "rgba(10,8,4,0.45)",
+        border: `1px solid ${h ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)"}`,
         textDecoration: "none", color: "#fff", cursor: "pointer",
         opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(8px)",
         transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
+        boxShadow: h ? "0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
       }}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
     >
-      <div style={{ minWidth: 0 }}>
-        <span style={{ fontWeight: 600, fontSize: 12.5 }}>{source.name}</span>
-        <span style={{ fontSize: 10.5, color: "#888", marginLeft: 7 }}>{source.type}</span>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: h ? "#FFD700" : "rgba(255,255,255,0.92)", letterSpacing: 0.1, transition: "color 0.25s" }}>{source.name}</span>
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: "rgba(255,255,255,0.42)", letterSpacing: 0.8, textTransform: "uppercase" }}>{source.type}</span>
       </div>
-      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 13, color: clr, textAlign: "right" }}>
-        {source.score}/{source.max}
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14.5, color: clr, textAlign: "right", letterSpacing: 0.3 }}>
+        {source.score}<span style={{ color: "rgba(255,255,255,0.35)", fontWeight: 500 }}>/{source.max}</span>
       </div>
-      <div style={{ position: "relative", height: 4, borderRadius: 2, background: "#161616", overflow: "hidden" }}>
+      <div style={{ position: "relative", height: 6, borderRadius: 3, background: "rgba(0,0,0,0.55)", overflow: "hidden", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.5)" }}>
         <div style={{
-          position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 2,
-          background: `linear-gradient(90deg,${clr}55,${clr})`,
+          position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 3,
+          background: `linear-gradient(90deg, ${clr}66 0%, ${clr} 60%, ${clr}dd 100%)`,
+          boxShadow: `0 0 10px ${clr}55`,
           width: visible ? `${Math.min(norm, 100)}%` : "0%",
           transition: `width 0.85s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05 + 0.25}s`,
         }} />
       </div>
-      <ExternalLink size={12} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.4)", transition: "color 0.2s" }} />
+      <ExternalLink size={13} style={{ color: h ? "#FFD700" : "rgba(255,255,255,0.32)", transition: "color 0.25s, transform 0.25s", transform: h ? "translate(2px,-2px)" : "translate(0,0)" }} />
     </a>
   );
 }
 
 function Accordion({ icon, label, count, open, toggle, children }) {
   return (
-    <div style={{ borderTop: "1px solid rgba(255,255,255,0.035)" }}>
+    <div style={{
+      borderTop: "1px solid rgba(255,215,0,0.06)",
+      background: open ? "linear-gradient(180deg, rgba(255,215,0,0.018) 0%, transparent 40%)" : "transparent",
+      transition: "background 0.4s ease",
+    }}>
       <button onClick={toggle} style={{
-        width: "100%", padding: "13px 24px", background: "none", border: "none",
-        color: open ? "#FFD700" : "#777", fontFamily: "'Syne',sans-serif",
-        fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+        width: "100%", padding: "18px 26px", background: "none", border: "none",
+        color: open ? "#FFD700" : "rgba(255,255,255,0.55)",
+        fontFamily: "'Playfair Display',serif",
+        fontStyle: "italic",
+        fontSize: 17, fontWeight: 600,
+        letterSpacing: -0.2,
+        cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "space-between",
+        transition: "color 0.3s ease",
+        position: "relative",
       }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.color = "#aaa"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = open ? "#FFD700" : "#777"; }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.color = "rgba(255,215,0,0.78)"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = open ? "#FFD700" : "rgba(255,255,255,0.55)"; }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          {icon} {label}
+        <span style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 28, height: 28, borderRadius: 8,
+            background: open ? "linear-gradient(135deg, rgba(255,215,0,0.16), rgba(255,165,0,0.04))" : "rgba(255,255,255,0.03)",
+            border: open ? "1px solid rgba(255,215,0,0.28)" : "1px solid rgba(255,255,255,0.06)",
+            color: open ? "#FFD700" : "rgba(255,255,255,0.6)",
+            transition: "all 0.3s ease",
+            flexShrink: 0,
+          }}>{icon}</span>
+          <span>{label}</span>
         </span>
-        <ChevronDown size={14} style={{ transition: "transform 0.35s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
+        <ChevronDown size={16} style={{
+          transition: "transform 0.4s cubic-bezier(0.16,1,0.3,1), color 0.3s ease",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          color: open ? "#FFD700" : "rgba(255,255,255,0.4)",
+        }} />
       </button>
-      <div style={{ maxHeight: open ? 1200 : 0, overflow: "hidden", transition: "max-height 0.55s cubic-bezier(0.16,1,0.3,1)" }}>
+      <div style={{ maxHeight: open ? 1600 : 0, overflow: "hidden", transition: "max-height 0.6s cubic-bezier(0.16,1,0.3,1)" }}>
         {children}
       </div>
     </div>
@@ -1217,6 +1279,41 @@ export default function FilmGlance() {
           .dym-card { gap: 16px !important; padding: 16px 16px 16px 14px !important; }
           .dym-poster-wrap { width: 100px !important; height: 150px !important; }
           .dym-title { font-size: 17px !important; }
+        }
+
+        /* Result page — recommendation cards (premium hover) */
+        .fg-rec-card:hover {
+          border-color: rgba(255,215,0,0.42) !important;
+          background: rgba(22,18,6,0.82) !important;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 32px rgba(255,215,0,0.10), inset 0 0 0 1px rgba(255,215,0,0.05) !important;
+          transform: translateY(-3px) !important;
+        }
+        .fg-rec-card:hover .fg-rec-poster { transform: scale(1.06); }
+        .fg-rec-card:focus-visible {
+          outline: none;
+          border-color: rgba(255,215,0,0.6) !important;
+          box-shadow: 0 0 0 2px rgba(255,215,0,0.32), 0 16px 40px rgba(0,0,0,0.6) !important;
+        }
+
+        /* Result page — video review cards */
+        .fg-vid-card:hover {
+          border-color: rgba(255,215,0,0.4) !important;
+          background: rgba(22,18,6,0.82) !important;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 30px rgba(255,215,0,0.10) !important;
+          transform: translateY(-3px) !important;
+        }
+        .fg-vid-card:hover .fg-vid-thumb { transform: scale(1.05); }
+        .fg-vid-card:hover .fg-vid-play {
+          transform: translate(-50%,-50%) scale(1.1);
+          box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 0 40px rgba(255,215,0,0.5) !important;
+        }
+        .fg-vid-card:focus-visible { outline: none; border-color: rgba(255,215,0,0.6) !important; }
+
+        /* Mobile: hero stacks vertically with smaller poster */
+        @media (max-width: 640px) {
+          .fg-hero-grid { flex-direction: column !important; gap: 18px !important; align-items: center !important; }
+          .fg-hero-poster { width: 156px !important; height: 234px !important; }
+          .fg-hero-meta { justify-content: center !important; }
         }
 
         /* Respect reduced-motion preference — disable stagger, rail sweep,
@@ -1852,8 +1949,8 @@ export default function FilmGlance() {
 
               {/* Streaming / Where to Watch if available */}
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={13} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
-                  <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <Accordion icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                  <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
@@ -1890,63 +1987,202 @@ export default function FilmGlance() {
 
           {/* Normal result — Released Movie */}
           {result && !result.notFound && !result.coming_soon && (
-            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 17, overflow: "hidden", animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", boxShadow: "0 8px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)" }}>
-              <div style={{ padding: "24px 26px 22px" }}>
-                <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
-                  <div style={{ width: 130, height: 195, borderRadius: 12, overflow: "hidden", flexShrink: 0, boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)", animation: "fadeIn 0.5s both" }}>
+            <div className="fg-result-card" style={{
+              background: "linear-gradient(180deg, rgba(14,11,4,0.72) 0%, rgba(8,6,2,0.78) 100%)",
+              border: "1px solid rgba(255,215,0,0.10)",
+              borderRadius: 18, overflow: "hidden",
+              animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)",
+              backdropFilter: "blur(24px) saturate(1.1)", WebkitBackdropFilter: "blur(24px) saturate(1.1)",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.55), 0 0 90px rgba(255,215,0,0.04), inset 0 1px 0 rgba(255,215,0,0.08)",
+              position: "relative",
+            }}>
+              {/* Top sheen — subtle gold gradient on header for cinematic feel */}
+              <div aria-hidden="true" style={{
+                position: "absolute", top: 0, left: 0, right: 0, height: 220,
+                background: "radial-gradient(ellipse 80% 80% at 50% 0%, rgba(255,215,0,0.06), transparent 60%)",
+                pointerEvents: "none", zIndex: 0,
+              }} />
+
+              <div style={{ padding: "32px 30px 28px", position: "relative", zIndex: 1 }}>
+                <div className="fg-hero-grid" style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
+                  <div className="fg-hero-poster" style={{
+                    width: 180, height: 270,
+                    borderRadius: 14, overflow: "hidden", flexShrink: 0,
+                    boxShadow: "0 18px 56px rgba(0,0,0,0.65), 0 0 60px rgba(255,215,0,0.08), 0 0 0 1px rgba(255,215,0,0.10), inset 0 0 0 1px rgba(255,255,255,0.04)",
+                    animation: "fadeIn 0.5s both",
+                    position: "relative",
+                  }}>
                     <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+
+                  <div style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
                     {result.tagline && (
-                      <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 11, fontStyle: "italic", color: "rgba(255,255,255,0.45)", marginBottom: 7, animation: "fadeIn 0.6s 0.1s both", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                        "{result.tagline}"
+                      <p style={{
+                        fontFamily: "'Playfair Display',serif",
+                        fontSize: 14, fontStyle: "italic",
+                        color: "rgba(255,215,0,0.6)",
+                        letterSpacing: 0.2,
+                        marginBottom: 11,
+                        animation: "fadeIn 0.6s 0.1s both",
+                        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}>
+                        <Quote size={12} style={{ color: "rgba(255,215,0,0.45)", transform: "scaleX(-1) translateY(-1px)" }} />
+                        {result.tagline}
                       </p>
                     )}
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 3, animation: "fadeIn 0.5s 0.15s both" }}>
-                      <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(20px,3.2vw,28px)", fontWeight: 700, lineHeight: 1.12, flex: 1 }}>{result.title}</h2>
+
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 11, animation: "fadeIn 0.5s 0.15s both" }}>
+                      <h2 style={{
+                        fontFamily: "'Playfair Display',serif",
+                        fontSize: "clamp(26px, 4vw, 40px)",
+                        fontWeight: 700, lineHeight: 1.06,
+                        letterSpacing: -1,
+                        flex: 1,
+                        background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.78) 100%)",
+                        WebkitBackgroundClip: "text", backgroundClip: "text",
+                        WebkitTextFillColor: "transparent", color: "transparent",
+                      }}>{result.title}</h2>
                       {user && (
-                        <button onClick={() => toggleFav(result)} style={{
-                          background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0, marginTop: 2,
-                          transition: "transform 0.2s",
+                        <button onClick={() => toggleFav(result)} aria-label={isFav(result) ? "Remove from favourites" : "Add to favourites"} style={{
+                          background: isFav(result) ? "linear-gradient(135deg, rgba(255,215,0,0.16), rgba(255,165,0,0.06))" : "rgba(255,255,255,0.03)",
+                          border: `1px solid ${isFav(result) ? "rgba(255,215,0,0.42)" : "rgba(255,255,255,0.08)"}`,
+                          borderRadius: 10, cursor: "pointer", padding: 9, flexShrink: 0,
+                          transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
                         }}
-                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"}
-                        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.06)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.boxShadow = "0 0 24px rgba(255,215,0,0.18)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.borderColor = isFav(result) ? "rgba(255,215,0,0.42)" : "rgba(255,255,255,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
                         >
-                          <Heart size={18} fill={isFav(result) ? "#FFD700" : "none"} stroke="#FFD700" strokeWidth={isFav(result) ? 0 : 1.5} style={{ transition: "all 0.3s" }} />
+                          <Heart size={17} fill={isFav(result) ? "#FFD700" : "none"} stroke="#FFD700" strokeWidth={isFav(result) ? 0 : 1.8} />
                         </button>
                       )}
                     </div>
-                    <p style={{ color: "#aaa", fontSize: 12, marginBottom: 2, animation: "fadeIn 0.5s 0.2s both" }}>
-                      {result.year}{result.director ? ` · ${result.director}` : ""}{result.runtime ? ` · ${result.runtime}` : ""}
-                    </p>
-                    {result.genre && <p style={{ color: "#666", fontSize: 11, marginBottom: 8, letterSpacing: 0.7, animation: "fadeIn 0.5s 0.25s both" }}>{result.genre}</p>}
-                    {result.description && <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, lineHeight: 1.55, marginBottom: 14, animation: "fadeIn 0.5s 0.3s both" }}>{result.description}</p>}
-                    <p style={{ fontSize: 10, letterSpacing: 1.8, color: "#FFD700", textTransform: "uppercase", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", marginBottom: 6, animation: "fadeIn 0.5s 0.3s both" }}>Averaged Movie Score Across Major Review Sites</p>
-                    <div style={{ display: "inline-flex", alignItems: "baseline", gap: 5, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
-                      <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 56, fontWeight: 700, background: "linear-gradient(135deg,#FFD700,#E8A000)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", lineHeight: 1 }}>{result.score.ten}</span>
-                      <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 20, fontWeight: 600 }}>/10</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both" }}>
-                      <StarDisplay rating={result.score.stars} sz={20} />
-                      <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{result.score.stars}/5</span>
-                      {result.trailer_key && (
-                        <button
-                          onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
-                          style={{
-                            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-                            padding: "6px 14px", borderRadius: 8,
-                            background: "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))",
-                            border: "1px solid rgba(255,215,0,0.2)",
-                            color: "#FFD700", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                            transition: "all 0.25s",
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,215,0,0.08)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.6)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(255,215,0,0.25), 0 0 40px rgba(255,215,0,0.1)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,165,0,0.05))"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.2)"; e.currentTarget.style.boxShadow = "none"; }}
-                        >
-                          <Play size={11} fill="#FFD700" stroke="#FFD700" />
-                          Watch Trailer
-                        </button>
+
+                    {/* Meta chips — year / runtime / director, gold-accented */}
+                    <div className="fg-hero-meta" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 12, animation: "fadeIn 0.5s 0.2s both" }}>
+                      {result.year && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontFamily: "'JetBrains Mono',monospace",
+                          fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                          color: "rgba(255,215,0,0.92)",
+                          background: "rgba(255,215,0,0.08)",
+                          padding: "5px 11px", borderRadius: 6,
+                          border: "1px solid rgba(255,215,0,0.18)",
+                        }}>
+                          <Calendar size={11} style={{ opacity: 0.7 }} />
+                          {result.year}
+                        </span>
                       )}
+                      {result.runtime && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontFamily: "'JetBrains Mono',monospace",
+                          fontSize: 12, fontWeight: 600, letterSpacing: 0.5,
+                          color: "rgba(255,255,255,0.78)",
+                          background: "rgba(255,255,255,0.04)",
+                          padding: "5px 11px", borderRadius: 6,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}>
+                          <Clock size={11} style={{ opacity: 0.7 }} />
+                          {result.runtime}
+                        </span>
+                      )}
+                      {result.director && (
+                        <span style={{
+                          fontFamily: "'Syne',sans-serif",
+                          fontSize: 13, fontWeight: 500,
+                          color: "rgba(255,255,255,0.7)",
+                          letterSpacing: 0.15,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          maxWidth: 320,
+                        }}>
+                          <span style={{ color: "rgba(255,215,0,0.62)", fontWeight: 600 }}>Directed by</span>&nbsp;{result.director}
+                        </span>
+                      )}
+                    </div>
+
+                    {result.genre && (
+                      <p style={{
+                        fontFamily: "'JetBrains Mono',monospace",
+                        color: "rgba(255,255,255,0.42)",
+                        fontSize: 10.5, fontWeight: 600,
+                        letterSpacing: 1.6, textTransform: "uppercase",
+                        marginBottom: 14,
+                        animation: "fadeIn 0.5s 0.25s both",
+                      }}>{result.genre}</p>
+                    )}
+
+                    {result.description && (
+                      <p style={{
+                        fontFamily: "'Syne',sans-serif",
+                        color: "rgba(255,255,255,0.86)",
+                        fontSize: 14, lineHeight: 1.6,
+                        marginBottom: 22,
+                        animation: "fadeIn 0.5s 0.3s both",
+                        letterSpacing: 0.1,
+                      }}>{result.description}</p>
+                    )}
+
+                    {/* Score panel — labeled, isolated, hero-treatment */}
+                    <div style={{
+                      padding: "16px 18px",
+                      borderRadius: 14,
+                      background: "linear-gradient(135deg, rgba(255,215,0,0.05) 0%, rgba(255,215,0,0.015) 100%)",
+                      border: "1px solid rgba(255,215,0,0.16)",
+                      boxShadow: "inset 0 1px 0 rgba(255,215,0,0.08)",
+                      animation: "fadeIn 0.5s 0.32s both",
+                    }}>
+                      <p style={{
+                        fontFamily: "'JetBrains Mono',monospace",
+                        fontSize: 9.5, letterSpacing: 1.8, color: "rgba(255,215,0,0.7)",
+                        textTransform: "uppercase", fontWeight: 700,
+                        marginBottom: 8,
+                      }}>Averaged Across Major Review Sites</p>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+                        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 6, animation: "countUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.35s both" }}>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontSize: 64, fontWeight: 700,
+                            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 38%, #E8A000 78%, #FFD700 100%)",
+                            backgroundSize: "220% auto",
+                            WebkitBackgroundClip: "text", backgroundClip: "text",
+                            WebkitTextFillColor: "transparent", color: "transparent",
+                            lineHeight: 0.95,
+                            textShadow: "0 0 28px rgba(255,215,0,0.18)",
+                            letterSpacing: -2,
+                          }}>{result.score.ten}</span>
+                          <span style={{ color: "rgba(255,255,255,0.42)", fontSize: 22, fontWeight: 600, fontFamily: "'Playfair Display',serif" }}>/ 10</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
+                          <StarDisplay rating={result.score.stars} sz={18} />
+                          <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.4 }}>{result.score.stars}/5 stars</span>
+                        </div>
+                        {result.trailer_key && (
+                          <button
+                            onClick={() => setVideoModal({ id: result.trailer_key, title: `${result.title} — Official Trailer` })}
+                            className="fg-trailer-btn"
+                            style={{
+                              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8,
+                              padding: "10px 18px", borderRadius: 10,
+                              background: "linear-gradient(135deg, rgba(255,215,0,0.16) 0%, rgba(255,165,0,0.06) 100%)",
+                              border: "1px solid rgba(255,215,0,0.32)",
+                              color: "#FFD700",
+                              fontFamily: "'Syne',sans-serif",
+                              fontSize: 12, fontWeight: 700,
+                              letterSpacing: 1, textTransform: "uppercase",
+                              cursor: "pointer",
+                              transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
+                              boxShadow: "0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.12)",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.28) 0%, rgba(255,165,0,0.12) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.7)"; e.currentTarget.style.boxShadow = "0 10px 32px rgba(0,0,0,0.5), 0 0 30px rgba(255,215,0,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,215,0,0.16) 0%, rgba(255,165,0,0.06) 100%)"; e.currentTarget.style.borderColor = "rgba(255,215,0,0.32)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,215,0,0.12)"; e.currentTarget.style.transform = "translateY(0)"; }}
+                          >
+                            <Play size={12} fill="#FFD700" stroke="#FFD700" />
+                            Watch Trailer
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1954,8 +2190,8 @@ export default function FilmGlance() {
 
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
-              <Accordion icon={<TrendingUp size={13} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
-                <div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <Accordion icon={<BarChart3 size={14} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
+                <div style={{ padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...result.sources].sort((a, b) => {
                     const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
                     const am = typeof a.max === 'string' ? parseFloat(a.max) : a.max;
@@ -1980,49 +2216,85 @@ export default function FilmGlance() {
 
               {/* Movie Hot Take */}
               {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
-                <Accordion icon={<TrendingUp size={13} />} label="Movie Hot Take — The Good and The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
-                  <div style={{ padding: "4px 18px 22px" }}>
+                <Accordion icon={<Flame size={14} />} label="The Good & The Bad" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
+                  <div style={{ padding: "8px 26px 26px" }}>
                     {result.hot_take.good?.length > 0 && (
-                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 16 : 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
-                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>👍</div>
-                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#22c55e" }}>The Good</span>
+                      <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 22 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 9,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0,
+                            background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(22,163,74,0.06))",
+                            border: "1px solid rgba(34,197,94,0.32)",
+                            boxShadow: "0 0 18px rgba(34,197,94,0.12), inset 0 1px 0 rgba(34,197,94,0.18)",
+                          }}>
+                            <ThumbsUp size={15} stroke="#22c55e" strokeWidth={2.2} />
+                          </div>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontStyle: "italic",
+                            fontSize: 18, fontWeight: 600,
+                            letterSpacing: -0.2,
+                            color: "#22c55e",
+                          }}>The Good</span>
                         </div>
                         {result.hot_take.good.map((point, i) => (
                           <div key={`good-${i}`} style={{
-                            display: "flex", alignItems: "baseline", gap: 10,
-                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
-                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
-                            background: "rgba(34,197,94,0.025)", border: "1px solid rgba(34,197,94,0.06)",
+                            display: "flex", alignItems: "baseline", gap: 12,
+                            padding: "13px 16px", borderRadius: 10, marginBottom: 6,
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 13.5, lineHeight: 1.55, color: "rgba(255,255,255,0.84)",
+                            background: "rgba(34,197,94,0.04)",
+                            border: "1px solid rgba(34,197,94,0.10)",
+                            borderLeft: "3px solid rgba(34,197,94,0.55)",
                             opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
                             transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s`,
                           }}>
-                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#22c55e", marginTop: 5 }} />
-                            {point}
+                            <span style={{ flexShrink: 0, width: 6, height: 6, borderRadius: "50%", background: "#22c55e", marginTop: 7, boxShadow: "0 0 8px rgba(34,197,94,0.6)" }} />
+                            <span style={{ flex: 1 }}>{point}</span>
                           </div>
                         ))}
                       </div>
                     )}
                     {result.hot_take.good?.length > 0 && result.hot_take.bad?.length > 0 && (
-                      <div style={{ height: 1, background: "rgba(255,255,255,0.03)", margin: "14px 4px" }} />
+                      <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(255,215,0,0.18), transparent)", margin: "20px 4px" }} />
                     )}
                     {result.hot_take.bad?.length > 0 && (
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 4px" }}>
-                          <div style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>👎</div>
-                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", color: "#ef4444" }}>The Bad</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 9,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0,
+                            background: "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(220,38,38,0.06))",
+                            border: "1px solid rgba(239,68,68,0.32)",
+                            boxShadow: "0 0 18px rgba(239,68,68,0.12), inset 0 1px 0 rgba(239,68,68,0.18)",
+                          }}>
+                            <ThumbsDown size={15} stroke="#ef4444" strokeWidth={2.2} />
+                          </div>
+                          <span style={{
+                            fontFamily: "'Playfair Display',serif",
+                            fontStyle: "italic",
+                            fontSize: 18, fontWeight: 600,
+                            letterSpacing: -0.2,
+                            color: "#ef4444",
+                          }}>The Bad</span>
                         </div>
                         {result.hot_take.bad.map((point, i) => (
                           <div key={`bad-${i}`} style={{
-                            display: "flex", alignItems: "baseline", gap: 10,
-                            padding: "9px 13px", borderRadius: 9, marginBottom: 4,
-                            fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.75)",
-                            background: "rgba(239,68,68,0.025)", border: "1px solid rgba(239,68,68,0.06)",
+                            display: "flex", alignItems: "baseline", gap: 12,
+                            padding: "13px 16px", borderRadius: 10, marginBottom: 6,
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 13.5, lineHeight: 1.55, color: "rgba(255,255,255,0.84)",
+                            background: "rgba(239,68,68,0.04)",
+                            border: "1px solid rgba(239,68,68,0.10)",
+                            borderLeft: "3px solid rgba(239,68,68,0.55)",
                             opacity: hotTakeOpen ? 1 : 0, transform: hotTakeOpen ? "translateY(0)" : "translateY(8px)",
                             transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${(result.hot_take.good?.length || 0) * 0.05 + i * 0.05}s`,
                           }}>
-                            <span style={{ flexShrink: 0, width: 5, height: 5, borderRadius: "50%", background: "#ef4444", marginTop: 5 }} />
-                            {point}
+                            <span style={{ flexShrink: 0, width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 7, boxShadow: "0 0 8px rgba(239,68,68,0.6)" }} />
+                            <span style={{ flex: 1 }}>{point}</span>
                           </div>
                         ))}
                       </div>
@@ -2031,33 +2303,55 @@ export default function FilmGlance() {
                 </Accordion>
               )}
 
-              {/* Video Reviews */}
+              {/* Video Reviews — bigger thumbnails, refined play affordance */}
               {result.video_reviews && result.video_reviews.length > 0 && (
-                <Accordion icon={<Play size={13} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
-                  <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
+                <Accordion icon={<Youtube size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                  <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
                         onClick={() => setVideoModal({ id: vr.video_id, title: vr.title })}
+                        className="fg-vid-card"
                         style={{
-                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                          borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
+                          background: "rgba(10,8,4,0.55)", border: "1px solid rgba(255,215,0,0.08)",
+                          borderRadius: 12, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
                           opacity: reviewsOpen ? 1 : 0,
                           transform: reviewsOpen ? "translateY(0)" : "translateY(8px)",
-                          transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.06}s`,
+                          transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${i * 0.06}s, transform 0.3s cubic-bezier(0.16,1,0.3,1)`,
+                          boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
-                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
-                          <img src={`https://img.youtube.com/vi/${vr.video_id}/hqdefault.jpg`} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}>
-                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,215,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <Play size={14} fill="#050505" stroke="#050505" style={{ marginLeft: 2 }} />
-                            </div>
+                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#0a0a0a", overflow: "hidden" }}>
+                          <img src={`https://img.youtube.com/vi/${vr.video_id}/hqdefault.jpg`} alt="" loading="lazy" className="fg-vid-thumb" style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.5s cubic-bezier(0.16,1,0.3,1)" }} />
+                          <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
+                          <div className="fg-vid-play" style={{
+                            position: "absolute", top: "50%", left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            width: 48, height: 48, borderRadius: "50%",
+                            background: "linear-gradient(135deg, rgba(255,215,0,0.95), rgba(232,160,0,0.95))",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            boxShadow: "0 8px 28px rgba(0,0,0,0.6), 0 0 28px rgba(255,215,0,0.32)",
+                            border: "2px solid rgba(255,255,255,0.2)",
+                            transition: "transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s ease",
+                          }}>
+                            <Play size={18} fill="#050505" stroke="#050505" style={{ marginLeft: 3 }} />
                           </div>
                         </div>
-                        <div style={{ padding: "6px 8px 8px" }}>
-                          <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vr.channel}</p>
+                        <div style={{ padding: "11px 13px 13px" }}>
+                          <p style={{
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.92)", lineHeight: 1.35,
+                            margin: "0 0 4px",
+                            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                          }}>{vr.title || vr.channel}</p>
+                          {vr.title && vr.channel && (
+                            <p style={{
+                              fontFamily: "'JetBrains Mono',monospace",
+                              fontSize: 10, color: "rgba(255,215,0,0.62)", fontWeight: 600,
+                              letterSpacing: 0.5, textTransform: "uppercase",
+                              margin: 0,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>{vr.channel}</p>
+                          )}
                         </div>
                       </button>
                     ))}
@@ -2066,19 +2360,19 @@ export default function FilmGlance() {
               )}
 
               {result.cast && result.cast.length > 0 && (
-                <Accordion icon={<Users size={13} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
+                <Accordion icon={<Users size={14} />} label="Cast" open={castOpen} toggle={() => setCastOpen(!castOpen)}>
                   {(() => {
                     const count = result.cast.length;
                     const canEvenRows = count % 4 === 0 || count % 3 === 0;
                     if (canEvenRows) {
                       return (
-                        <div style={{ padding: "6px 18px 22px", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                        <div style={{ padding: "12px 26px 28px", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
                           {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                         </div>
                       );
                     }
                     return (
-                      <div className="fg-scroll" style={{ padding: "6px 18px 22px", display: "flex", gap: 6, overflowX: "auto", overflowY: "hidden" }}>
+                      <div className="fg-scroll" style={{ padding: "12px 22px 26px", display: "flex", gap: 8, overflowX: "auto", overflowY: "hidden" }}>
                         {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                       </div>
                     );
@@ -2087,38 +2381,51 @@ export default function FilmGlance() {
               )}
 
               {result.awards && result.awards.length > 0 && (
-                <Accordion icon={<Award size={13} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
-                  <div style={{ padding: "4px 18px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
-                    {result.awards.map((a, idx) => (
-                      <div key={`${a.award}-${a.result}-${idx}`} style={{
-                        padding: "10px 13px", borderRadius: 9,
-                        background: "rgba(255,255,255,0.018)",
-                        border: `1px solid ${a.result === "Won" ? "rgba(255,215,0,0.1)" : "rgba(255,255,255,0.035)"}`,
-                        opacity: awardsOpen ? 1 : 0,
-                        transform: awardsOpen ? "translateY(0)" : "translateY(8px)",
-                        transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <span style={{
-                            fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                            textTransform: "uppercase", padding: "2px 7px", borderRadius: 5,
-                            background: a.result === "Won" ? "rgba(255,215,0,0.1)" : "rgba(255,255,255,0.04)",
-                            color: a.result === "Won" ? "#FFD700" : "#666",
-                            fontFamily: "'JetBrains Mono',monospace",
-                          }}>{a.result}</span>
-                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#ccc" }}>{a.award}</span>
-                          {a.year && <span style={{ fontSize: 10, color: "#777", fontFamily: "'JetBrains Mono',monospace" }}>{a.year}</span>}
+                <Accordion icon={<Trophy size={14} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
+                  <div style={{ padding: "8px 26px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    {result.awards.map((a, idx) => {
+                      const won = a.result === "Won";
+                      return (
+                        <div key={`${a.award}-${a.result}-${idx}`} style={{
+                          padding: "14px 18px", borderRadius: 11,
+                          background: won
+                            ? "linear-gradient(135deg, rgba(255,215,0,0.04) 0%, rgba(255,215,0,0.012) 100%)"
+                            : "rgba(255,255,255,0.022)",
+                          border: `1px solid ${won ? "rgba(255,215,0,0.22)" : "rgba(255,255,255,0.05)"}`,
+                          borderLeft: won ? "3px solid rgba(255,215,0,0.85)" : "1px solid rgba(255,255,255,0.05)",
+                          boxShadow: won ? "0 0 28px rgba(255,215,0,0.05), inset 0 1px 0 rgba(255,215,0,0.06)" : "none",
+                          opacity: awardsOpen ? 1 : 0,
+                          transform: awardsOpen ? "translateY(0)" : "translateY(8px)",
+                          transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 5,
+                              fontFamily: "'JetBrains Mono',monospace",
+                              fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+                              textTransform: "uppercase", padding: "3px 9px", borderRadius: 5,
+                              background: won ? "linear-gradient(135deg, rgba(255,215,0,0.18), rgba(255,165,0,0.06))" : "rgba(255,255,255,0.05)",
+                              color: won ? "#FFD700" : "rgba(255,255,255,0.55)",
+                              border: won ? "1px solid rgba(255,215,0,0.32)" : "1px solid rgba(255,255,255,0.06)",
+                              boxShadow: won ? "0 0 14px rgba(255,215,0,0.2)" : "none",
+                            }}>
+                              {won && <Trophy size={9} />}
+                              {a.result}
+                            </span>
+                            <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 13.5, fontWeight: 700, color: won ? "rgba(255,255,255,0.96)" : "rgba(255,255,255,0.78)", letterSpacing: 0.1 }}>{a.award}</span>
+                            {a.year && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.42)", fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.5 }}>{a.year}</span>}
+                          </div>
+                          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.62)", lineHeight: 1.5, margin: 0, letterSpacing: 0.1 }}>{a.detail}</p>
                         </div>
-                        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", lineHeight: 1.4, margin: 0 }}>{a.detail}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </Accordion>
               )}
 
               {result.boxOffice && (
-                <Accordion icon={<DollarSign size={13} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
-                  <div style={{ padding: "4px 18px 18px" }}>
+                <Accordion icon={<DollarSign size={14} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
+                  <div style={{ padding: "10px 22px 22px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={null} idx={2} visible={boxOfficeOpen} />
@@ -2141,42 +2448,65 @@ export default function FilmGlance() {
               )}
 
               {result.streaming && result.streaming.length > 0 && (
-                <Accordion icon={<Tv size={13} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
-                  <div style={{ padding: "8px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <Accordion icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
+                  <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
               )}
 
-              {/* Similar Movies */}
+              {/* You Might Also Like — recommendations as proper portrait posters
+                  (was 16/9 which cropped most of the image off). Spotlight hover
+                  matching the Did-You-Mean card pattern. */}
               {result.recommendations && result.recommendations.length > 0 && (
-                <Accordion icon={<Film size={13} />} label="You Might Also Like" open={true} toggle={() => {}}>
-                  <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
+                <Accordion icon={<Sparkles size={14} />} label="You Might Also Like" open={true} toggle={() => {}}>
+                  <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 14 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
                         onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
+                        className="fg-rec-card"
                         style={{
-                          flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)",
-                          borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
-                          transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both`,
+                          background: "rgba(10,8,4,0.55)",
+                          border: "1px solid rgba(255,215,0,0.08)",
+                          borderRadius: 12, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left",
+                          transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
+                          animation: `fadeIn 0.5s ${0.1 + i * 0.07}s both`,
+                          boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+                          position: "relative",
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
-                        <div style={{ position: "relative", aspectRatio: "16/9", background: "#111" }}>
+                        <div style={{ position: "relative", aspectRatio: "2/3", background: "#0a0a0a", overflow: "hidden" }}>
                           {rec.poster_path ? (
-                            <img src={`https://image.tmdb.org/t/p/w300${rec.poster_path}`} alt={rec.title}
+                            <img src={`https://image.tmdb.org/t/p/w342${rec.poster_path}`} alt={rec.title}
                               loading="lazy"
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              className="fg-rec-poster"
+                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", transition: "transform 0.5s cubic-bezier(0.16,1,0.3,1)" }}
                               onError={e => { e.target.style.display = "none"; }} />
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <Film size={18} style={{ color: "#222" }} />
+                              <Film size={22} style={{ color: "rgba(255,215,0,0.28)" }} />
                             </div>
                           )}
-                        </div>
-                        <div style={{ padding: "6px 8px 8px" }}>
-                          <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                          {/* Bottom gradient + title overlay */}
+                          <div aria-hidden="true" style={{
+                            position: "absolute", bottom: 0, left: 0, right: 0, height: "55%",
+                            background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 50%, transparent 100%)",
+                            pointerEvents: "none",
+                          }} />
+                          <p style={{
+                            position: "absolute", left: 10, right: 10, bottom: 10,
+                            fontFamily: "'Syne',sans-serif",
+                            fontSize: 12, fontWeight: 700,
+                            color: "#fff",
+                            lineHeight: 1.25,
+                            letterSpacing: 0.1,
+                            margin: 0,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            textShadow: "0 2px 8px rgba(0,0,0,0.85)",
+                          }}>{rec.title}</p>
                         </div>
                       </button>
                     ))}
