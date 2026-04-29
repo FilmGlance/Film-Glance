@@ -386,6 +386,26 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
   );
 }
 
+/* Trim DYM suggestion overviews to a clean fixed length so every card
+   has the same visible body height. Targets ~200 chars, prefers ending
+   at the last full sentence (. ! ?) within range; otherwise breaks at
+   the last word boundary and appends an ellipsis. Returns the original
+   string unchanged if it's already short enough. */
+function trimOverview(text, maxChars = 200) {
+  if (!text || text.length <= maxChars) return text || "";
+  const cut = text.substring(0, maxChars);
+  const lastSentence = Math.max(
+    cut.lastIndexOf(". "),
+    cut.lastIndexOf("! "),
+    cut.lastIndexOf("? ")
+  );
+  if (lastSentence > maxChars * 0.55) {
+    return text.substring(0, lastSentence + 1);
+  }
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 0 ? text.substring(0, lastSpace) : cut).replace(/[,;:\s]+$/, "") + "…";
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SUGGESTIONS — popular movie titles for search chips
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -2397,12 +2417,8 @@ export default function FilmGlance() {
                                 color: "rgba(255, 255, 255, 0.72)",
                                 lineHeight: 1.55,
                                 letterSpacing: 0.1,
-                                display: "-webkit-box",
-                                WebkitLineClamp: 3,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
                               }}>
-                                {s.overview}
+                                {trimOverview(s.overview)}
                               </p>
                             )}
                           </div>
