@@ -1,5 +1,69 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 — Mobile pass round 2 (v5.10.36) — reduced-motion bug + source-row hardening + score centering + FAB safe-area
+
+User re-screenshot-tested v5.10.35 on mobile (5 new screenshots in `/mobile/`). Reported 4 issues. The screenshot URLs revealed an important detail — most were on `filmglance.com` and `film-glance.vercel.app`, both of which are **production** (v5.10.34, no v5.10.35 fixes). The staging preview lives at `film-glance-git-staging-rs-projects-c0025ef0.vercel.app`. This was a clue but not a complete explanation — the user *did* see the v5.10.35 FAB on at least one screen, so they reached staging at some point. Either way, the four reported issues each had a real root cause worth fixing.
+
+### Issue 1 — DYM and Favs pages don't show movies
+
+**Root cause: prefers-reduced-motion opacity stuck at 0.** Both `.dym-card` and `.fg-fav-card` are rendered with inline `opacity: 0` plus an `animation: softFade ... both` that transitions opacity 0 → 1 over 0.55s. The two existing `@media (prefers-reduced-motion: reduce)` blocks (one near `.dym-card`, one near `.fg-fav-card`) kill the animation with `animation: none !important;` to respect user preference — but they don't restore `opacity: 1`. Result: the cards stay at opacity 0 forever and are invisible.
+
+**Why phones hit this and desktop doesn't:** modern Android (Samsung OneUI default), iOS low-power mode, and most battery-saver settings auto-set `prefers-reduced-motion: reduce`. Desktop machines rarely have it on. So the bug only manifests on phones with battery saver — which the user almost certainly had on, and which is the realistic mobile testing environment.
+
+**Fix:** added `.dym-card { opacity: 1 !important }` and `.fg-fav-card { opacity: 1 !important }` inside both reduced-motion blocks. Now when animations are disabled, the cards fall back to fully visible.
+
+This is the single biggest fix in v5.10.36 — explains both the favourites blank-page complaint AND the "Did you mean..." page with no suggestion cards.
+
+### Issue 2 — Source Breakdown text still overlapping
+
+User screenshot showed "Metacritic User" wrapping onto two lines with "9.3/10" overlapping the "User" line. My v5.10.35 @media was at ≤640px and used `white-space: nowrap` without `!important`. Two possible reasons it wasn't applying: (a) the user's phone is 481-700 logical width and v5.10.35 was actually deployed but on a wider phone the breakpoint missed, or (b) the inline style on the name span won out due to specificity.
+
+**Fix:** pulled the source-row rules out of the 640 hero @media into their own `@media (max-width: 700px)`. Added `!important` on every text-related property. Added `min-width: 0` to the name container, name span, and score column to guarantee flex/grid items can shrink. Added `display: block` on the name span so the truncation kicks in even if the parent column tries to give it more room.
+
+### Issue 3 — True Rating Score should be centered
+
+NEW request — desktop layout has score-on-left + description-on-right with flex-wrap; on mobile the items wrapped but stayed left-aligned (default `justify-content`). Added className hooks (`fg-score-row`, `fg-score-num-wrap`, `fg-score-desc-wrap`) and a mobile @media that sets `justify-content: center` on the row + `width: 100%` on both children + `text-align: center` on the description column. Now the score number is centered horizontally within the panel, with the description below also centered.
+
+### Issue 4 — FAB worked once then disappeared
+
+User couldn't reproduce reliably. Most likely cause: mobile Chrome's address bar appearing on scroll-up pushes content down and can hide a FAB at `bottom: 22px`. Some Android browsers measure viewport differently with the chrome visible vs. hidden, and a position:fixed element at a small bottom offset can fall behind the chrome.
+
+**Defensive fixes (all in v5.10.36, no way to reproduce remotely):**
+- z-index 210 → 250 (clears the scrollPct>0.8 bottom-fade gradient at z:150 + any future fixed chrome)
+- `bottom: 22px` → `bottom: max(28px, env(safe-area-inset-bottom, 28px))` so the FAB clears the iOS home indicator + Android navigation bar safe-area
+- Popover `bottom` re-anchored relative to FAB position: `calc(max(28px, env(safe-area-inset-bottom, 28px)) + 64px)`
+- Backdrop z-index 205 → 245, popover 215 → 255 (kept the relative ordering: backdrop < FAB < popover)
+- `display: inline-flex !important` on the @media show rule, defending against any future cascade override
+- Width 50→52 (slight visual upweighting)
+- `pointer-events: auto` set explicitly so any ancestor's `pointer-events: none` doesn't bleed through
+
+### Bonus — Header breakpoint bumped 480 → 560
+
+User screenshots showed "Film/Glance" still wrapping onto two lines on their phone, plus "My/Account" still wrapping. The v5.10.35 @media at ≤480px doesn't catch phones in the 481-560 logical-width range (which is most modern phones in portrait). Bumped to ≤560 so the discuss-button-drop + icon-only My Account treatment now applies on most modern phones in portrait.
+
+### What the user should do next
+
+Test on the **staging preview URL**: `film-glance-git-staging-rs-projects-c0025ef0.vercel.app` (NOT `filmglance.com` or `film-glance.vercel.app` — those serve `main`, which is at v5.10.34 until the PR merges). Vercel's GitHub integration adds a "Visit Preview" button on PRs but the staging-branch URL is also stable and accessible without going through a PR.
+
+If the user re-tests on the right URL and the issues are gone, we open the staging→main PR. If anything's still off, another iteration before the PR.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +75 / -34 | All 4 fixes + breakpoint bumps; FG_VERSION 5.10.36 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.36 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Inline `opacity: 0` + animation = invisible-on-reduced-motion landmine.** Any time you write `opacity: 0` inline and rely on a CSS animation to transition it to 1, you must override that opacity inside any reduced-motion @media block that disables the animation. This is a CSS-architecture footgun, not a one-off bug — should be a checklist item for every fade-in pattern in this codebase. Audit needed: any other inline `opacity: 0` paired with a fade animation.
+2. **Test target URL matters more than you'd think.** The user thought `filmglance.com` was their staging URL because that's what they remembered. Always link or quote the exact staging preview URL when asking for verification — and verify ourselves via `gh api` that v5.10.X actually built on the URL we're asking the user to test.
+3. **`env(safe-area-inset-bottom)` is the right default for any bottom-anchored FAB.** Mobile Chrome's appearing/disappearing address bar + iOS home indicator + Android nav bar all conspire against a naive `bottom: 22px`. The safe-area-inset env var was made for this; use it everywhere a fixed element sits near the bottom edge.
+4. **Bumping a breakpoint by 80px (480→560) is often the right move.** Most "modern phone" widths cluster around 390-430px, but Samsung Z Fold-style or newer iPhone Pro Max can go up to 540. The 480 boundary is a leftover from iPhone-2016 mental models; 560 catches the 2024-2026 device generation.
+
+---
+
 ## Session: April 29, 2026 (continued, round 6) — Mobile pass Phase 1 + standing mobile-parity rule (v5.10.35)
 
 PR #46 (v5.10.34) merged to main earlier today. User pulled the live site up on their phone and screenshot-audited the mobile experience. Five critical issues surfaced, four they listed plus the floating menu that was completely hidden on mobile:

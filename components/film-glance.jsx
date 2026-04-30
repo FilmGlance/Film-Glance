@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.35";
+const FG_VERSION = "5.10.36";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -2448,7 +2448,11 @@ export default function FilmGlance() {
           .fg-fav-folder-tag { font-size: 9.5px !important; padding: 2px 7px !important; }
         }
 
-        /* Reduced-motion: kill animations on the new surfaces too */
+        /* Reduced-motion: kill animations on the new surfaces too.
+           v5.10.36 fix: same opacity:0-stuck issue as .dym-card. Favs
+           cards have inline opacity:0 paired with a softFade animation;
+           when animations are killed by reduce-motion the cards stay
+           invisible. Force opacity:1 so the static fallback renders. */
         @media (prefers-reduced-motion: reduce) {
           .fg-fav-card,
           .fg-fav-card:hover,
@@ -2463,6 +2467,7 @@ export default function FilmGlance() {
             transform: none !important;
             transition: none !important;
           }
+          .fg-fav-card { opacity: 1 !important; }
         }
 
         /* Result page — recommendation cards (premium hover) */
@@ -2523,14 +2528,19 @@ export default function FilmGlance() {
         /* Floating Action Button — replaces the sidebar at ≤1379px so
            movie-page section navigation isn't lost on tablets/phones.
            At ≥1380px the FAB is hidden (sidebar takes over). Position:
-           bottom-right, clear of the gold scroll indicator at right:4. */
+           bottom-right, clear of the gold scroll indicator at right:4.
+           v5.10.36 hardening: bumped z-index 210→250 (above the
+           scrollPct>0.8 bottom-fade at z:150 and any other fixed chrome),
+           bottom uses max(28px, env(safe-area-inset-bottom)) so the FAB
+           clears mobile Chrome's appearing address bar + iOS home
+           indicator on devices with safe-area insets. */
         .fg-sidebar-fab {
           display: none;
           position: fixed;
           right: 18px;
-          bottom: 22px;
-          z-index: 210;
-          width: 50px; height: 50px;
+          bottom: max(28px, env(safe-area-inset-bottom, 28px));
+          z-index: 250;
+          width: 52px; height: 52px;
           border-radius: 50%;
           background: linear-gradient(135deg, #FFE89A 0%, #FFD700 48%, #E8A000 100%);
           color: #050505;
@@ -2539,6 +2549,7 @@ export default function FilmGlance() {
           cursor: pointer;
           align-items: center;
           justify-content: center;
+          pointer-events: auto;
           transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
         }
         .fg-sidebar-fab:active { transform: translateY(1px) scale(0.96); }
@@ -2547,7 +2558,7 @@ export default function FilmGlance() {
           outline-offset: 3px;
         }
         .fg-sidebar-fab-backdrop {
-          position: fixed; inset: 0; z-index: 205;
+          position: fixed; inset: 0; z-index: 245;
           background: rgba(0, 0, 0, 0.55);
           backdrop-filter: blur(6px);
           -webkit-backdrop-filter: blur(6px);
@@ -2556,10 +2567,10 @@ export default function FilmGlance() {
         .fg-sidebar-fab-popover {
           position: fixed;
           right: 18px;
-          bottom: 84px;
-          z-index: 215;
+          bottom: calc(max(28px, env(safe-area-inset-bottom, 28px)) + 64px);
+          z-index: 255;
           width: min(280px, calc(100vw - 36px));
-          max-height: calc(100vh - 130px);
+          max-height: calc(100vh - 140px);
           overflow-y: auto;
           background: rgba(8, 6, 2, 0.96);
           backdrop-filter: blur(24px) saturate(1.1);
@@ -2571,7 +2582,7 @@ export default function FilmGlance() {
           animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
         }
         @media (max-width: 1379px) {
-          .fg-sidebar-fab { display: inline-flex; }
+          .fg-sidebar-fab { display: inline-flex !important; }
         }
         .fg-side-link:not(.active):hover {
           background: rgba(255,215,0,0.05) !important;
@@ -2627,29 +2638,56 @@ export default function FilmGlance() {
           .fg-hero-director { white-space: normal !important; max-width: 100% !important; }
           .fg-result-card-inner { padding: 20px 16px 22px !important; }
 
-          /* Source breakdown rows — compressed inline at ≤600px (this rule
-             extends slightly past the 640 breakpoint above; the layout
-             starts visibly cramping below ~600). Original desktop columns:
-               auto | 1fr (name) | 88px (score) | 1fr (bar) | 28px (link)
-             …with 14px gaps + 18px padding the row needs ~480px to render
-             without name + score colliding. Mobile columns:
-               28px chip | minmax(0,1fr) | auto score | 44px bar | 18px link
-             …with 8px gaps + 10x 12px padding. Name truncates via ellipsis
-             instead of wrapping, score scales 19→14, bar shrinks. */
+        }
+        /* Source breakdown rows — compressed inline at ≤700px. Pulled out
+           of the 640 hero block to its own @media so wider phones (480-
+           700) also get the treatment. v5.10.36: bumped breakpoint
+           640→700, added !important on every text property, added a
+           min-width:0 guard on the name container so flex items can
+           shrink properly. Original desktop columns:
+             auto | 1fr (name) | 88px (score) | 1fr (bar) | 28px (link)
+           with 14px gaps + 18px padding — needs ~480px to fit without
+           name + score colliding. Mobile columns:
+             28px chip | minmax(0,1fr) | auto score | 44px bar | 14px link
+           with 8px gaps + 10/12px padding. Name truncates via ellipsis. */
+        @media (max-width: 700px) {
           .fg-source-row {
-            grid-template-columns: 28px minmax(0, 1fr) auto 44px 16px !important;
+            grid-template-columns: 28px minmax(0, 1fr) auto 44px 14px !important;
             gap: 8px !important;
             padding: 10px 12px !important;
           }
           .fg-source-row > div:nth-child(1) { width: 28px !important; height: 28px !important; border-radius: 7px !important; }
           .fg-source-row > div:nth-child(1) img { width: 18px !important; height: 18px !important; }
-          .fg-source-row > div:nth-child(2) > span:first-child { font-size: 13px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .fg-source-row > div:nth-child(2) { min-width: 0 !important; }
+          .fg-source-row > div:nth-child(2) > span:first-child {
+            font-size: 13px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            display: block !important;
+            min-width: 0 !important;
+          }
           .fg-source-row > div:nth-child(2) > span:nth-child(2) { font-size: 9px !important; letter-spacing: 0.6px !important; }
-          .fg-source-row > div:nth-child(3) { font-size: 14px !important; }
+          .fg-source-row > div:nth-child(3) { font-size: 14px !important; min-width: 0 !important; white-space: nowrap !important; }
+
+          /* True Rating Score — center the score number + description on
+             mobile per user feedback (v5.10.36). Desktop layout is
+             score-on-left + description-on-right with flex-wrap so they
+             stack on mobile; before this rule the wrapped items aligned
+             flex-start (left edge of panel), now they center. */
+          .fg-score-row { justify-content: center !important; gap: 18px !important; }
+          .fg-score-num-wrap { width: 100% !important; min-width: 0 !important; }
+          .fg-score-desc-wrap { width: 100% !important; min-width: 0 !important; align-items: center !important; text-align: center !important; }
         }
 
         /* Respect reduced-motion preference — disable stagger, rail sweep,
-           hover translate. Keep static layout, no animation. */
+           hover translate. Keep static layout, no animation. v5.10.36 fix:
+           cards have inline opacity:0 paired with a softFade animation
+           that transitions opacity 0 → 1. When animations are killed by
+           reduce-motion (Android battery saver, Samsung OneUI default,
+           iOS low-power), the cards stay at opacity:0 and never appear.
+           Force opacity:1 here so the static fallback is visible. Same
+           treatment for fg-fav-card below. */
         @media (prefers-reduced-motion: reduce) {
           .dym-card,
           .dym-card:hover,
@@ -2661,6 +2699,7 @@ export default function FilmGlance() {
             transform: none !important;
             transition: none !important;
           }
+          .dym-card { opacity: 1 !important; }
           .dym-rail { transform: scaleX(1) !important; opacity: 1 !important; }
         }
 
@@ -2676,13 +2715,15 @@ export default function FilmGlance() {
         @media (max-width: 520px) {
           .nav-forum-label { display: none !important; }
         }
-        /* v5.10.35 mobile pass — at narrow phones (≤480px) compact the
-           header further: drop the Discussion Forum chat-icon button
-           entirely (forum is still reachable from a future hamburger or
-           via /discuss URL), make the My Account / Sign In button
-           icon-only (label hidden), and tighten button padding so the
-           "Film Glance" brand-mark stops wrapping onto two lines. */
-        @media (max-width: 480px) {
+        /* v5.10.36 — bumped breakpoint 480→560 (was missing modern
+           phones in the 481-540px logical-width range; user reported
+           "Film/Glance" still wrapping on a phone they tested). At
+           ≤560px: drop the Discussion Forum chat-icon button entirely
+           (forum is still reachable via /discuss URL), make the My
+           Account / Sign In button icon-only (label hidden), and
+           tighten button padding so the "Film Glance" brand-mark stops
+           wrapping onto two lines. Also tighten header padding. */
+        @media (max-width: 560px) {
           .nav-discuss-btn { display: none !important; }
           .nav-account-label { display: none !important; }
           .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
@@ -4226,13 +4267,13 @@ export default function FilmGlance() {
                       </div>
 
                       {/* Body — huge glowing score number on the left, tagline + stars on the right */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
+                      <div className="fg-score-row" style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
                         {/* Massive gold score number — replaces the gauge.
                             line-height bumped 0.9 → 1.05 + paddingBottom on
                             the score span so descenders ("3", "5", etc.)
                             sit fully inside the line box and aren't clipped
                             by the parent's overflow. */}
-                        <div style={{
+                        <div className="fg-score-num-wrap" style={{
                           flexShrink: 0,
                           display: "inline-flex",
                           alignItems: "baseline",
@@ -4259,7 +4300,7 @@ export default function FilmGlance() {
                             letterSpacing: -0.5,
                           }}>/ 10</span>
                         </div>
-                        <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
+                        <div className="fg-score-desc-wrap" style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
                           <p style={{
                             fontFamily: "'Syne',sans-serif",
                             fontStyle: "normal",
