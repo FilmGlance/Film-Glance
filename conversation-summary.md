@@ -1,5 +1,281 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued, round 5) — Gold scrollbar on favourites view (v5.10.34)
+
+User noticed the custom gold scroll indicator (right-edge track + draggable thumb, turns orange past 85% scroll) was missing on the favourites page after staging v5.10.33. Same indicator that's on the landing and result pages.
+
+### Single-line fix
+
+The render block for the indicator was gated:
+
+```jsx
+{!showFavs && ((result && !result.notFound) || (!result && !loading)) && (
+```
+
+The `!showFavs` gate is a historical artifact — back when favourites was a small modal-style strip with little scroll length, hiding the indicator made sense. The current full-page favourites view (DYM-style card list, optionally filtered by folder) has plenty of scroll on a full library, so the gate is wrong.
+
+Removed `!showFavs && `. The indicator now renders on landing, result, and favs.
+
+### Why no other wiring was needed
+
+The `scrollPct` state is updated by a window-level `scroll` listener installed in `useEffect` near the top of the component (line ~1317). It computes `scrollY / (scrollHeight - innerHeight)` — view-agnostic. Whatever page renders, the listener tracks scroll position correctly. The drag handler at line ~1329 also uses `window.scrollTo` which works against any scrolling document.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +6 / -2 | Removed `!showFavs` gate on the gold scroll indicator; updated comment; FG_VERSION 5.10.34 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.34 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learning
+
+**Gates outlive their justifications.** The `!showFavs` gate made sense when the favs view was a tiny strip. Two redesigns later (v5.10.30 full DYM-style cards, v5.10.31 folders + chip bar), the favs view scrolls like any other page — but the gate stayed. Worth periodic audit: when a feature changes shape, re-read every conditional that touches it.
+
+---
+
+## Session: April 29, 2026 (continued, round 4) — Modal centering + hover-fill cure + hero static (v5.10.33)
+
+After v5.10.32 went up the user reviewed staging again and gave three more pieces of feedback. Addressed in v5.10.33.
+
+### 1. "Add to Favorites" modal — center all text + bump size under the header
+
+User wanted everything below the "Add to Favorites" italic gold heading centered and one notch larger.
+
+- `<h3>` title — added `textAlign: center` (kept fontSize 32 — header itself wasn't bumped per the user's "everything UNDER the header" wording)
+- `<p>` subtitle "Pick or create a folder to save this favorite." — added `textAlign: center`, fontSize 15 → 17, white opacity .72 → .78
+- Three list-row buttons (Unsorted, each folder, "New folder…") — `justifyContent: flex-start` → `center` on both the button and the inner `.fg-shiny-label`, base size 13 → 16 via inline `fontSize: 16` on the button (overrides `.fg-shiny`'s 13px default), padding `10px 18px` → `13px 18px`, leading icon size 14 → 16
+- Cancel — fontSize 12.5 → 14, padding `10px 18px` → `13px 18px`, added explicit `textAlign: center`
+
+The header at 32px now visually dominates while the rest of the modal sits at the new larger, centered cadence.
+
+### 2. Yellow fill on hover — Unsorted + folder rows in the modal
+
+Root cause: `.fg-shiny:is(:hover, :focus-visible, :focus-within)` widens the conic shine band from `--fg-shiny-pct: 7%` (rest) to `18%`, and a sibling rule sets `.fg-shiny-label::before { opacity: 0.22 }` (the breathing inset bottom-glow). At 18% + 0.22 the bottom edge of the chip reads as a solid gold/yellow fill — exactly what the user flagged.
+
+Fix: a new `.fg-shiny-flat` modifier:
+
+```css
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) {
+  --fg-shiny-pct: 7%;
+  --fg-shiny-shine: var(--shiny-hi);
+  color: var(--shiny-fg);
+}
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0; }
+```
+
+Applied to the Unsorted button + each folder row in the picker. The rotating gold conic-gradient border + dotted shimmer + arc gleam still play (those are perimeter, not fill). The "+ New folder…" CTA is unchanged — it uses `.fg-shiny-cta` because it's a primary action.
+
+### 3. Landing hero — remove animations from the title
+
+User asked previously (v5.10.30 era) to remove "boot animations" on the landing. v5.10.32 still had two infinite loops on `.hero-accent` (the "One True Rating Score." second line):
+
+- `goldShimmer 6s ease-in-out infinite` — `background-position` oscillation that creates a moving sheen across the gold gradient
+- `haloBreathe 5s ease-in-out infinite` — `text-shadow` pulse (10px → 18px blur, .22 → .32 alpha)
+
+Both removed. Replaced the `haloBreathe` with a static `text-shadow: 0 0 14px rgba(255, 215, 0, 0.26)` — the halo is still there, just frozen at a mid-amplitude value. The gold gradient (background-clip: text) is unchanged because that's brand colour, not animation.
+
+Below-fold sections kept per the user's "I still want the Review Sites Included and What you'll find to have their animation":
+- `tickerScroll 44s linear infinite` on `.ticker-track` (Review Sites Included) — kept
+- `.newl-how-card` hover lift + glow — kept
+- `filmScroll 56s linear infinite` on `.film-track` (What You'll Find strip) — kept
+- `.film-frame` hover sheen — kept
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +42 / -18 | `.fg-shiny-flat` modifier; modal centering + sizing; `.hero-accent` static; FG_VERSION 5.10.33 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.33 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Hover state on a "shiny" button is the wrong default for list rows.** The `.fg-shiny` design was built for filter chips and CTAs — interactive elements where a hover "warm-up" reads as feedback. When the same component is reused for list rows in a modal (Unsorted, folders), hover ambiguity reads as a fill. The fix is a modifier (`fg-shiny-flat`) that locks the hover state to the rest-state values — the rotating perimeter still confirms interactivity, but no fill.
+2. **Brand-colour gradients ≠ animations.** Removing `goldShimmer` + `haloBreathe` from `.hero-accent` doesn't remove the gold colour or the halo — those become static. Worth distinguishing in feedback: when a user says "no animations on the title", they often want the static visual to remain.
+3. **Each modal should set its own button text size.** `.fg-shiny` defaults to 13px which works for filter chips and toolbar CTAs but is too small inside a centered, oversized modal. Inline `fontSize: 16` on the button overrides cleanly without a new CSS rule.
+
+---
+
+## Session: April 29, 2026 (continued, round 3) — Favourites polish round 3 (v5.10.32)
+
+After v5.10.31 went up the user flagged three quick visual issues from the Vercel preview. All addressed in v5.10.32.
+
+### Context note — recovered work, not redo
+
+Prior round 3 attempt hung mid-session — terminal got stuck on a `agent-browser` install while the actual code edits had already landed locally and were sitting uncommitted on staging. This session resumed by re-verifying the diff against the three asks (it matched), running a clean `tsc --noEmit` (exit 0), and pushing as v5.10.32. No new code was written — everything below describes the edits the prior session had already made before the hang.
+
+### 1. Yellow fill on Favourites chips and the heart-click "+ New folder" CTA
+
+User flagged two spots where the active filter chip and the "+ New folder" CTA were reading as a heavy yellow fill instead of the intended shiny perimeter aesthetic. Root was the always-on `span::before` inset bottom-glow (`box-shadow: inset 0 -1.6ex 1.4rem 3px var(--shiny-hi)` at opacity 0.55 on `.active` / 0.42 on `.fg-shiny-cta`) plus a 14% / 10% conic-gradient shine band that, in combination, painted the bottom half of the pill solid gold.
+
+Fix:
+- Inset bottom-glow → opacity 0 on both `.fg-shiny.active` and `.fg-shiny.fg-shiny-cta` (it's still alive on hover at a subdued 0.22, so the chip "warms" but never "fills")
+- `--fg-shiny-pct` shine band: `.active` 14% → 7%, `.fg-shiny-cta` 10% → 7%
+- `--shiny-bg-sub` (inner pad-box tint): `#2a1d04` → `#1f1604` on both
+- `::after` gleam streak: width 140% → 130%, opacity 0.42 → 0.18 (idle) / 0.22 (active+CTA), narrower transparent stops (32%/68% → 38%/62%), darker mask threshold (38% → 52%) so the bright streak rotates through a smaller arc
+- Hover label::before glow opacity 0.65 → 0.22
+
+Result: rotating gold conic-gradient border + dotted ::before shimmer + slim arc gleam all preserved, but the chip body never reads as filled gold. State is signaled by the perimeter, not by interior fill.
+
+### 2. Heart-click modal — title, subtitle, "+ New folder" pill, sizing
+
+- Title `Save to library` → `Add to Favorites` (32px Playfair italic gold, was 26px; letter-spacing -0.5 → -0.6, line-height 1.1 → 1.08, margin-bottom 6 → 10)
+- Subtitle `Choose where {title} should live.` → `Pick or create a folder to save this favorite.` (15px Syne, was 13px; opacity .62 → .72, added line-height 1.5)
+- "+ New folder…" yellow fill — already covered by the global `.fg-shiny-cta` fix in §1 above; no extra modal-scoped CSS needed
+
+### 3. True Movie Rating Score — descender clip on the 124px Playfair number
+
+The score wrapper had `padding: 12px 16px` and the score `<span>` had `lineHeight: 0.9`. At fontSize 124 + Playfair Display's tall descenders, the bottom of "3" / "5" / "8" was sitting outside the line box and getting clipped by the parent's effective padding. Fix:
+
+- Score wrapper padding `12px 16px` → `12px 16px 18px`
+- Score `<span>`: `lineHeight: 0.9` → `1.05`, added `paddingBottom: 0.12em`
+
+`/ 10` suffix unchanged — only the gradient-clipped score number had the descender problem because its background-clip:text + transparent fill made the clip visible at the pixel level.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +48 / -31 | Shiny CSS retune (no fill on .active/.fg-shiny-cta), modal copy + sizing, score line-height + padding fix, FG_VERSION 5.10.32 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.32 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **A "shiny button" can read as a "filled button" if the always-on inset glow is bright enough.** The aliimam/shiny-button design uses `span::before` as a breathing inset bottom-glow — at low opacity (0.0–0.25) it adds depth without reading as fill. At 0.55+ it crosses the threshold and starts looking like a yellow pill. The fix on `.active` / `.fg-shiny-cta` was to keep the breathing keyframe but leave the rest-state opacity at 0, only lighting up subtly on hover.
+2. **`background-clip: text` + Playfair Display + tight line-height = descender clip.** Default Playfair descender extends well below the baseline; `line-height < 1.0` shrinks the line box below the glyph, and the parent's padding does the actual visible clipping. Lesson: at large display sizes, line-height needs to be ≥ 1.05 for serif fonts with prominent descenders, and an explicit `padding-bottom: 0.1em–0.15em` on the span is cheap insurance against clip from any ancestor `overflow: hidden`.
+3. **A hung terminal in the previous session doesn't mean the code is hung — verify by reading the diff.** This session would have produced churn (re-doing all three fixes) if it had assumed nothing landed. Always check `git status` + `git diff` before re-implementing.
+
+---
+
+## Session: April 29, 2026 (continued, round 2) — Favourites polish (v5.10.31)
+
+After v5.10.30 hit staging the user reviewed it on the Vercel preview and gave five pieces of feedback. All addressed in v5.10.31.
+
+1. **Diagnostic line removed.** The italic Playfair "Your Favourites" headline now stands alone — the JetBrains Mono `// X films saved · folder name` slug under it was deleted per user "remove the # of films saved line" request.
+2. **Score format `8.3/10` inline.** Was a stacked `8.3` + tiny mono `OUT OF 10` underneath. Now baseline-aligned: 56px Playfair gold-gradient `8.3` + 22px Playfair gold `/10` next to it. The `.fg-fav-score-suffix` rule was rewritten from caps-letterspaced mono to a Playfair slug.
+3. **Card detail richness via two-tier enrichment.** User flagged that director + plot were missing on existing fav cards (they were saved before yesterday's metadata-columns migration, so all 18 rows had nulls). Two-tier fix:
+   - **Migration 012** — one-shot SQL backfill: `UPDATE favorites SET runtime/director/overview FROM movie_cache via search_key match`. 13/18 existing favs immediately enriched.
+   - **`/api/enrich-favorites`** — POST endpoint, Bearer-auth-gated, validates each `(title, year)` pair belongs to the authenticated user (defends against using the endpoint as a free Claude oracle), then sends a single batch prompt to **Claude Sonnet 4.6** asking for `{director, runtime_minutes, overview}` per movie. Returns the enriched data + UPDATE-writes the rows. Called silently from `loadUserData` for any rows still missing data after the cache backfill. The remaining 5 of 18 will fill in on the next sign-in.
+4. **Shiny-button replacement for all favourites-page chips.** Per the 21st.dev `aliimam/shiny-button` design. Fetched the source registry JSON (`https://21st.dev/r/aliimam/shiny-button.json`) to get the exact CSS primitives:
+   - `@property` registered `<angle>` and `<percentage>` and `<color>` for `--gradient-angle`, `--gradient-angle-offset`, `--gradient-percent`, `--gradient-shine`
+   - Triple-layered button: `padding-box` solid bg + `border-box` rotating conic-gradient (the shine sweep) + `box-shadow inset` faux double-border
+   - `::before` pseudo — radial dot pattern masked to a moving conic arc (the dotted shimmer)
+   - `::after` pseudo — linear-gradient streak masked to a radial-bottom fade (the gleam)
+   - `span::before` pseudo — inset bottom-glow with `breathe` keyframe (1→1.2 scale at 50%)
+   - Three keyframes: `gradient-angle` (rotate), `shimmer` (pseudo rotate), `breathe` (pulse)
+   
+   Recolored to Film Glance gold: `--shiny-cta-bg: #0a0805`, `--shiny-bg-sub: #1a1308`, `--shiny-hi: #FFD700`, `--shiny-hi-soft: #FFE89A`. Renamed keyframes `fgShinyAngle` / `fgShinyArc` / `fgShinyBreathe` to avoid collision with the existing `shimmer` / `breathe` keyframes elsewhere in the stylesheet. Added a `.fg-shiny-cta` modifier for primary CTAs (+ New folder, save-to-folder confirm) — brighter rest state with the animation always running. Active filter chips (`.fg-shiny.active`) use the same always-running treatment with gold text. Per-folder chips use `<span>` outer + nested `<button>` for the filter click + sibling action `<button>`s for rename/delete (avoids invalid button-in-button HTML).
+
+5. **Heart-click "Save to library" picker.** New centered modal opens when the user clicks the heart on a result page for a movie they haven't favourited yet. Lists Unsorted + each folder + a "New folder…" inline create path. Click any row → instant save with that destination + close. The "+ New folder" path expands to an inline input + Save button; on save it creates the folder, then chains the favourite insert with the new folder id (via a `createFolder` change that now returns the new id on success). The previous `toggleFav` add path inserted directly with `folder_id: null`; that was replaced by `setSaveToFolderTarget(movieResult)` which opens the picker. The actual insert now lives in a new `confirmSaveFav(folderId)` helper. Heart-click on an already-favourited movie still un-favourites instantly (no modal) — matches the user's "lean toward existing behaviour" pick.
+
+### Persistence
+
+User asked for explicit confirmation that favs + folders + folder assignments persist forever per account. Already does — `favorites.user_id` + `favorite_folders.user_id` are FKs to `auth.users.id`, RLS policies are owner-scoped (`auth.uid() = user_id` on every SELECT/INSERT/UPDATE/DELETE), `loadUserData` reloads everything on every fresh sign-in. The only thing that wasn't persisting before this session was the new metadata columns on legacy rows — fixed by migration 012 + Sonnet enrichment.
+
+### Files modified
+
+| File | Purpose |
+|------|---------|
+| `components/film-glance.jsx` | Diagnostic line removed; score `/10`; shiny-button CSS + applied to chip bar; heart-click picker modal; `confirmSaveFav` + `saveToNewFolder` helpers; `createFolder` returns id; FG_VERSION 5.10.31 |
+| `app/api/enrich-favorites/route.ts` | NEW — Sonnet 4.6 batch enrichment, Bearer auth, ownership-gated |
+| `sql/migrations/012_backfill_favorites_metadata.sql` | NEW — one-shot UPDATE from movie_cache |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Key learnings
+
+1. **Defend AI endpoints with ownership checks.** `/api/enrich-favorites` could otherwise be used as a free Claude oracle for arbitrary movie lookups. The endpoint validates that every `(title, year)` pair in the request matches a row in the caller's own favorites table before the Sonnet call fires.
+2. **`@property` registered CSS custom properties unlock real animation.** The shiny-button's rotating shine works because `--gradient-angle` is registered as `<angle>`, which makes it animatable across keyframes. Without `@property`, browser would treat it as a string and skip the interpolation.
+3. **Avoid keyframe name collisions in long-lived stylesheets.** This stylesheet already had `@keyframes shimmer` (background-position translate for landing) and there's no `breathe` yet but adjacent code might land it. Prefixing the new ones (`fgShinyAngle`, `fgShinyArc`, `fgShinyBreathe`) avoids accidental clobber.
+4. **HTML doesn't allow nested `<button>`s** — the per-folder filter chips need `<span>` outer + `<button>` inner so the chip can host both the filter click and the rename/delete action buttons. CSS `:focus-within` on the outer span makes keyboard focus on the inner button still trigger the shiny hover state.
+
+---
+
+## Session: April 29, 2026 (continued) — Favourites Page Redesign (v5.10.30) + Folders System
+
+### Context
+
+Session opened with the Favourites page priority from the prior chat's NEXT STEPS list. The existing favourites surface was a thin pill (44×66 poster, plain title, year, score, trash) — visually disconnected from the rest of the v5.10 brand pass. User asked for a ruthless overhaul: take the **DYM (Did You Mean…) suggestion-card** visual language as the reference, port it to favourites, plus add a folders organizational system with create/rename/delete, and a per-card "move to folder" affordance, plus an aggregated rating on the right and a trash icon bottom-right. No AI slop, max effort, no push-to-staging until 100% satisfied.
+
+### Workstream 1: Folder data model + Supabase migration
+
+New migration `011_favorite_folders.sql` applied to production via Supabase MCP after explicit user approval. Adds:
+
+- **`favorite_folders` table** — id (uuid), user_id (uuid FK profiles ON DELETE CASCADE), name (1-60 chars, unique per user), position (int for display order), created_at. RLS enabled with 4 owner-only policies (SELECT/INSERT/UPDATE/DELETE via `auth.uid() = user_id`).
+- **4 nullable columns on `favorites`:** `folder_id` (uuid FK favorite_folders ON DELETE SET NULL — folder deletion re-orphans cards to "Unsorted" rather than losing them), `runtime` (int minutes), `director` (text), `overview` (text). Older rows stay with nulls; the redesigned card renders gracefully without those chips.
+- 1 index on `favorite_folders(user_id, position, created_at)`, 1 partial index on `favorites(folder_id) WHERE folder_id IS NOT NULL`.
+- Verified post-apply via SQL probe: 4 RLS policies, RLS enabled, 4 new fav columns confirmed.
+
+### Workstream 2: Component-level folder CRUD
+
+Same optimistic-update + revert-on-error pattern as the existing `toggleFav`/`removeFav`:
+
+- `loadUserData` extended to fetch favourites + folders in parallel (`Promise.all`), maps the new fav columns onto local state.
+- `toggleFav` — when adding, also writes `runtime` (parsed from "120 min" or "2h 0m" string forms), `director`, `overview` (from `result.description`).
+- New helpers: `createFolder`, `renameFolder`, `deleteFolder` (re-orphans cards on success), `moveFavToFolder`. Each performs the optimistic local mutation, the Supabase round-trip, and reverts state if the network/RLS rejects.
+- Sign-out resets `folders`, `activeFolderId` alongside `favorites`.
+
+### Workstream 3: Card redesign (DYM-style port)
+
+The existing `.dym-card` CSS rules (cursor-tracking radial spotlight via `--mx`/`--my` CSS vars, animated rotating conic-gradient 1px ring border, lift-on-hover, poster scale 1.04) were **shared with `.fg-fav-card`** by widening each selector — no duplication, no drift. New favourites-only CSS adds:
+
+- **`.fg-fav-score` column** — 56px Playfair gold-gradient number with two-layer drop-shadow glow (24px close); hover bumps to 38+80px glow + scale 1.04. Mirrors the result-page True Movie Rating treatment, scaled down. Falls back to a "no score" mono caption when score is 0/missing.
+- **`.fg-fav-actions` cluster** — bottom-right of card. Trash button (red glow on hover) + "move to folder" button (gold glow). Idle dim → bumps to legible when card is hovered.
+- **`.fg-fav-folder-tag`** — small mono pill bottom-left of card showing the containing folder name (only rendered when `folderId` is set). Clickable shortcut to filter the chip bar to that folder.
+- **`.fg-move-pop`** — popover anchored to the move button, listing folders + "Unsorted" + "+ New folder…", with active-state checkmark, gold scrollbar on overflow, soft fade-in.
+- **`.fg-folder-chip` + `.fg-folder-new-pill` + `.fg-folder-input`** — chip-bar UI. Chips have count badge, hover lift, `.active` state with gold gradient bg + inner glow; rename/delete icon-buttons appear on hover via `max-width` transition. New-folder pill switches to an inline input with gold border and brand-coloured caret.
+- **`.fg-fav-modal`** — confirm-delete folder dialog. Italic Playfair gold heading "Delete &lsquo;X&rsquo;?", explanatory body in Syne body font ("the N films inside will move to Unsorted"), Cancel + Delete buttons in brand colours.
+
+### Workstream 4: Render block
+
+Replaced the entire `showFavs` JSX (60 lines) with a new IIFE-wrapped block (~330 lines). Order:
+
+1. Top letterbox rail (reused `.dym-rail-top`)
+2. Italic Playfair gold "Your Favourites" headline + JetBrains Mono diagnostic "// X films saved · [folder name]"
+3. Folder filter chip bar (All / Unsorted / per-folder / + New Folder)
+4. Card list (filtered by `activeFolderId`) — DYM-shape with score column, action cluster, folder tag
+5. Per-filter empty states (no favs at all → heart + invitation; Unsorted with 0 → "Everything is filed. Nice."; folder with 0 → "Move a favourite here using the &lt;icon&gt; on any card")
+6. Bottom letterbox rail
+7. Confirm-delete modal (when `deleteFolderTarget` is set)
+
+Document-level `mousedown` listener handles click-outside-to-close for the move popover (root-level fixed backdrop wouldn't work because `.fg-fav-card` has `isolation: isolate` and would render under the backdrop).
+
+### Workstream 5: Pre-existing hydration crash, found and fixed
+
+Local playwright verify caught a "Application error: a client-side exception has occurred" on /#favourites. Root cause: the `<style>{`...`}</style>` JSX text-node escaping bug — server SSR escapes `'` → `&#x27;` and `&` → `&amp;` in CSS text, but client hydration doesn't, so the `@import url('https://fonts.googleapis.com/css2?...')` CSS line breaks (browser sees `&#x27;https://...` as the URL, refuses to load, then the hydration mismatch unmounts the entire React tree, dispatching the "Missing ActionQueueContext" invariant). Fix: switch the inline style block to `<style dangerouslySetInnerHTML={{ __html: `...` }} />` — same fix `preview-landing.jsx` got in PR #37 era. After the fix, both home page and /#favourites render clean with only a stray 404 in console (likely a missing dev asset, not related).
+
+### Workstream 6: Verification artifacts
+
+Wrote `scratch/verify-favourites.mjs` (gitignored, alongside the prior `verify-loading.mjs` from PR #40). Uses temporary `playwright-core@1.55` install. Two screenshots: home idle (full landing with grid bg, hero, ticker, How It Works, film strip) and /#favourites no-auth (auth modal correctly pops). Cards-with-data verification deferred to user's signed-in session (playwright can't fake a Supabase JWT).
+
+### Workstream 7: Windows path-casing diagnostic detour
+
+`next build` repeatedly failed with `Cannot read properties of null (reading 'useContext')` during prerender. Investigated by stashing my changes and rebuilding the baseline — same error occurred. Root cause is Windows case-insensitive FS + this Bash session's lowercase cwd (`film-glance-terminal`) vs. the actual filesystem casing (`Film-Glance-Terminal`); webpack treats them as separate paths and bundles React twice. **Vercel builds on case-sensitive Linux so this artifact never reaches production.** No code change needed.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +1170 / -84 | Folder state + helpers, redesigned card render block, shared `.dym-card` CSS extension, hydration-mismatch fix |
+| `sql/migrations/011_favorite_folders.sql` | NEW | `favorite_folders` table + 4 new fav columns |
+| `tech-specs.md` | +2 rows | Change Log: new CURRENT STATE + NEXT STEPS, prior 29 Apr rows tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+| `scratch/verify-favourites.mjs` | NEW (gitignored) | Local playwright verification harness |
+
+### Key learnings
+
+1. **Reuse beats reinvention.** Sharing `.dym-card` CSS via selector lists (`.dym-card, .fg-fav-card`) instead of copy-pasting the rules kept ~120 lines of CSS DRY and means the gold spotlight + conic border stays visually identical across the two surfaces.
+2. **Optimistic-update + revert-on-error is the right pattern for collection CRUD.** Already proven by `toggleFav`/`removeFav` — extending it to folders meant zero new error UX (every helper writes a `setFolderError(...)` line on failure that the chip-bar reads).
+3. **`isolation: isolate` + popover = stacking-context trap.** Initial click-outside backdrop placed at root z-index 40 was hidden behind the popover because the card creates its own stacking context. Document-level listener is the cleaner pattern.
+4. **JSX text-node `<style>` content is dangerous.** Any apostrophe, ampersand, or `<` in the CSS becomes an HTML entity on SSR and a literal char on client → guaranteed hydration mismatch. Always use `dangerouslySetInnerHTML` for inline `<style>` blocks. The bible doc from PR #37 era already noted this; the fix wasn't applied to the main film-glance.jsx until now.
+
+### Next session
+
+User signs in to localhost dev, hits `/#favourites`, exercises: create folder, rename, delete with confirm, move card to folder, remove card, hover spotlight on card, click card → loadFav navigates to result page. If satisfied, commit and push to staging → Vercel preview → PR → merge to main. If iterations needed, capture feedback and adjust before push.
+
+---
+
 ## Session: April 28-29, 2026 — Movie Result Page Comprehensive Redesign (PRs #43, #44) + DYM Polish
 
 ### Context
