@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.36";
+const FG_VERSION = "5.10.37";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -188,6 +188,7 @@ function CastMember({ name, character, img, idx, visible }) {
 
   return (
     <div
+      className="fg-cast-member"
       style={{
         display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
         opacity: visible ? 1 : 0,
@@ -198,7 +199,7 @@ function CastMember({ name, character, img, idx, visible }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
-      <div style={{
+      <div className="fg-cast-circle" style={{
         width: 96, height: 96, borderRadius: "50%", overflow: "hidden",
         background: `linear-gradient(135deg, hsl(${hue},22%,13%), hsl(${hue},28%,22%))`,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -232,7 +233,7 @@ function CastMember({ name, character, img, idx, visible }) {
         )}
       </div>
       <div style={{ textAlign: "center", lineHeight: 1.25, width: "100%", marginTop: 6 }}>
-        <div style={{
+        <div className="fg-cast-name" style={{
           fontFamily: "'Syne',sans-serif",
           fontSize: 13, fontWeight: 700,
           letterSpacing: 0.15,
@@ -240,7 +241,7 @@ function CastMember({ name, character, img, idx, visible }) {
           transition: "color 0.25s",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{name}</div>
-        <div style={{
+        <div className="fg-cast-char" style={{
           fontFamily: "'Playfair Display',serif",
           fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 3, fontStyle: "italic",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
@@ -440,7 +441,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
     : lbl.includes("days") ? Calendar
     : DollarSign;
   return (
-    <div style={{
+    <div className="fg-boxoffice-row" style={{
       display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14,
       padding: "18px 20px", borderRadius: 11,
       background: idx % 2 === 0 ? "rgba(255,255,255,0.022)" : "transparent",
@@ -449,7 +450,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
       transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.04}s`,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
-        <div style={{
+        <div className="fg-boxoffice-icon" style={{
           width: 38, height: 38, borderRadius: 10, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: "rgba(255,255,255,0.04)",
@@ -458,7 +459,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
         }}>
           <Icon size={17} />
         </div>
-        <span style={{
+        <span className="fg-boxoffice-label" style={{
           fontFamily: "'Syne',sans-serif",
           fontSize: 16,
           color: "rgba(255,255,255,0.82)",
@@ -467,7 +468,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
           minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
         }}>{label}</span>
       </div>
-      <span style={{
+      <span className="fg-boxoffice-value" style={{
         fontFamily: "'JetBrains Mono',monospace",
         fontSize: 17,
         color: valColor,
@@ -2678,6 +2679,61 @@ export default function FilmGlance() {
           .fg-score-row { justify-content: center !important; gap: 18px !important; }
           .fg-score-num-wrap { width: 100% !important; min-width: 0 !important; }
           .fg-score-desc-wrap { width: 100% !important; min-width: 0 !important; align-items: center !important; text-align: center !important; }
+
+          /* ═══ v5.10.37 Phase 2 mobile pass — sections that didn't have
+             breakpoints yet (cast / awards / box-office / thumbs / watch).
+             User-approved patterns:
+               - Cast: shrink first (96→64 circle), let existing
+                 even-rows-vs-scroll fallback handle non-divisible counts.
+               - Box Office: drop the value's white-space:nowrap so long
+                 values wrap inline (plain wrapping per user spec — no
+                 special rank-suffix formatting).
+               - Awards / Thumbs / Watch: shrink-and-fit (smaller padding,
+                 fonts, icon chips). ═══ */
+
+          /* Cast — circles 96→64, container width gets compact, name and
+             character text scale down. With smaller circles, more counts
+             will fit a clean grid; counts that don't will fall back to
+             horizontal-scroll mode (existing fg-scroll wrapper). */
+          .fg-cast-member { min-width: 76px !important; max-width: 90px !important; width: calc(25% - 8px) !important; gap: 4px !important; }
+          .fg-cast-circle { width: 64px !important; height: 64px !important; }
+          .fg-cast-circle span { font-size: 20px !important; }
+          .fg-cast-name { font-size: 11.5px !important; }
+          .fg-cast-char { font-size: 10.5px !important; margin-top: 1px !important; }
+
+          /* Box Office row — shrink-and-fit. Value drops nowrap so long
+             "X / #N rank suffix" values wrap inline (plain wrapping). */
+          .fg-boxoffice-row { padding: 12px 14px !important; gap: 10px !important; }
+          .fg-boxoffice-icon { width: 32px !important; height: 32px !important; }
+          .fg-boxoffice-icon svg { width: 14px !important; height: 14px !important; }
+          .fg-boxoffice-label { font-size: 13.5px !important; letter-spacing: 0.1px !important; }
+          .fg-boxoffice-value { font-size: 14.5px !important; white-space: normal !important; text-align: right !important; }
+          .fg-boxoffice-value > span { font-size: 11.5px !important; margin-left: 4px !important; }
+
+          /* Awards row — smaller padding, smaller chip + name fonts. */
+          .fg-awards-row { padding: 11px 14px !important; }
+          .fg-awards-row > div:first-child { gap: 8px !important; }
+          .fg-awards-chip { font-size: 10.5px !important; padding: 3px 8px !important; letter-spacing: 1.0px !important; }
+          .fg-awards-name { font-size: 13.5px !important; }
+          .fg-awards-detail { font-size: 12.5px !important; line-height: 1.45 !important; }
+
+          /* Thumbs Up / Down section headers — icon chip 40→32, italic
+             title 26→22, and tighten the marginLeft on the caption. */
+          .fg-thumbs-icon { width: 32px !important; height: 32px !important; border-radius: 9px !important; }
+          .fg-thumbs-icon svg { width: 16px !important; height: 16px !important; }
+          .fg-thumbs-title { font-size: 22px !important; }
+          .fg-thumbs-caption { margin-left: 44px !important; font-size: 10.5px !important; }
+          .fg-thumbs-wrap { padding-left: 14px !important; padding-right: 14px !important; }
+
+          /* Where to Watch container — reduce side padding 26→14 so the
+             pills get more horizontal room before wrapping. */
+          .fg-watch-wrap { padding-left: 14px !important; padding-right: 14px !important; gap: 8px !important; }
+
+          /* Universal: any accordion content block tagged with
+             .fg-accord-content gets reduced side padding on mobile.
+             (Sections that already have specific rules above override
+             this.) */
+          .fg-accord-content { padding-left: 14px !important; padding-right: 14px !important; }
         }
 
         /* Respect reduced-motion preference — disable stagger, rail sweep,
@@ -4007,7 +4063,7 @@ export default function FilmGlance() {
               {/* Streaming / Where to Watch if available */}
               {result.streaming && result.streaming.length > 0 && (
                 <Accordion id="fg-watch" icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
-                  <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  <div className="fg-watch-wrap" style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
@@ -4327,7 +4383,7 @@ export default function FilmGlance() {
 
               {result.sources && Array.isArray(result.sources) && result.sources.length > 0 && (
               <Accordion id="fg-sources" icon={<BarChart3 size={14} />} label="Source Breakdown" open={srcOpen} toggle={() => setSrcOpen(!srcOpen)}>
-                <div style={{ padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="fg-accord-content" style={{ padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...result.sources].sort((a, b) => {
                     const as = typeof a.score === 'string' ? parseFloat(a.score) : a.score;
                     const am = typeof a.max === 'string' ? parseFloat(a.max) : a.max;
@@ -4353,12 +4409,12 @@ export default function FilmGlance() {
               {/* Movie Hot Take */}
               {result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) && (
                 <Accordion id="fg-hottake" icon={<ThumbsUp size={14} />} label="Thumbs Up & Thumbs Down" open={hotTakeOpen} toggle={() => setHotTakeOpen(!hotTakeOpen)}>
-                  <div style={{ padding: "12px 26px 28px" }}>
+                  <div className="fg-thumbs-wrap" style={{ padding: "12px 26px 28px" }}>
                     {result.hot_take.good?.length > 0 && (
                       <div style={{ marginBottom: result.hot_take.bad?.length > 0 ? 28 : 0 }}>
                         <div style={{ marginBottom: 18 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                            <div style={{
+                            <div className="fg-thumbs-icon" style={{
                               width: 40, height: 40, borderRadius: 11,
                               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                               background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(22,163,74,0.08))",
@@ -4367,14 +4423,14 @@ export default function FilmGlance() {
                             }}>
                               <ThumbsUp size={19} stroke="#22c55e" strokeWidth={2.2} />
                             </div>
-                            <span style={{
+                            <span className="fg-thumbs-title" style={{
                               fontFamily: "'Playfair Display',serif",
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#22c55e", lineHeight: 1,
                             }}>The Good</span>
                           </div>
-                          <span style={{
+                          <span className="fg-thumbs-caption" style={{
                             display: "block",
                             fontFamily: "'JetBrains Mono',monospace",
                             fontSize: 11, fontWeight: 600,
@@ -4402,7 +4458,7 @@ export default function FilmGlance() {
                       <div>
                         <div style={{ marginBottom: 18 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                            <div style={{
+                            <div className="fg-thumbs-icon" style={{
                               width: 40, height: 40, borderRadius: 11,
                               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                               background: "linear-gradient(135deg, rgba(239,68,68,0.22), rgba(220,38,38,0.08))",
@@ -4411,14 +4467,14 @@ export default function FilmGlance() {
                             }}>
                               <ThumbsDown size={19} stroke="#ef4444" strokeWidth={2.2} />
                             </div>
-                            <span style={{
+                            <span className="fg-thumbs-title" style={{
                               fontFamily: "'Playfair Display',serif",
                               fontStyle: "italic",
                               fontSize: 26, fontWeight: 600, letterSpacing: -0.4,
                               color: "#ef4444", lineHeight: 1,
                             }}>The Bad</span>
                           </div>
-                          <span style={{
+                          <span className="fg-thumbs-caption" style={{
                             display: "block",
                             fontFamily: "'JetBrains Mono',monospace",
                             fontSize: 11, fontWeight: 600,
@@ -4446,7 +4502,7 @@ export default function FilmGlance() {
               {/* Video Reviews — bigger thumbnails, refined play affordance */}
               {result.video_reviews && result.video_reviews.length > 0 && (
                 <Accordion id="fg-videos" icon={<Youtube size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
-                  <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+                  <div className="fg-accord-content" style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
                         onClick={() => setVideoModal({ id: vr.video_id, title: vr.title })}
@@ -4506,13 +4562,13 @@ export default function FilmGlance() {
                     const canEvenRows = count % 4 === 0 || count % 3 === 0;
                     if (canEvenRows) {
                       return (
-                        <div style={{ padding: "12px 26px 28px", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
+                        <div className="fg-accord-content" style={{ padding: "12px 26px 28px", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
                           {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                         </div>
                       );
                     }
                     return (
-                      <div className="fg-scroll" style={{ padding: "12px 22px 26px", display: "flex", gap: 8, overflowX: "auto", overflowY: "hidden" }}>
+                      <div className="fg-scroll fg-accord-content" style={{ padding: "12px 22px 26px", display: "flex", gap: 8, overflowX: "auto", overflowY: "hidden" }}>
                         {result.cast.map((m, i) => <CastMember key={`${m.name}-${i}`} name={m.name} character={m.character} img={m.img} idx={i} visible={castOpen} />)}
                       </div>
                     );
@@ -4522,7 +4578,7 @@ export default function FilmGlance() {
 
               {result.awards && result.awards.length > 0 && (
                 <Accordion id="fg-awards" icon={<Trophy size={14} />} label="Awards & Accolades" open={awardsOpen} toggle={() => setAwardsOpen(!awardsOpen)}>
-                  <div style={{ padding: "8px 26px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div className="fg-accord-content" style={{ padding: "8px 26px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
                     {/* Sort: Wins first, Nominations after — preserves original order within each group */}
                     {[...result.awards].sort((a, b) => {
                       const aw = a.result === "Won" ? 0 : 1;
@@ -4531,7 +4587,7 @@ export default function FilmGlance() {
                     }).map((a, idx) => {
                       const won = a.result === "Won";
                       return (
-                        <div key={`${a.award}-${a.result}-${idx}`} style={{
+                        <div key={`${a.award}-${a.result}-${idx}`} className="fg-awards-row" style={{
                           padding: "14px 18px", borderRadius: 11,
                           background: won
                             ? "linear-gradient(135deg, rgba(255,215,0,0.04) 0%, rgba(255,215,0,0.012) 100%)"
@@ -4544,7 +4600,7 @@ export default function FilmGlance() {
                           transition: `all 0.4s cubic-bezier(0.16,1,0.3,1) ${idx * 0.05}s`,
                         }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 8, flexWrap: "wrap" }}>
-                            <span style={{
+                            <span className="fg-awards-chip" style={{
                               display: "inline-flex", alignItems: "center", gap: 6,
                               fontFamily: "'JetBrains Mono',monospace",
                               fontSize: 12, fontWeight: 700, letterSpacing: 1.4,
@@ -4557,10 +4613,10 @@ export default function FilmGlance() {
                               {won && <Trophy size={11} />}
                               {a.result}
                             </span>
-                            <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15.5, fontWeight: 700, color: won ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.82)", letterSpacing: 0.1 }}>{a.award}</span>
+                            <span className="fg-awards-name" style={{ fontFamily: "'Syne',sans-serif", fontSize: 15.5, fontWeight: 700, color: won ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.82)", letterSpacing: 0.1 }}>{a.award}</span>
                             {a.year && <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace", letterSpacing: 0.5 }}>{a.year}</span>}
                           </div>
-                          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.5, margin: 0, letterSpacing: 0.1 }}>{a.detail}</p>
+                          <p className="fg-awards-detail" style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.5, margin: 0, letterSpacing: 0.1 }}>{a.detail}</p>
                         </div>
                       );
                     })}
@@ -4570,7 +4626,7 @@ export default function FilmGlance() {
 
               {result.boxOffice && (
                 <Accordion id="fg-boxoffice" icon={<DollarSign size={14} />} label="Production & Theatrical Run" open={boxOfficeOpen} toggle={() => setBoxOfficeOpen(!boxOfficeOpen)}>
-                  <div style={{ padding: "10px 22px 22px" }}>
+                  <div className="fg-accord-content" style={{ padding: "10px 22px 22px" }}>
                     <BoxOfficeRow label="Production Budget" val={result.boxOffice.budget} rank={result.boxOffice.budgetRank} idx={0} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Opening Weekend Gross" val={result.boxOffice.openingWeekend} rank={result.boxOffice.openingRank} idx={1} visible={boxOfficeOpen} />
                     <BoxOfficeRow label="Per-Theater Average (PTA)" val={result.boxOffice.pta} rank={result.boxOffice.ptaRank} idx={2} visible={boxOfficeOpen} />
@@ -4594,7 +4650,7 @@ export default function FilmGlance() {
 
               {result.streaming && result.streaming.length > 0 && (
                 <Accordion id="fg-watch" icon={<Tv size={14} />} label="Where to Watch" open={watchOpen} toggle={() => setWatchOpen(!watchOpen)}>
-                  <div style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  <div className="fg-watch-wrap" style={{ padding: "14px 26px 26px", display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {result.streaming.map((s, i) => <StreamingBadge key={`${s.platform}-${i}`} platform={s.platform} url={s.url} type={s.type} logo_path={s.logo_path} title={result.title} idx={i} visible={watchOpen} />)}
                   </div>
                 </Accordion>
@@ -4605,7 +4661,7 @@ export default function FilmGlance() {
                   matching the Did-You-Mean card pattern. */}
               {result.recommendations && result.recommendations.length > 0 && (
                 <Accordion id="fg-recs" icon={<Sparkles size={14} />} label="You Might Also Like" open={true} toggle={() => {}}>
-                  <div style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 14 }}>
+                  <div className="fg-accord-content" style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 14 }}>
                     {result.recommendations.map((rec, i) => (
                       <button key={`${rec.title}-${i}`}
                         onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
