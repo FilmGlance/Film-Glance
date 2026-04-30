@@ -5,7 +5,7 @@
 // for the current (period_type, region). The dropdown groups by year so
 // 40-year backfills don't render as a 2,000-row dropdown.
 
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useLayoutEffect } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 function groupByYear(items) {
@@ -26,7 +26,9 @@ export default function PeriodNavigator({
   onChange,
 }) {
   const [open, setOpen] = useState(false);
+  const [popoverPos, setPopoverPos] = useState({ top: 0, right: 0, maxHeight: 420 });
   const popoverRef = useRef(null);
+  const triggerRef = useRef(null);
 
   const currentIndex = useMemo(() => {
     if (!date) return 0; // "latest" → first item in DESC list
@@ -39,10 +41,36 @@ export default function PeriodNavigator({
     [groups],
   );
 
+  // Position the popover via viewport coords so no ancestor's overflow,
+  // backdrop-filter, or transform can clip it. Anchored to the trigger
+  // button's getBoundingClientRect — recomputed on open + on resize/scroll.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const reposition = () => {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const margin = 8;
+      const viewportH = window.innerHeight;
+      const top = rect.bottom + margin;
+      const right = window.innerWidth - rect.right;
+      const maxHeight = Math.max(160, viewportH - top - 16);
+      setPopoverPos({ top, right, maxHeight });
+    };
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onClick = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) {
         setOpen(false);
       }
     };
@@ -99,6 +127,7 @@ export default function PeriodNavigator({
       </button>
 
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         style={{
@@ -148,12 +177,16 @@ export default function PeriodNavigator({
           ref={popoverRef}
           role="listbox"
           style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: 0,
-            zIndex: 50,
+            // position:fixed escapes any ancestor stacking context, backdrop-filter
+            // containment, or overflow-clip — guaranteeing the dropdown is fully
+            // visible regardless of where it lives in the React tree.
+            position: "fixed",
+            top: popoverPos.top,
+            right: popoverPos.right,
+            zIndex: 1000,
             minWidth: 280,
-            maxHeight: 420,
+            maxWidth: "calc(100vw - 32px)",
+            maxHeight: popoverPos.maxHeight,
             overflowY: "auto",
             padding: 10,
             background: "rgba(8,6,2,0.96)",

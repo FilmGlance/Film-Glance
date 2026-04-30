@@ -35,6 +35,7 @@ interface BoxOfficeRowResponse {
   search_key: string;
   title: string;
   year: number | null;
+  director: string | null;
   poster_path: string | null;
   backdrop_path: string | null;
   gross: number;            // dollars
@@ -47,6 +48,7 @@ interface DbRow {
   search_key: string;
   title: string;
   release_year: number | null;
+  director: string | null;
   poster_path: string | null;
   backdrop_path: string | null;
   rank: number;
@@ -131,7 +133,7 @@ export async function GET(req: NextRequest) {
   const { data: rows, error: rowsErr } = await supabaseAdmin
     .from("box_office_metrics")
     .select(
-      "search_key, title, release_year, poster_path, backdrop_path, rank, gross, theaters, pta_cents, period_label, period_start, period_end, data_status, source, retrieved_at",
+      "search_key, title, release_year, director, poster_path, backdrop_path, rank, gross, theaters, pta_cents, period_label, period_start, period_end, data_status, source, retrieved_at",
     )
     .eq("period_type", period)
     .eq("region", region)
@@ -190,6 +192,7 @@ export async function GET(req: NextRequest) {
       search_key: r.search_key,
       title: r.title,
       year: r.release_year,
+      director: r.director,
       poster_path: r.poster_path,
       backdrop_path: r.backdrop_path,
       gross: grossDollars,

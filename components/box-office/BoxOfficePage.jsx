@@ -21,8 +21,7 @@ import SiteHeader from "../SiteHeader";
 import BackdropLayer from "./BackdropLayer";
 import PageHero from "./PageHero";
 import FilterBar from "./FilterBar";
-import HeroCard from "./HeroCard";
-import BoxOfficeRow from "./BoxOfficeRow";
+import PosterCard from "./PosterCard";
 import EmptyState from "./EmptyState";
 import SkeletonRows from "./SkeletonRows";
 
@@ -92,8 +91,8 @@ export default function BoxOfficePage() {
     };
   }, [period, region, date]);
 
-  const heroEntry = data?.entries?.[0] || null;
-  const restEntries = (data?.entries || []).slice(1, 10);
+  const allEntries = (data?.entries || []).slice(0, 10);
+  const heroEntry = allEntries[0] || null;
 
   return (
     <div
@@ -149,26 +148,52 @@ export default function BoxOfficePage() {
           />
         )}
         {data && data.entries?.length > 0 && (
-          <>
-            <HeroCard entry={heroEntry} key={`hero-${heroEntry?.search_key}-${data.period_start}`} />
-            <div
-              style={{
-                marginTop: 36,
-                display: "flex",
-                flexDirection: "column",
-                gap: 16,
-              }}
-            >
-              {restEntries.map((entry, i) => (
-                <BoxOfficeRow
-                  key={`row-${entry.search_key}-${data.period_start}`}
-                  entry={entry}
-                  staggerDelayMs={i * 50}
-                />
-              ))}
-            </div>
-          </>
+          <div
+            className="bom-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 18,
+            }}
+          >
+            {allEntries.map((entry, i) => (
+              <PosterCard
+                key={`card-${entry.search_key}-${data.period_start}`}
+                entry={entry}
+                featured={i === 0}
+                staggerDelayMs={i * 60}
+              />
+            ))}
+          </div>
         )}
+
+        <style jsx global>{`
+          /* 2 cols × 4 cols × 5 cols responsive grid.
+             #1 (featured) spans the full row on tablet & mobile so it
+             stays visually elevated rather than getting cramped. */
+          @media (max-width: 1280px) {
+            .bom-grid {
+              grid-template-columns: repeat(4, 1fr) !important;
+            }
+          }
+          @media (max-width: 960px) {
+            .bom-grid {
+              grid-template-columns: repeat(3, 1fr) !important;
+            }
+            .bom-grid > .bom-pcard-featured {
+              grid-column: span 3;
+            }
+          }
+          @media (max-width: 640px) {
+            .bom-grid {
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 14px !important;
+            }
+            .bom-grid > .bom-pcard-featured {
+              grid-column: span 2;
+            }
+          }
+        `}</style>
       </main>
     </div>
   );

@@ -35,6 +35,9 @@ import {
   type PeriodType,
   type Source,
 } from "@/lib/box-office-upsert";
+import { supabaseAdmin } from "@/lib/supabase-server";
+import { sanitizeQuery } from "@/lib/sanitize";
+import { waitUntil } from "@vercel/functions";
 import {
   sendAlertEmail,
   logCronFailure,
@@ -73,10 +76,90 @@ interface ChartIngestion {
   count: number;
 }
 
+// Track unique titles seen this run so we score-backfill each one only once.
+type SeenTitle = { search_key: string; title: string };
+
+/**
+ * For each title that BOM gave us, populate `movie_cache` (Film Glance score
+ * source) by firing /api/search server-side with the X-Cron-Service header.
+ * Runs as fire-and-forget via waitUntil so it doesn't extend the cron's
+ * response time. Each search adds one Claude call (~$0.005) plus TMDB +
+ * verified-ratings — typical 4-10s wall time per movie. Vercel keeps the
+ * function alive past the 200 OK return until each fetch completes.
+ */
+async function triggerScoreBackfill(seen: SeenTitle[]): Promise<void> {
+  if (seen.length === 0) return;
+
+  // De-dup by search_key (movies often appear in multiple period_types)
+  const unique = new Map<string, SeenTitle>();
+  for (const s of seen) if (!unique.has(s.search_key)) unique.set(s.search_key, s);
+
+  // Skip titles that already have a movie_cache entry
+  const keys = [...unique.keys()];
+  const { data: hits } = await supabaseAdmin
+    .from("movie_cache")
+    .select("search_key")
+    .in("search_key", keys);
+  const have = new Set((hits || []).map((r: any) => r.search_key));
+  const missing = [...unique.values()].filter((s) => !have.has(s.search_key));
+
+  if (missing.length === 0) {
+    console.log("[score-backfill] all top titles already in movie_cache, skipping");
+    return;
+  }
+
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+  const cronSecret = process.env.CRON_SECRET || "";
+  // Vercel auto-populates this when "Protection Bypass for Automation" is on;
+  // forwarding it lets internal fetches sail past Vercel Authentication.
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
+
+  console.log(
+    `[score-backfill] firing ${missing.length} /api/search calls for: ${missing
+      .map((m) => m.title)
+      .join(", ")
+      .slice(0, 200)}`,
+  );
+
+  for (const m of missing) {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-cron-service": cronSecret,
+    };
+    if (bypass) headers["x-vercel-protection-bypass"] = bypass;
+
+    waitUntil(
+      fetch(`${baseUrl}/api/search`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query: m.title }),
+        signal: AbortSignal.timeout(60000),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            console.error(
+              `[score-backfill] /api/search for "${m.title}" → ${r.status}: ${(await r
+                .text()
+                .catch(() => "")).slice(0, 200)}`,
+            );
+          } else {
+            console.log(`[score-backfill] ✓ scored "${m.title}"`);
+          }
+        })
+        .catch((err) => {
+          console.error(`[score-backfill] /api/search for "${m.title}" failed:`, err.message);
+        }),
+    );
+  }
+}
+
 async function ingestRows(
   result: { rows: any[]; periodLabel: string; periodStart: string; periodEnd: string },
   periodType: PeriodType,
-  dataStatus: DataStatus
+  dataStatus: DataStatus,
+  seenTitles: SeenTitle[]
 ): Promise<ChartIngestion> {
   let count = 0;
   for (const row of result.rows) {
@@ -90,6 +173,7 @@ async function ingestRows(
       dataStatus,
       source: SOURCE,
     });
+    seenTitles.push({ search_key: sanitizeQuery(row.title), title: row.title });
     count++;
   }
   return {
@@ -111,6 +195,7 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const year = now.getUTCFullYear();
+  const seenTitles: SeenTitle[] = [];
   const summary: { ingestions: ChartIngestion[]; warnings: string[] } = {
     ingestions: [],
     warnings: [],
@@ -123,7 +208,7 @@ export async function GET(req: NextRequest) {
     if (latestWeek) {
       const weekResult = await scrapeWeekChart(latestWeek.year, latestWeek.week, TOP_N);
       summary.ingestions.push(
-        await ingestRows(weekResult, "weekly", "actual"),
+        await ingestRows(weekResult, "weekly", "actual", seenTitles),
       );
       await sleep(POLITE_DELAY_MS);
     } else {
@@ -132,20 +217,24 @@ export async function GET(req: NextRequest) {
 
     // 2. Current month (in-progress; data updates daily on BOM)
     const monthResult = await scrapeMonthChart(year, currentMonth(now), TOP_N);
-    summary.ingestions.push(await ingestRows(monthResult, "monthly", "estimate"));
+    summary.ingestions.push(await ingestRows(monthResult, "monthly", "estimate", seenTitles));
     await sleep(POLITE_DELAY_MS);
 
     // 3. Current season (in-progress)
     const seasonResult = await scrapeSeasonChart(year, currentSeason(now), TOP_N);
-    summary.ingestions.push(await ingestRows(seasonResult, "seasonal", "estimate"));
+    summary.ingestions.push(await ingestRows(seasonResult, "seasonal", "estimate", seenTitles));
     await sleep(POLITE_DELAY_MS);
 
     // 4. Current year (in-progress)
     const yearResult = await scrapeYearChart(year, TOP_N);
-    summary.ingestions.push(await ingestRows(yearResult, "yearly", "estimate"));
+    summary.ingestions.push(await ingestRows(yearResult, "yearly", "estimate", seenTitles));
 
     // Resolve prior failures
     await markCronFailuresResolved(JOB);
+
+    // Score backfill — fire searches for titles missing from movie_cache.
+    // Runs as fire-and-forget via waitUntil so the cron's response is fast.
+    await triggerScoreBackfill(seenTitles);
 
     console.log(`[${JOB}] ✓`, summary);
     return NextResponse.json({ ok: true, summary });

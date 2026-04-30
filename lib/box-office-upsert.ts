@@ -33,6 +33,7 @@ interface MovieCacheEnrichmentRow {
     year?: number | null;
     tmdb_id?: number | null;
     imdb_id?: string | null;
+    director?: string | null;
   };
 }
 
@@ -53,12 +54,13 @@ export async function ensurePosterAndBackdrop(
   backdrop_path: string | null;
   tmdb_id: number | null;
   imdb_id: string | null;
+  director: string | null;
 }> {
   // Try existing box_office_metrics first (cheapest — same row ingested previously)
   try {
     const prior = await supabaseAdmin
       .from("box_office_metrics")
-      .select("poster_path, backdrop_path, tmdb_id, imdb_id")
+      .select("poster_path, backdrop_path, tmdb_id, imdb_id, director")
       .eq("search_key", search_key)
       .not("poster_path", "is", null)
       .limit(1)
@@ -69,6 +71,7 @@ export async function ensurePosterAndBackdrop(
         backdrop_path: prior.data.backdrop_path ?? null,
         tmdb_id: prior.data.tmdb_id ?? null,
         imdb_id: prior.data.imdb_id ?? null,
+        director: prior.data.director ?? null,
       };
     }
   } catch (_err) {
@@ -88,6 +91,7 @@ export async function ensurePosterAndBackdrop(
         backdrop_path: cached.data.data.backdrop_path ?? null,
         tmdb_id: cached.data.data.tmdb_id ?? null,
         imdb_id: cached.data.data.imdb_id ?? null,
+        director: (cached.data.data as any).director ?? null,
       };
     }
   } catch (_err) {
@@ -106,12 +110,13 @@ export async function ensurePosterAndBackdrop(
         backdrop_path: tmdb.backdrop_path,
         tmdb_id: tmdb.tmdb_id,
         imdb_id: tmdb.imdb_id,
+        director: tmdb.director,
       };
     }
   } catch (_err) {
     /* swallow */
   }
-  return { poster_path: null, backdrop_path: null, tmdb_id: null, imdb_id: null };
+  return { poster_path: null, backdrop_path: null, tmdb_id: null, imdb_id: null, director: null };
 }
 
 /**
@@ -134,6 +139,7 @@ export async function upsertBoxOfficeRow(input: UpsertInput): Promise<void> {
     imdb_id: enrich.imdb_id,
     poster_path: enrich.poster_path,
     backdrop_path: enrich.backdrop_path,
+    director: enrich.director,
     period_type: periodType,
     period_start: periodStart,
     period_end: periodEnd,

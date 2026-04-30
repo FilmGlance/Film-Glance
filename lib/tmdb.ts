@@ -793,40 +793,48 @@ export async function enrichBoxOfficeWithTMDB(
   backdrop_path: string | null;
   tmdb_id: number | null;
   imdb_id: string | null;
+  director: string | null;
 }> {
   const blank = {
     poster_path: null,
     backdrop_path: null,
     tmdb_id: null,
     imdb_id: null,
+    director: null,
   };
   if (!TMDB_KEY) return blank;
   try {
     const movie = await searchMovie(title, year);
     if (!movie) return blank;
+    // Single /movie/{id} call appends external_ids + credits so we get
+    // poster + backdrop + IMDb id + director (from crew) in one round-trip.
     const res = await fetch(
-      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`,
+      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids,credits`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!res.ok) {
-      // Fall back to whatever we got from the search call
       return {
         poster_path: movie.poster_path ?? null,
         backdrop_path: null,
         tmdb_id: movie.id,
         imdb_id: null,
+        director: null,
       };
     }
     const data = (await res.json()) as {
       backdrop_path?: string | null;
       poster_path?: string | null;
       external_ids?: { imdb_id?: string | null };
+      credits?: { crew?: { name: string; job: string }[] };
     };
+    const director =
+      (data.credits?.crew || []).find((c) => c.job === "Director")?.name ?? null;
     return {
       poster_path: data.poster_path ?? movie.poster_path ?? null,
       backdrop_path: data.backdrop_path ?? null,
       tmdb_id: movie.id,
       imdb_id: data.external_ids?.imdb_id ?? null,
+      director,
     };
   } catch {
     return blank;

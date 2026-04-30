@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.box_office_metrics (
   search_key text NOT NULL,             -- normalized via sanitizeQuery() — same key as movie_cache
   title text NOT NULL,                  -- BOM official title (display)
   release_year integer,
+  director text,                        -- TMDB credits crew[job=Director]
   tmdb_id integer,                      -- cached after first enrichWithTMDB() call
   imdb_id text,
   poster_path text,                     -- TMDB poster_path; URL built at render
