@@ -1,5 +1,60 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 (continued) — Phase 2 mobile sweep (v5.10.37)
+
+User confirmed v5.10.36 fixes work on real phone, opened PR #47 (v5.10.35-36 → main), then asked to start Phase 2.
+
+### Phase 2 audit + plan (user-approved)
+
+Walked through every result-page section that didn't yet have a mobile breakpoint. Findings + pattern picks:
+
+| Priority | Section | Pattern | Done? |
+|---|---|---|---|
+| **HIGH** | Cast | Shrink (96→64 circles); existing even-rows-vs-scroll fallback handles non-divisible counts | ✓ |
+| **HIGH** | Box Office (Production & Theatrical Run) | Allow value wrap (drop nowrap) — plain wrapping per user | ✓ |
+| MED | Awards | Shrink-and-fit (smaller padding + fonts) | ✓ |
+| MED | Thumbs Up / Down | Shrink-and-fit (icon chip 40→32, italic 26→22) | ✓ |
+| LOW | Where to Watch | Reduce side padding 26→14 | ✓ |
+| LOW | You Might Also Like | Already adapts via `repeat(auto-fit, minmax(118px, 1fr))` — verify only | ✓ (verified) |
+| LOW | Video Reviews | Already adapts via `minmax(180px, 1fr)` — verify only | ✓ (verified) |
+| UNIV | Accordion content padding | New `.fg-accord-content` shared className: side padding 22-26→14 on mobile | ✓ |
+
+User decisions:
+1. Approve audit as-is — proceed
+2. Cast: "Shrink and then revert back if it doesn't fit" — shrink circles + trust the existing fallback (non-divisible counts already go to horizontal-scroll mode)
+3. Box Office: "plain wrapping" — no special font/color/indent for the rank suffix when it wraps to a second line
+
+### Implementation — single @media block extension
+
+All v5.10.37 rules added inside the existing `@media (max-width: 640px)` block from v5.10.35/36 (so each subsequent edit is one block, not nine). Key targeted classNames added to the JSX:
+
+- `.fg-cast-member`, `.fg-cast-circle`, `.fg-cast-name`, `.fg-cast-char`
+- `.fg-boxoffice-row`, `.fg-boxoffice-icon`, `.fg-boxoffice-label`, `.fg-boxoffice-value`
+- `.fg-awards-row`, `.fg-awards-chip`, `.fg-awards-name`, `.fg-awards-detail`
+- `.fg-thumbs-icon`, `.fg-thumbs-title`, `.fg-thumbs-caption`, `.fg-thumbs-wrap`
+- `.fg-watch-wrap`
+- `.fg-accord-content` (universal padding rule applied to 7 accordion content wrappers — Source Breakdown, Video Reviews, Cast both modes, Awards, BoxOffice, Recommendations)
+
+### Why this is one PR, not two
+
+Phase 1 (v5.10.35) and Phase 2 (v5.10.37) ship behind PR #47 together. The PR's scope grew from 2 commits to 4 (35, 36, doc-prep, 37) but the change is cohesive — "comprehensive mobile pass" — and the user's preference is to verify everything on real phone in one go before merging to production. Splitting into separate PRs would mean two re-screenshot rounds for arguably one feature.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +84 / -28 | Phase 2 className hooks + @media rules; FG_VERSION 5.10.37 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.37 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Audit first, code second.** Phase 2 took ~10 minutes to audit and ~25 minutes to code because the audit nailed down the exact pattern per section. The audit doc gets thrown away after; the value is forcing you to think before edits.
+2. **Universal `.fg-accord-content` rule beats per-section rules where the change is identical.** For "side padding 26→14" applied across 7 accordion wrappers, one selector with one rule wins over seven duplicated targeted rules. Targeted classNames are still needed for per-section font/icon-size adjustments — but the padding case is universal.
+3. **Pattern picks don't have to be exotic.** "Shrink-and-fit" handled 4 of 5 sections. The only section that needed a different pattern was Cast (which already has the right pattern — even-rows-vs-scroll). Mobile UX work is mostly turning down knobs, not redesigning.
+
+---
+
 ## Session: April 30, 2026 — Mobile pass round 2 (v5.10.36) — reduced-motion bug + source-row hardening + score centering + FAB safe-area
 
 User re-screenshot-tested v5.10.35 on mobile (5 new screenshots in `/mobile/`). Reported 4 issues. The screenshot URLs revealed an important detail — most were on `filmglance.com` and `film-glance.vercel.app`, both of which are **production** (v5.10.34, no v5.10.35 fixes). The staging preview lives at `film-glance-git-staging-rs-projects-c0025ef0.vercel.app`. This was a clue but not a complete explanation — the user *did* see the v5.10.35 FAB on at least one screen, so they reached staging at some point. Either way, the four reported issues each had a real root cause worth fixing.
