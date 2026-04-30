@@ -1,5 +1,13 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 (continued, round 5) — v5.11.0 merged to main; pivot to next project
+
+User merged PR #51 via the GitHub web UI. Production at v5.11.0 (filmglance.com). Pre-merge clarification: discussed dropping `runtime = "edge"` to avoid long-term 25s-timeout monitoring; user opted to keep edge runtime ("it'll never go past 25 seconds anyway") with no proactive monitoring. PR #51 final scope = edge runtime + waitUntil migration + sidebar active-tracking fix + transition twitch fix. User reported twitching reduced from significant-on-2-of-3 movies to minor-on-1-of-4 — accepted as a manageable residual, not blocking. Bible docs updated to mark v5.11.0 in production.
+
+Pivoting to next project (TBD by user).
+
+---
+
 ## Session: April 30, 2026 (continued, round 4) — v5.11.0 staging cycle round 2 — sidebar active-tracking + transition twitch fix
 
 User tested v5.11.0 (round 1: edge runtime + waitUntil migration) on the Vercel preview after PR #51 was opened. Confirmed warm cache-hit returns instantly. Flagged two bugs surfaced during the same testing:
