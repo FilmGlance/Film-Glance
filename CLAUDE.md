@@ -56,8 +56,8 @@ After every task or set of tasks:
 - Never run destructive SQL (DELETE, DROP, TRUNCATE) without user approval.
 
 ### Production App
-- **Main app `v5.9.1` is in production and stable.** Don't touch it unless working on a specific production bug.
-- Main app changes always go through staging → Vercel preview → PR → merge.
+- **Current production version is whatever's on `main` and live at filmglance.com.** The current version + status (production / staging / pending PR) live in `tech-specs.md` §10 (top row marked ✅ CURRENT STATE) and `tech-specs.md` §9 (Version History). Read those at session start — never trust a hardcoded version number in this file.
+- Don't touch production unless you're working on a specific production bug. Main app changes always go through staging → Vercel preview → PR → merge.
 
 ### Anthropic API Credits
 - The Feb 27 outage was caused by exhausted API credits. If searches start returning 504, the first check is Anthropic console billing. Enable auto-reload to prevent recurrence.

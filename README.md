@@ -35,7 +35,7 @@ Unlike existing movie sites that exist in isolation, Film Glance is **platform-n
 - **Discussion forum:** https://filmglance.com/discuss
 - **GitHub repo:** https://github.com/FilmGlance/Film-Glance
 - **Tech stack:** Next.js 14, React, Anthropic Claude API (Haiku 4.5), TMDB API, RapidAPI (Ratings Ultra + YT Search Basic + RottenTomato Pro), Piped API, Invidious API, Letterboxd Direct, Supabase (auth + DB), Vercel (hosting), Cloudflare (DNS), Zoho Mail (email), NodeBB v3.12.7 (forum), PostgreSQL (forum DB), Nginx (forum reverse proxy)
-- **Current version:** Check tech-specs.md §9 for the latest version (v5.9.1 in production)
+- **Current version:** `tech-specs.md` §10 (top row marked ✅ CURRENT STATE) and `tech-specs.md` §9 (Version History) are the source of truth for what's in production vs. staging. Never assume a version from this README.
 - **Access model:** Anonymous users get 15 searches/day; free accounts get unlimited access
 - **Business email:** rod@filmglance.com (primary), partnerships@filmglance.com (outreach), support@filmglance.com (user support) — all via Zoho Mail, DNS in Cloudflare
 
