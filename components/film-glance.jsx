@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.32";
+const FG_VERSION = "5.10.33";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -2286,6 +2286,20 @@ export default function FilmGlance() {
         .fg-shiny.fg-shiny-cta::after { animation-play-state: running; }
         .fg-shiny.fg-shiny-cta .fg-shiny-label::before { opacity: 0; }
 
+        /* List-row variant — used for the heart-click "Add to Favorites"
+           rows (Unsorted + each folder). Hover would otherwise widen the
+           shine band to 18% and light up the inset bottom-glow at 0.22,
+           painting the row's bottom edge yellow. This modifier locks both
+           to their rest-state values so hover never reads as a fill.
+           Rotating perimeter shine + dotted ::before shimmer + arc gleam
+           still play on hover via :focus-within → animation-play-state. */
+        .fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) {
+          --fg-shiny-pct: 7%;
+          --fg-shiny-shine: var(--shiny-hi);
+          color: var(--shiny-fg);
+        }
+        .fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0; }
+
         /* Count badge inside a chip */
         .fg-shiny .count {
           font-family: 'JetBrains Mono', monospace;
@@ -2545,12 +2559,19 @@ export default function FilmGlance() {
         @keyframes goldShimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
         @keyframes haloBreathe { 0%, 100% { text-shadow: 0 0 10px rgba(255, 215, 0, 0.22); } 50% { text-shadow: 0 0 18px rgba(255, 215, 0, 0.32); } }
 
+        /* Hero second-line gold accent — static gradient. The previous
+           goldShimmer (background-position oscillation) + haloBreathe
+           (text-shadow pulse) infinite loops were removed per user
+           feedback ("the title should be there when the site loads, no
+           animations"). The static gradient itself is still there — it's
+           the brand colour, not an animation. The below-fold "Review
+           Sites Included" + "What You'll Find" sections keep their
+           animations as the user requested. */
         .hero-accent {
           background: linear-gradient(135deg, #FFE27A 0%, #FFD700 32%, #E8A000 62%, #FFD700 100%);
-          background-size: 220% auto;
           -webkit-background-clip: text; background-clip: text;
           -webkit-text-fill-color: transparent; color: transparent;
-          animation: goldShimmer 6s ease-in-out infinite, haloBreathe 5s ease-in-out infinite;
+          text-shadow: 0 0 14px rgba(255, 215, 0, 0.26);
         }
 
         .ticker-viewport { overflow: hidden; mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%); }
@@ -2797,16 +2818,18 @@ export default function FilmGlance() {
                 letterSpacing: -0.6,
                 marginBottom: 10,
                 lineHeight: 1.08,
+                textAlign: "center",
               }}
             >
               Add to Favorites
             </h3>
             <p style={{
               fontFamily: "'Syne', sans-serif",
-              fontSize: 15,
-              color: "rgba(255, 255, 255, 0.72)",
+              fontSize: 17,
+              color: "rgba(255, 255, 255, 0.78)",
               lineHeight: 1.5,
               marginBottom: 4,
+              textAlign: "center",
             }}>
               Pick or create a folder to save this favorite.
             </p>
@@ -2822,12 +2845,12 @@ export default function FilmGlance() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
               <button
                 type="button"
-                className="fg-shiny"
+                className="fg-shiny fg-shiny-flat"
                 onClick={() => confirmSaveFav(null)}
-                style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+                style={{ justifyContent: "center", padding: "13px 18px", fontSize: 16 }}
               >
-                <span className="fg-shiny-label" style={{ width: "100%" }}>
-                  <Inbox size={14} aria-hidden="true" />
+                <span className="fg-shiny-label" style={{ justifyContent: "center" }}>
+                  <Inbox size={16} aria-hidden="true" />
                   <span>Unsorted</span>
                 </span>
               </button>
@@ -2835,12 +2858,12 @@ export default function FilmGlance() {
                 <button
                   key={fld.id}
                   type="button"
-                  className="fg-shiny"
+                  className="fg-shiny fg-shiny-flat"
                   onClick={() => confirmSaveFav(fld.id)}
-                  style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+                  style={{ justifyContent: "center", padding: "13px 18px", fontSize: 16 }}
                 >
-                  <span className="fg-shiny-label" style={{ width: "100%" }}>
-                    <Folder size={14} aria-hidden="true" />
+                  <span className="fg-shiny-label" style={{ justifyContent: "center" }}>
+                    <Folder size={16} aria-hidden="true" />
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{fld.name}</span>
                   </span>
                 </button>
@@ -2850,10 +2873,10 @@ export default function FilmGlance() {
                   type="button"
                   className="fg-shiny fg-shiny-cta"
                   onClick={() => { setSaveToFolderNewName(""); setFolderError(null); }}
-                  style={{ justifyContent: "flex-start", padding: "10px 18px" }}
+                  style={{ justifyContent: "center", padding: "13px 18px", fontSize: 16 }}
                 >
-                  <span className="fg-shiny-label" style={{ width: "100%" }}>
-                    <FolderPlus size={14} aria-hidden="true" />
+                  <span className="fg-shiny-label" style={{ justifyContent: "center" }}>
+                    <FolderPlus size={16} aria-hidden="true" />
                     <span>New folder…</span>
                   </span>
                 </button>
@@ -2893,17 +2916,18 @@ export default function FilmGlance() {
               style={{
                 marginTop: 18,
                 width: "100%",
-                padding: "10px 18px",
+                padding: "13px 18px",
                 background: "transparent",
                 border: "1px solid rgba(255, 255, 255, 0.10)",
                 borderRadius: 999,
                 color: "rgba(255, 255, 255, 0.62)",
                 fontFamily: "'Syne', sans-serif",
-                fontSize: 12.5,
+                fontSize: 14,
                 fontWeight: 600,
                 letterSpacing: 0.4,
                 cursor: "pointer",
                 transition: "border-color 0.25s, color 0.25s",
+                textAlign: "center",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.28)"; e.currentTarget.style.color = "rgba(255,255,255,0.92)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)"; e.currentTarget.style.color = "rgba(255,255,255,0.62)"; }}

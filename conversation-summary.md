@@ -1,5 +1,68 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued, round 4) — Modal centering + hover-fill cure + hero static (v5.10.33)
+
+After v5.10.32 went up the user reviewed staging again and gave three more pieces of feedback. Addressed in v5.10.33.
+
+### 1. "Add to Favorites" modal — center all text + bump size under the header
+
+User wanted everything below the "Add to Favorites" italic gold heading centered and one notch larger.
+
+- `<h3>` title — added `textAlign: center` (kept fontSize 32 — header itself wasn't bumped per the user's "everything UNDER the header" wording)
+- `<p>` subtitle "Pick or create a folder to save this favorite." — added `textAlign: center`, fontSize 15 → 17, white opacity .72 → .78
+- Three list-row buttons (Unsorted, each folder, "New folder…") — `justifyContent: flex-start` → `center` on both the button and the inner `.fg-shiny-label`, base size 13 → 16 via inline `fontSize: 16` on the button (overrides `.fg-shiny`'s 13px default), padding `10px 18px` → `13px 18px`, leading icon size 14 → 16
+- Cancel — fontSize 12.5 → 14, padding `10px 18px` → `13px 18px`, added explicit `textAlign: center`
+
+The header at 32px now visually dominates while the rest of the modal sits at the new larger, centered cadence.
+
+### 2. Yellow fill on hover — Unsorted + folder rows in the modal
+
+Root cause: `.fg-shiny:is(:hover, :focus-visible, :focus-within)` widens the conic shine band from `--fg-shiny-pct: 7%` (rest) to `18%`, and a sibling rule sets `.fg-shiny-label::before { opacity: 0.22 }` (the breathing inset bottom-glow). At 18% + 0.22 the bottom edge of the chip reads as a solid gold/yellow fill — exactly what the user flagged.
+
+Fix: a new `.fg-shiny-flat` modifier:
+
+```css
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) {
+  --fg-shiny-pct: 7%;
+  --fg-shiny-shine: var(--shiny-hi);
+  color: var(--shiny-fg);
+}
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0; }
+```
+
+Applied to the Unsorted button + each folder row in the picker. The rotating gold conic-gradient border + dotted shimmer + arc gleam still play (those are perimeter, not fill). The "+ New folder…" CTA is unchanged — it uses `.fg-shiny-cta` because it's a primary action.
+
+### 3. Landing hero — remove animations from the title
+
+User asked previously (v5.10.30 era) to remove "boot animations" on the landing. v5.10.32 still had two infinite loops on `.hero-accent` (the "One True Rating Score." second line):
+
+- `goldShimmer 6s ease-in-out infinite` — `background-position` oscillation that creates a moving sheen across the gold gradient
+- `haloBreathe 5s ease-in-out infinite` — `text-shadow` pulse (10px → 18px blur, .22 → .32 alpha)
+
+Both removed. Replaced the `haloBreathe` with a static `text-shadow: 0 0 14px rgba(255, 215, 0, 0.26)` — the halo is still there, just frozen at a mid-amplitude value. The gold gradient (background-clip: text) is unchanged because that's brand colour, not animation.
+
+Below-fold sections kept per the user's "I still want the Review Sites Included and What you'll find to have their animation":
+- `tickerScroll 44s linear infinite` on `.ticker-track` (Review Sites Included) — kept
+- `.newl-how-card` hover lift + glow — kept
+- `filmScroll 56s linear infinite` on `.film-track` (What You'll Find strip) — kept
+- `.film-frame` hover sheen — kept
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +42 / -18 | `.fg-shiny-flat` modifier; modal centering + sizing; `.hero-accent` static; FG_VERSION 5.10.33 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.33 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Hover state on a "shiny" button is the wrong default for list rows.** The `.fg-shiny` design was built for filter chips and CTAs — interactive elements where a hover "warm-up" reads as feedback. When the same component is reused for list rows in a modal (Unsorted, folders), hover ambiguity reads as a fill. The fix is a modifier (`fg-shiny-flat`) that locks the hover state to the rest-state values — the rotating perimeter still confirms interactivity, but no fill.
+2. **Brand-colour gradients ≠ animations.** Removing `goldShimmer` + `haloBreathe` from `.hero-accent` doesn't remove the gold colour or the halo — those become static. Worth distinguishing in feedback: when a user says "no animations on the title", they often want the static visual to remain.
+3. **Each modal should set its own button text size.** `.fg-shiny` defaults to 13px which works for filter chips and toolbar CTAs but is too small inside a centered, oversized modal. Inline `fontSize: 16` on the button overrides cleanly without a new CSS rule.
+
+---
+
 ## Session: April 29, 2026 (continued, round 3) — Favourites polish round 3 (v5.10.32)
 
 After v5.10.31 went up the user flagged three quick visual issues from the Vercel preview. All addressed in v5.10.32.
