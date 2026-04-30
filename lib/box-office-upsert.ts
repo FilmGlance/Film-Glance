@@ -56,22 +56,25 @@ export async function ensurePosterAndBackdrop(
   imdb_id: string | null;
   director: string | null;
 }> {
-  // Try existing box_office_metrics first (cheapest — same row ingested previously)
+  // Try existing box_office_metrics first (cheapest — same row ingested previously).
+  // Require BOTH poster_path AND director to be present for a clean cache hit;
+  // if director is missing on prior rows, fall through to TMDB so we backfill it.
   try {
     const prior = await supabaseAdmin
       .from("box_office_metrics")
       .select("poster_path, backdrop_path, tmdb_id, imdb_id, director")
       .eq("search_key", search_key)
       .not("poster_path", "is", null)
+      .not("director", "is", null)
       .limit(1)
       .maybeSingle();
-    if (prior.data?.poster_path) {
+    if (prior.data?.poster_path && prior.data?.director) {
       return {
         poster_path: prior.data.poster_path,
         backdrop_path: prior.data.backdrop_path ?? null,
         tmdb_id: prior.data.tmdb_id ?? null,
         imdb_id: prior.data.imdb_id ?? null,
-        director: prior.data.director ?? null,
+        director: prior.data.director,
       };
     }
   } catch (_err) {
