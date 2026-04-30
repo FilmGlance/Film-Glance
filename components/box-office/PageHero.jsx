@@ -75,23 +75,21 @@ export default function PageHero({
 
   return (
     <header style={{ marginBottom: 28 }}>
+      {/* Hero — uses the shared `.hero-accent` class (defined in app/globals.css)
+          so the gradient + halo match the landing page's "One True Rating Score."
+          treatment exactly. Italic 700 Playfair Display sized for a page hero. */}
       <h1
+        className="hero-accent"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontStyle: "italic",
           fontWeight: 700,
-          fontSize: "clamp(44px, 6vw, 64px)",
+          fontSize: "clamp(44px, 6vw, 72px)",
           margin: 0,
-          lineHeight: 1.05,
+          lineHeight: 1.18,
           letterSpacing: -0.5,
-          background:
-            "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          color: "transparent",
           paddingBottom: "0.08em",
-          textShadow: "0 0 22px rgba(255, 215, 0, 0.18)",
+          display: "block",
         }}
       >
         Box Office
@@ -105,7 +103,7 @@ export default function PageHero({
           letterSpacing: 0.2,
         }}
       >
-        Highest-grossing films, refreshed weekly.
+        The Movies Topping The Box Office Charts.
       </p>
 
       {(periodLabel || dataStatus || ago) && (

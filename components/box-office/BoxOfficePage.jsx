@@ -17,6 +17,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import SiteHeader from "../SiteHeader";
 import BackdropLayer from "./BackdropLayer";
 import PageHero from "./PageHero";
 import FilterBar from "./FilterBar";
@@ -103,6 +104,10 @@ export default function BoxOfficePage() {
       }}
     >
       <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
+
+      <div style={{ position: "relative", zIndex: 3 }}>
+        <SiteHeader active="boxoffice" />
+      </div>
 
       <main
         style={{

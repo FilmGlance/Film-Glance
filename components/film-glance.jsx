@@ -3076,7 +3076,7 @@ export default function FilmGlance() {
               textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
             }}
           >
-            <DollarSign size={13} />
+            <TrendingUp size={13} />
             <span className="nav-forum-label">Box Office</span>
           </Link>
           {user && (

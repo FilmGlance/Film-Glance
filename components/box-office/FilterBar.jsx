@@ -1,76 +1,49 @@
 "use client";
 
-// Filter bar — period tabs (Weekly/Monthly/Seasonal/Yearly), region tabs
-// (Domestic active, International "Coming Soon"), and the period navigator
-// for browsing historical periods.
+// Filter bar — period chips (Yearly → Seasonal → Monthly → Weekly), region
+// chips (Domestic active, International "Coming Soon"), and the period
+// navigator. Uses the shared `.fg-shiny` chip pattern from app/globals.css
+// so chips match the rest of the site (Favourites filter bar, modals).
 
 import React from "react";
 import PeriodNavigator from "./PeriodNavigator";
 
+// Ordered largest-period → smallest-period per user spec (v5.12.0 round 2):
 const PERIOD_OPTIONS = [
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-  { id: "seasonal", label: "Seasonal" },
   { id: "yearly", label: "Yearly" },
+  { id: "seasonal", label: "Seasonal" },
+  { id: "monthly", label: "Monthly" },
+  { id: "weekly", label: "Weekly" },
 ];
 
-function Chip({ active, disabled, onClick, children, comingSoon }) {
-  const baseColor = active ? "#FFD700" : "rgba(255,255,255,0.62)";
-  const baseBg = active
-    ? "linear-gradient(135deg, rgba(255,215,0,0.13), rgba(255,165,0,0.04))"
-    : "rgba(0,0,0,0.32)";
-  const baseBorder = active
-    ? "rgba(255, 215, 0, 0.32)"
-    : "rgba(255,255,255,0.10)";
+function ShinyChip({ active, disabled, comingSoon, onClick, ariaLabel, children }) {
+  const cls = [
+    "fg-shiny",
+    active ? "active" : "",
+    disabled ? "fg-shiny-disabled" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
+      className={cls}
+      aria-label={ariaLabel}
+      aria-pressed={active ? true : undefined}
       title={comingSoon ? "International coverage shipping in a future update" : undefined}
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "9px 16px",
-        borderRadius: 12,
-        background: baseBg,
-        border: `1px solid ${baseBorder}`,
-        color: baseColor,
-        fontFamily: "'Syne', sans-serif",
-        fontSize: 14,
-        fontWeight: active ? 700 : 500,
-        letterSpacing: 0.3,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        whiteSpace: "nowrap",
-        transition:
-          "background 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.3s ease",
-        boxShadow: active
-          ? "0 0 22px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.08)"
-          : "none",
+        // Slightly larger than the base .fg-shiny defaults to feel like
+        // primary filter affordances rather than secondary chips.
+        padding: "10px 18px",
+        fontSize: 13.5,
       }}
     >
-      {children}
-      {comingSoon && (
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "2px 7px",
-            borderRadius: 999,
-            background: "rgba(255,215,0,0.16)",
-            color: "#FFD700",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 9.5,
-            letterSpacing: 1.1,
-            textTransform: "uppercase",
-            fontWeight: 600,
-          }}
-        >
-          Coming Soon
-        </span>
-      )}
+      <span className="fg-shiny-label">
+        {children}
+        {comingSoon && <span className="fg-shiny-coming-soon">Coming Soon</span>}
+      </span>
     </button>
   );
 }
@@ -87,7 +60,7 @@ export default function FilterBar({
       style={{
         display: "flex",
         flexWrap: "wrap",
-        gap: 16,
+        gap: 14,
         alignItems: "center",
         padding: "16px 18px",
         marginBottom: 28,
@@ -107,13 +80,14 @@ export default function FilterBar({
         }}
       >
         {PERIOD_OPTIONS.map((p) => (
-          <Chip
+          <ShinyChip
             key={p.id}
             active={period === p.id}
+            ariaLabel={`Show ${p.label.toLowerCase()} chart`}
             onClick={() => onChange({ period: p.id, date: null })}
           >
             {p.label}
-          </Chip>
+          </ShinyChip>
         ))}
       </div>
 
@@ -134,16 +108,21 @@ export default function FilterBar({
           alignItems: "center",
         }}
       >
-        <Chip active={region === "domestic"} onClick={() => onChange({ region: "domestic" })}>
+        <ShinyChip
+          active={region === "domestic"}
+          ariaLabel="Domestic chart"
+          onClick={() => onChange({ region: "domestic" })}
+        >
           Domestic
-        </Chip>
-        <Chip
+        </ShinyChip>
+        <ShinyChip
           active={false}
           disabled={true}
           comingSoon={true}
+          ariaLabel="International chart — coming soon"
         >
           International
-        </Chip>
+        </ShinyChip>
       </div>
 
       <div
