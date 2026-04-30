@@ -213,7 +213,11 @@ async function runFullPipeline(
     signal: AbortSignal.timeout(18000),
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 3500,
+      // v5.10.40: 3500 → 2500. Most responses don't fill 3500. Smaller cap
+      // shaves ~500ms-1s off long-response generation time. Existing
+      // [claude-truncated] log at line ~237 will surface any responses
+      // that hit the cap so we can re-tune if needed.
+      max_tokens: 2500,
       system: CLAUDE_SYSTEM,
       messages: [{ role: "user", content: claudeUserPrompt(queryForClaude, yearHint) }],
     }),

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.39";
+const FG_VERSION = "5.10.40";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -791,6 +791,52 @@ const DB = {};
 const FREE_LIMIT = 8;
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CLIENT CACHE — v5.10.40 localStorage layer for last 50 movie searches.
+   Hit: render instantly, no network call. Miss: normal flow + cache write.
+   Server cache (Supabase 30-day TTL) still owns canonical truth — this is a
+   prefetch-style fast path for movies the user already saw this device.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const FG_CLIENT_CACHE_KEY = "fg_movie_cache_v1";
+const FG_CLIENT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const FG_CLIENT_CACHE_MAX = 50;
+
+function readClientCache() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return {};
+    const raw = window.localStorage.getItem(FG_CLIENT_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function getClientCachedMovie(query) {
+  const all = readClientCache();
+  const entry = all[query];
+  if (!entry) return null;
+  if (Date.now() - entry.ts > FG_CLIENT_CACHE_TTL_MS) return null;
+  return entry.mv;
+}
+
+function setClientCachedMovie(query, mv) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const all = readClientCache();
+    all[query] = { mv, ts: Date.now() };
+    // LRU prune — keep newest 50 by timestamp
+    const keys = Object.keys(all);
+    if (keys.length > FG_CLIENT_CACHE_MAX) {
+      keys.sort((a, b) => (all[b].ts || 0) - (all[a].ts || 0));
+      const trimmed = {};
+      for (const k of keys.slice(0, FG_CLIENT_CACHE_MAX)) trimmed[k] = all[k];
+      window.localStorage.setItem(FG_CLIENT_CACHE_KEY, JSON.stringify(trimmed));
+      return;
+    }
+    window.localStorage.setItem(FG_CLIENT_CACHE_KEY, JSON.stringify(all));
+  } catch {
+    // localStorage quota exceeded or disabled — silently no-op
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    API — calls /api/search backend (proxies Anthropic + TMDB enrichment)
    ═══════════════════════════════════════════════════════════════════════════ */
 async function fetchMovieAPI(title, authToken) {
@@ -1434,6 +1480,24 @@ export default function FilmGlance() {
     // Auth is prompted only when daily limit is reached or for favorites.
 
     // [ARCHIVED — PRICING DORMANT] if (atLimit) { setShowPrice(true); return; }
+
+    // v5.10.40 client-cache fast path — if this query was searched on this
+    // device within the last hour, render immediately. Skips the loading
+    // overlay entirely. Server cache (Supabase) still owns canonical truth.
+    const cachedMv = getClientCachedMovie(q);
+    if (cachedMv) {
+      setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
+      try {
+        if (cachedMv.coming_soon) {
+          setResult(normalizeResult(cachedMv));
+        } else if (cachedMv.sources && cachedMv.sources.length > 0) {
+          setResult(normalizeResult({ ...cachedMv, score: cachedMv.score || calcScore(cachedMv.sources) }));
+        }
+        DB[q] = cachedMv;
+        return;
+      } catch { /* fall through to normal flow on parse error */ }
+    }
+
     setLoading(true); setResult(null); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
@@ -1474,6 +1538,7 @@ export default function FilmGlance() {
           setResult({ notFound: true, query: q });
         }
         DB[q] = mv;
+        setClientCachedMovie(q, mv);
       } else if (mv && mv.sources && mv.sources.length > 0) {
         try {
           const res = normalizeResult({ ...mv, score: mv.score || calcScore(mv.sources) });
@@ -1508,7 +1573,8 @@ export default function FilmGlance() {
           setResult({ notFound: true, query: q });
         }
         // [ARCHIVED — PRICING DORMANT] if (plan === "free") setSearches(c => c + 1);
-        DB[q] = mv; // Client-side session cache
+        DB[q] = mv; // Client-side session cache (in-memory)
+        setClientCachedMovie(q, mv); // v5.10.40 — persist across sessions
       } else {
         setErrMsg("Could not find this movie. Check spelling or try the full title.");
         setResult({ notFound: true, query: q });
