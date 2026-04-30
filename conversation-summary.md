@@ -1,5 +1,78 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 (continued, round 6) — v5.12.0 /boxoffice page (architecture pivot mid-impl, BOM-direct scraping)
+
+User picked the Box Office page from the standing queue as the next project. Provided two prompts in `BoxOffice/`: `prompt.txt` (initial requirements) + `prompt2.txt` (added the freshness/automation pillar). Plus `aianalysis.docx` (Gemini + ChatGPT data-source analysis) and 12 reference screenshots from Rotten Tomatoes / IMDB / Box Office Mojo for design inspiration.
+
+Plan went through 3 revisions before approval:
+- **v1**: Apify + RapidAPI hybrid, latest-period only.
+- **v2**: After user pointed out users need historical browsing too, added one-shot RapidAPI 1984-2024 backfill + period navigator UI + more cinematic visual treatment (hero #1 card with TMDB backdrop, count-up gross, stagger-fade rows). Locked architecture choices: Path B hybrid, "Seasonal" follows BOM convention, Resend email for failure alerts. Accepted "1 out of 4 movies still twitch — manageable" residual on the v5.11.0 cycle and merged that to main earlier in this session arc (PR #51 → production v5.11.0).
+- **v3 (during impl)**: Phase 0 verification revealed Apify's `trovevault/movie-box-office-tracker` Actor is a **per-movie career-stats lookup tool, not a chart/ranking source** — its input schema is a list of titles, output is per-film budget/gross/ROI. The docx's claim that it offers "weekend and weekly box office rankings" was based on the Actor's marketing description, not its actual schema. Searched Apify's full store for any other box-office-mojo chart Actor — none exist. Pivoted to **direct BOM cheerio scraping** for both ongoing weekly cron AND full historical backfill. Verified BOM's chart pages are publicly accessible with consistent table structure: `/year/YYYY/`, `/month/{name}/YYYY/`, `/season/{name}/YYYY/`, `/weekly/YYYYWNN/`. User confirmed: "A but also we also need to scrape, and potentially cache BOM's entire domestic historical dataset."
+
+### Final architecture (v5.12.0)
+
+| Layer | What | Why |
+|---|---|---|
+| Schema | `box_office_metrics` (sql/013) + `cron_failures` (sql/014) | Idempotent upsert keyed on natural composite + generic job-failure log resolved on next success |
+| Scraper | `lib/bom-scraper.ts` (cheerio, 4 chart types) | Single source — BOM. URL patterns + table headers verified live |
+| Cron | `app/api/cron/box-office/refresh` (Tue 11:00 UTC) | Refresh latest completed week + current month/season/year. ~10-20s total runtime |
+| Backfill | `app/api/admin/backfill-bom` (per-`year × period_type`) | Operator shell loop 1984..2024. ~2,760 page fetches, ~100-150 min |
+| Read API | `app/api/boxoffice/route.ts` | Joins `fg_score` from `movie_cache` per row; "score pending" for misses |
+| UI | `app/boxoffice/page.tsx` + `components/box-office/*` (8 files) | TMDB-backdrop hero, count-up gross, stagger-fade rows, period navigator |
+| Alerting | `lib/alert.ts` (Resend REST, no SDK) | `sendAlertEmail` + `logCronFailure` + `markCronFailuresResolved` |
+| Hooks | `lib/use-count-up.ts` | rAF-driven number animation |
+| Refactor | `sanitizeQuery()` → `lib/sanitize.ts` | Cron + search + backfill all reuse the same key normalization |
+
+### Key engineering moves
+
+1. **Header-driven cheerio parser** — built a tiny `buildColumnMap($)` helper that reads the first `<tr>` `<th>` labels into a `header → index` map, then row parsing pulls cells by name. Resilient to minor BOM column reorders. The same parser handles both periodic (year/month/season — 11 columns) and weekly (10 columns with LW + Average + Weeks) tables; row parsers differ but column-lookup is shared.
+
+2. **`enrichBoxOfficeWithTMDB()` separate from `enrichWithTMDB()`** — the existing search-flow enrichment fetches credits + streaming + trailer + recommendations + video reviews. Way too heavy for cron-time enrichment of 10 films. New helper does only what the box office page needs: `poster_path + backdrop_path + tmdb_id + imdb_id` from search + `/movie/{id}?append_to_response=external_ids`. Two HTTP calls instead of seven.
+
+3. **`ensurePosterAndBackdrop()` cache cascade** — `lib/box-office-upsert.ts` looks for poster/backdrop in this order: prior `box_office_metrics` row (cheapest, since most BOM Top-10s recur across periods), then `movie_cache` (existing search-result data), then live TMDB lookup. Most ingests after the first hit cache instantly.
+
+4. **URL state with `useSearchParams` + `router.replace`** — page is shareable (`/boxoffice?period=monthly&date=2024-03-01` works) and back-button-safe. Avoided installing SWR — single round-trip per filter change, simple `useEffect(fetch)` is enough.
+
+5. **Cinematic register without "AI slop"** — backdrop layer + hero count-up + stagger-fade come from production-grade typography + real movie posters/backdrops, not glow-everywhere chrome. Filter chips reuse the existing `.fg-shiny` pattern from Favourites (familiar, themed). International "Coming Soon" pill surfaces the v2 roadmap visibly so users see a promise rather than a dead button.
+
+### Skills + auto-suggestions
+
+Several auto-suggested skills (workflow, react-best-practices, runtime-cache, swr, json-render, email, routing-middleware, vercel-cli, geistdocs, vercel-api, etc.) all skipped as disproportionate or false-positive matches. Loaded `vercel-functions` and `nextjs` only when genuinely relevant. Auto-suggested "long-running" warnings on `setTimeout` polite-throttle calls were false alarms (~10-20s total runtimes well under 300s budget — Vercel Workflow would be overkill).
+
+### Files touched
+
+| Type | Files | LOC |
+|---|---|---|
+| New | `app/api/admin/backfill-bom/route.ts`, `app/api/boxoffice/route.ts`, `app/api/cron/box-office/refresh/route.ts`, `app/boxoffice/page.tsx`, `components/box-office/*` (9 files), `lib/alert.ts`, `lib/bom-scraper.ts`, `lib/box-office-upsert.ts`, `lib/sanitize.ts`, `lib/use-count-up.ts`, `sql/migrations/013_box_office_metrics.sql`, `sql/migrations/014_cron_failures.sql` | ~2,000 |
+| Modified | `app/api/search/route.ts` (sanitizeQuery import + inline removal), `components/film-glance.jsx` (nav link + FG_VERSION 5.11.0 → 5.12.0 + mobile breakpoint hide), `lib/tmdb.ts` (added `enrichBoxOfficeWithTMDB()`), `vercel.json` (cron entry), `package.json` (cheerio + resend), `tech-specs.md` (Change Log §10 + Version History §9), `conversation-summary.md` (this entry) | ~150 |
+
+### Deferred (user-action, not blocking commit)
+
+- Apply migrations 013 + 014 via Supabase web SQL editor (or MCP after OAuth).
+- Set Vercel env vars: `RESEND_API_KEY`, `ALERT_EMAIL_TO` (recipient).
+- Verify Resend's DKIM/SPF/TXT records in Cloudflare DNS for `filmglance.com`.
+- After staging deploy: `curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/box-office/refresh` to validate ingestion end-to-end.
+- After ingestion validates: kick off historical backfill shell loop (1984..2024 × 4 period_types).
+- Mobile parity check on Vercel preview at 360 / 480 / 640 / 1380 widths before merging staging → main.
+- Optional post-deploy: `/schedule` a watchdog agent for weekly staleness checks.
+
+### Key learnings
+
+1. **API marketing descriptions ≠ API capabilities.** The Apify Actor's marketing literally said "track domestic weekend and weekly box office rankings" — the actual input schema was a list of movie titles for per-film lookup. Always verify against the actual `inputSchema` in the Actor build metadata (the docx and even the seoTitle didn't reveal this gap).
+2. **When scraping is upstream of every "vendor" anyway, cut out the middleman.** Apify's box-office Actor scrapes BOM. `boxoffice-api` Python scrapes BOM. RapidAPI's 1984-2024 scrapes BOM. So we just scrape BOM directly: same source, no per-call billing, no broker between us and the upstream.
+3. **Header-driven parsing >> column-position-based parsing.** Building a `header → index` map from the first `<tr>` is 5 extra lines of code and means a 1-column BOM reorder doesn't break us at all. With column-position parsing we'd be tracking which BOM page has which column where.
+4. **Auto-mode + plan approval = focus.** Pivoting mid-impl from Apify to BOM-direct was a real architectural change (different lib, different data path), but having an approved plan to anchor against meant the pivot was scoped surgically (replace `lib/apify.ts` with `lib/bom-scraper.ts`; everything downstream — schema, cron, UI — was unchanged). The plan acted as a fixed surface; the pivot just changed which module fed it.
+
+### Next session
+
+1. User reviews `/boxoffice` on Vercel preview after committing migrations + env vars.
+2. Run cron once via curl, verify rows land.
+3. Start historical backfill (~2-3 hours supervised).
+4. PR staging → main; mark v5.12.0 in production in next session's bible doc update.
+5. Then: v5.11.1 (Claude prompt split — already pre-accepted ~2x cold-cache API cost for −1 to −2s real latency).
+
+---
+
 ## Session: April 30, 2026 (continued, round 5) — v5.11.0 merged to main; pivot to next project
 
 User merged PR #51 via the GitHub web UI. Production at v5.11.0 (filmglance.com). Pre-merge clarification: discussed dropping `runtime = "edge"` to avoid long-term 25s-timeout monitoring; user opted to keep edge runtime ("it'll never go past 25 seconds anyway") with no proactive monitoring. PR #51 final scope = edge runtime + waitUntil migration + sidebar active-tracking fix + transition twitch fix. User reported twitching reduced from significant-on-2-of-3 movies to minor-on-1-of-4 — accepted as a manageable residual, not blocking. Bible docs updated to mark v5.11.0 in production.
