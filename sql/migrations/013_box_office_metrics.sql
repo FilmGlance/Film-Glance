@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.box_office_metrics (
 
   -- Revision tracking + provenance
   data_status text NOT NULL CHECK (data_status IN ('estimate','actual','historical')),
-  source text NOT NULL CHECK (source IN ('rapidapi','apify')),
+  source text NOT NULL CHECK (source IN ('bom-direct','rapidapi','apify')),
   retrieved_at timestamptz NOT NULL DEFAULT now(),
   raw_payload jsonb,                    -- full source row, kept for replay/audit
 
