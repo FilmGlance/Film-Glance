@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.37";
+const FG_VERSION = "5.10.38";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -2872,6 +2872,26 @@ export default function FilmGlance() {
           .ticker-track { gap: 44px !important; animation-duration: 32s !important; }
           .film-frame { width: 210px !important; padding: 22px 20px !important; }
           .film-title { font-size: 15.5px !important; }
+        }
+
+        /* v5.10.38 Phase 3 — landing-page ticker + film-strip animations
+           weren't perceptibly moving on narrow phones. Root cause: 56s /
+           32s durations across track widths that translateX(-50%) means
+           ~13–36 px/s perceived motion. With a 360px viewport masked
+           14% / 10% on each edge, the user sees ~2 items at a time
+           moving at glacial pace — looks frozen. Fix: speed both up,
+           shrink film-frame, narrow the masks. ticker also drops gap
+           further so more items occupy the visible window. */
+        @media (max-width: 640px) {
+          .ticker-viewport { mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%) !important; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%) !important; }
+          .ticker-track { gap: 32px !important; animation-duration: 22s !important; }
+          .ticker-item { gap: 10px !important; }
+          .ticker-item span { font-size: 14px !important; }
+          .film-track-viewport { mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%) !important; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%) !important; }
+          .film-track { animation-duration: 28s !important; }
+          .film-frame { width: 170px !important; height: 158px !important; padding: 18px 16px !important; }
+          .film-title { font-size: 14px !important; margin-bottom: 6px !important; }
+          .film-body { font-size: 11.5px !important; line-height: 1.45 !important; }
         }
       ` }} />
 

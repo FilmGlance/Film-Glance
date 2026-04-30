@@ -1,5 +1,63 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 (continued, round 2) — Phase 3 mobile pass — ticker + film-strip animation visibility (v5.10.38)
+
+PR #47 (Phase 1) + PR #48 (Phase 2) merged. User asked to start Phase 3.
+
+### What Phase 3 is
+
+Phase 3 came out of the v5.10.34 mobile audit suspicion: the landing-page `tickerScroll` (Review Sites Included) + `filmScroll` (What You'll Find strip) infinite animations might appear "frozen" on narrow phones because the user only sees 2 frozen items at a time.
+
+### Diagnosis
+
+Read the existing CSS:
+- `.ticker-track`: 44s desktop / 32s at ≤860 (existing v5.10 rule); track width ~12 items × ~150px + 44px gap ≈ 2300px. translateX(-50%) → 1150px / 32s = 36 px/s perceived motion. An item passes through 360px viewport in ~10 seconds.
+- `.film-track`: 56s with NO existing mobile rule. 6 features × 244px (or 210 at ≤860) ≈ 1500px track. translateX(-50%) → 750px / 56s = 13 px/s. An item passes through 360px viewport in ~28 seconds — basically static.
+- Masks: ticker 7%/93% (14% faded), film 5%/95% (10% faded). On 360px → 50px each side faded for ticker, 36px for film.
+
+Verdict: animations are running, just painfully slow on narrow viewports. The film-strip in particular is effectively static.
+
+### Fix — single `@media (max-width: 640px)` block
+
+- `.ticker-track`: 32s → 22s (faster), gap 44→32 (more items in viewport)
+- `.ticker-item`: gap 14→10, span font 16→14
+- `.ticker-viewport` mask: 7%/93% → 4%/96% (wider visible window)
+- `.film-track`: 56s → 28s (twice as fast)
+- `.film-frame`: 210 → 170, height 180 → 158, padding 22/20 → 18/16 (so 360 viewport sees 2 frames simultaneously)
+- `.film-track-viewport` mask: 5%/95% → 3%/97%
+- `.film-title`: 17 → 14 (was 15.5 at ≤860; tighter)
+- `.film-body`: 12.5 → 11.5
+
+### Audit precaution: opacity:0 + animation pairs
+
+Per the Phase 2 NEXT STEPS note, grepped the codebase for `opacity: 0` inline paired with `animation: ... softFade|fadeIn`. Only **2 hits**:
+
+- Line 3572 — `.fg-fav-card` (already protected by v5.10.36 reduce-motion `opacity: 1 !important`)
+- Line 4847 — `.dym-card` (already protected by v5.10.36 reduce-motion `opacity: 1 !important`)
+
+No other elements match the pattern. The opacity-stuck-at-0 landmine is fully covered.
+
+### What's NOT in Phase 3
+
+- Phase 4 (formal responsive contract in §11) — still queued
+- Continuous-animation reduce-motion handling — currently the ticker/film-strip animations DON'T have explicit reduce-motion overrides, meaning they keep running on phones with battery saver. Open question whether that's a problem (vestibular concern) or fine (decorative motion is short and slow). Defer until user feedback.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +21 / -1 | New @media (max-width: 640px) block speeding up ticker + film-strip; FG_VERSION 5.10.38 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.38 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Animation duration scales with viewport width even when track width doesn't.** A 56s loop is fine on a 1440px desktop (visible motion = good chunk of track per second). On a 360px phone with a fixed-width track, the same 56s feels frozen because the visible window is so much smaller. The fix is to scale duration with viewport, not just adjust other dimensions.
+2. **Mask edges look wider than they are at narrow viewports.** A 7% mask on 1440px = 100px each side; on 360px = 25px. The 25px is proportionally bigger relative to the visible content area, so it visually dominates more on mobile. Narrowing the mask percentage on mobile (7% → 4%) makes more sense than scaling the track.
+3. **Audit-then-act for known landmine patterns.** The opacity:0+animation grep took 5 seconds and confirmed there's nothing else hiding. Worth doing every time a new pattern is identified — adds the audit to the "find similar problems" pass before declaring a class of bug fixed.
+
+---
+
 ## Session: April 30, 2026 (continued) — Phase 2 mobile sweep (v5.10.37)
 
 User confirmed v5.10.36 fixes work on real phone, opened PR #47 (v5.10.35-36 → main), then asked to start Phase 2.
