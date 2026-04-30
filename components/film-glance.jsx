@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.37";
+const FG_VERSION = "5.10.39";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -1356,12 +1356,26 @@ export default function FilmGlance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll tracking for gold scrollbar (window scroll)
+  // Scroll tracking for gold scrollbar (window scroll).
+  // v5.10.39 perf: rAF-throttle so multiple scroll events collapse into
+  // one work batch per animation frame (60Hz max instead of unbounded
+  // hundreds per second). scrollPct rounded to 1% precision so React
+  // skips re-renders when the rounded value hasn't changed — that drops
+  // scroll-induced re-renders from thousands to ~100 over a full page
+  // scroll. setHeaderScrolled is already cheap because React no-ops
+  // setState when the boolean value matches the current state.
   useEffect(() => {
+    let ticking = false;
     const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      setScrollPct(max > 0 ? Math.min(window.scrollY / max, 1) : 0);
-      setHeaderScrolled(window.scrollY > 8);
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        const raw = max > 0 ? Math.min(window.scrollY / max, 1) : 0;
+        setScrollPct(Math.round(raw * 100) / 100);
+        setHeaderScrolled(window.scrollY > 8);
+        ticking = false;
+      });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -2873,9 +2887,36 @@ export default function FilmGlance() {
           .film-frame { width: 210px !important; padding: 22px 20px !important; }
           .film-title { font-size: 15.5px !important; }
         }
+
+        /* v5.10.38 Phase 3 — landing-page ticker + film-strip animations
+           weren't perceptibly moving on narrow phones. Root cause: 56s /
+           32s durations across track widths that translateX(-50%) means
+           ~13–36 px/s perceived motion. With a 360px viewport masked
+           14% / 10% on each edge, the user sees ~2 items at a time
+           moving at glacial pace — looks frozen. Fix: speed both up,
+           shrink film-frame, narrow the masks. ticker also drops gap
+           further so more items occupy the visible window. */
+        @media (max-width: 640px) {
+          .ticker-viewport { mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%) !important; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%) !important; }
+          .ticker-track { gap: 32px !important; animation-duration: 22s !important; }
+          .ticker-item { gap: 10px !important; }
+          .ticker-item span { font-size: 14px !important; }
+          .film-track-viewport { mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%) !important; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%) !important; }
+          .film-track { animation-duration: 28s !important; }
+          .film-frame { width: 170px !important; height: 158px !important; padding: 18px 16px !important; }
+          .film-title { font-size: 14px !important; margin-bottom: 6px !important; }
+          .film-body { font-size: 11.5px !important; line-height: 1.45 !important; }
+        }
       ` }} />
 
-      {/* Header — matches /preview-landing for cross-page consistency */}
+      {/* Header — matches /preview-landing for cross-page consistency.
+          v5.10.39: header padding locked at 18px constant (was toggling
+          18→13 on scroll, the 5px height change was reflowing the whole
+          page on every scroll-threshold crossing). Visual feedback that
+          you've scrolled is preserved via background/border/box-shadow
+          toggle — just no height change. translateZ(0) + will-change
+          force GPU layer promotion so backdrop-filter doesn't recompute
+          against changing underlying content on every scroll frame. */}
       <header
         style={{
           position: "sticky",
@@ -2884,7 +2925,7 @@ export default function FilmGlance() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: headerScrolled ? "13px 32px" : "18px 32px",
+          padding: "18px 32px",
           borderBottom: headerScrolled
             ? "1px solid rgba(255, 215, 0, 0.14)"
             : "1px solid rgba(255, 255, 255, 0.04)",
@@ -2894,7 +2935,9 @@ export default function FilmGlance() {
           boxShadow: headerScrolled
             ? "0 1px 0 rgba(255, 215, 0, 0.06), 0 8px 32px rgba(0, 0, 0, 0.35)"
             : "none",
-          transition: "padding 0.35s ease, border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease",
+          transition: "border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease",
+          transform: "translateZ(0)",
+          willChange: "transform",
         }}
       >
         <Link href="/preview-landing" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
@@ -5172,7 +5215,7 @@ export default function FilmGlance() {
             loop
             muted
             playsInline
-            preload="auto"
+            preload="metadata"
             aria-hidden="true"
             style={{
               width: "min(440px, 80vw)",
