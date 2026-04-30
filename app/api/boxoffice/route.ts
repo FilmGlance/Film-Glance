@@ -21,6 +21,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { calcScore } from "@/lib/score";
 
 export const runtime = "nodejs";
 
@@ -169,13 +170,28 @@ export async function GET(req: NextRequest) {
     .select("search_key, data")
     .in("search_key", searchKeys);
 
+  // Score is computed at read time from cached `sources` (the cache stores
+  // sources verbatim from Claude+verified-ratings; calcScore aggregates them
+  // into the 0-10 figure that /api/search returns). Box-office page does the
+  // same calculation here so a cached movie shows the same score everywhere.
   const scoreByKey = new Map<string, number | null>();
   for (const c of (cacheRows || []) as { search_key: string; data: any }[]) {
-    const score = c.data?.score?.ten;
-    scoreByKey.set(
-      c.search_key,
-      typeof score === "number" ? score : score != null ? parseFloat(String(score)) : null,
-    );
+    const sources = (c.data?.sources as any[]) || [];
+    if (sources.length === 0) {
+      scoreByKey.set(c.search_key, null);
+      continue;
+    }
+    try {
+      const s = calcScore(sources);
+      // calcScore returns { ten, fivePoint, percent } — we want the 0-10 value
+      const ten = (s as any)?.ten;
+      scoreByKey.set(
+        c.search_key,
+        typeof ten === "number" ? ten : ten != null ? parseFloat(String(ten)) : null,
+      );
+    } catch {
+      scoreByKey.set(c.search_key, null);
+    }
   }
 
   // 5. Shape entries
