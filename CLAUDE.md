@@ -59,6 +59,13 @@ After every task or set of tasks:
 - **Current production version is whatever's on `main` and live at filmglance.com.** The current version + status (production / staging / pending PR) live in `tech-specs.md` §10 (top row marked ✅ CURRENT STATE) and `tech-specs.md` §9 (Version History). Read those at session start — never trust a hardcoded version number in this file.
 - Don't touch production unless you're working on a specific production bug. Main app changes always go through staging → Vercel preview → PR → merge.
 
+### Mobile parity is non-negotiable (added Apr 29, 2026 after the v5.10.34 mobile audit)
+- **Every UI change must work on mobile AND desktop, verified before commit.** Mobile is not a follow-up pass — it ships in the same commit/PR as the desktop work. Treat them as one feature, not two.
+- **Target viewport widths to verify against**: 360px, 390px, 414px (phones); 480px (small phones / tight layouts); 600px (small tablet portrait); 860px (tablet landscape); ≥1380px (desktop with sidebar). At minimum, sanity-check 360px and one desktop width.
+- **Verification methods**: Chrome DevTools device emulation against the Vercel preview URL is the baseline; for high-risk changes (new sections, new components, hero/result page layout), screenshot from a real phone before the PR merges.
+- **Don't ship UI work that hasn't been tested on at least one mobile width.** The v5.10.34 mobile audit found four critical breakages (favs cards rendering as zero-height, hero overflow on long-titled movies, source-row name/score collision, ResultSidebar entirely hidden on mobile) — all introduced because previous sessions tested only on desktop.
+- **Common mobile pitfalls to watch for** (codified from the v5.10.34 audit): flex children without `min-width: 0` overflow horizontally; fixed-width score columns + `1fr` siblings collide on narrow viewports; `align-items: center` on a flex column prevents children from stretching to full width; long taglines / director names with `white-space: nowrap` push the row wider than the viewport; hover-only affordances are invisible on touch (use always-visible action clusters instead); components hidden via `display: none` at small viewports need a mobile-equivalent (FAB, bottom sheet, sticky chip bar) — never just hide them.
+
 ### Anthropic API Credits
 - The Feb 27 outage was caused by exhausted API credits. If searches start returning 504, the first check is Anthropic console billing. Enable auto-reload to prevent recurrence.
 

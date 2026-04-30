@@ -1,5 +1,159 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 — Mobile pass round 2 (v5.10.36) — reduced-motion bug + source-row hardening + score centering + FAB safe-area
+
+User re-screenshot-tested v5.10.35 on mobile (5 new screenshots in `/mobile/`). Reported 4 issues. The screenshot URLs revealed an important detail — most were on `filmglance.com` and `film-glance.vercel.app`, both of which are **production** (v5.10.34, no v5.10.35 fixes). The staging preview lives at `film-glance-git-staging-rs-projects-c0025ef0.vercel.app`. This was a clue but not a complete explanation — the user *did* see the v5.10.35 FAB on at least one screen, so they reached staging at some point. Either way, the four reported issues each had a real root cause worth fixing.
+
+### Issue 1 — DYM and Favs pages don't show movies
+
+**Root cause: prefers-reduced-motion opacity stuck at 0.** Both `.dym-card` and `.fg-fav-card` are rendered with inline `opacity: 0` plus an `animation: softFade ... both` that transitions opacity 0 → 1 over 0.55s. The two existing `@media (prefers-reduced-motion: reduce)` blocks (one near `.dym-card`, one near `.fg-fav-card`) kill the animation with `animation: none !important;` to respect user preference — but they don't restore `opacity: 1`. Result: the cards stay at opacity 0 forever and are invisible.
+
+**Why phones hit this and desktop doesn't:** modern Android (Samsung OneUI default), iOS low-power mode, and most battery-saver settings auto-set `prefers-reduced-motion: reduce`. Desktop machines rarely have it on. So the bug only manifests on phones with battery saver — which the user almost certainly had on, and which is the realistic mobile testing environment.
+
+**Fix:** added `.dym-card { opacity: 1 !important }` and `.fg-fav-card { opacity: 1 !important }` inside both reduced-motion blocks. Now when animations are disabled, the cards fall back to fully visible.
+
+This is the single biggest fix in v5.10.36 — explains both the favourites blank-page complaint AND the "Did you mean..." page with no suggestion cards.
+
+### Issue 2 — Source Breakdown text still overlapping
+
+User screenshot showed "Metacritic User" wrapping onto two lines with "9.3/10" overlapping the "User" line. My v5.10.35 @media was at ≤640px and used `white-space: nowrap` without `!important`. Two possible reasons it wasn't applying: (a) the user's phone is 481-700 logical width and v5.10.35 was actually deployed but on a wider phone the breakpoint missed, or (b) the inline style on the name span won out due to specificity.
+
+**Fix:** pulled the source-row rules out of the 640 hero @media into their own `@media (max-width: 700px)`. Added `!important` on every text-related property. Added `min-width: 0` to the name container, name span, and score column to guarantee flex/grid items can shrink. Added `display: block` on the name span so the truncation kicks in even if the parent column tries to give it more room.
+
+### Issue 3 — True Rating Score should be centered
+
+NEW request — desktop layout has score-on-left + description-on-right with flex-wrap; on mobile the items wrapped but stayed left-aligned (default `justify-content`). Added className hooks (`fg-score-row`, `fg-score-num-wrap`, `fg-score-desc-wrap`) and a mobile @media that sets `justify-content: center` on the row + `width: 100%` on both children + `text-align: center` on the description column. Now the score number is centered horizontally within the panel, with the description below also centered.
+
+### Issue 4 — FAB worked once then disappeared
+
+User couldn't reproduce reliably. Most likely cause: mobile Chrome's address bar appearing on scroll-up pushes content down and can hide a FAB at `bottom: 22px`. Some Android browsers measure viewport differently with the chrome visible vs. hidden, and a position:fixed element at a small bottom offset can fall behind the chrome.
+
+**Defensive fixes (all in v5.10.36, no way to reproduce remotely):**
+- z-index 210 → 250 (clears the scrollPct>0.8 bottom-fade gradient at z:150 + any future fixed chrome)
+- `bottom: 22px` → `bottom: max(28px, env(safe-area-inset-bottom, 28px))` so the FAB clears the iOS home indicator + Android navigation bar safe-area
+- Popover `bottom` re-anchored relative to FAB position: `calc(max(28px, env(safe-area-inset-bottom, 28px)) + 64px)`
+- Backdrop z-index 205 → 245, popover 215 → 255 (kept the relative ordering: backdrop < FAB < popover)
+- `display: inline-flex !important` on the @media show rule, defending against any future cascade override
+- Width 50→52 (slight visual upweighting)
+- `pointer-events: auto` set explicitly so any ancestor's `pointer-events: none` doesn't bleed through
+
+### Bonus — Header breakpoint bumped 480 → 560
+
+User screenshots showed "Film/Glance" still wrapping onto two lines on their phone, plus "My/Account" still wrapping. The v5.10.35 @media at ≤480px doesn't catch phones in the 481-560 logical-width range (which is most modern phones in portrait). Bumped to ≤560 so the discuss-button-drop + icon-only My Account treatment now applies on most modern phones in portrait.
+
+### What the user should do next
+
+Test on the **staging preview URL**: `film-glance-git-staging-rs-projects-c0025ef0.vercel.app` (NOT `filmglance.com` or `film-glance.vercel.app` — those serve `main`, which is at v5.10.34 until the PR merges). Vercel's GitHub integration adds a "Visit Preview" button on PRs but the staging-branch URL is also stable and accessible without going through a PR.
+
+If the user re-tests on the right URL and the issues are gone, we open the staging→main PR. If anything's still off, another iteration before the PR.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +75 / -34 | All 4 fixes + breakpoint bumps; FG_VERSION 5.10.36 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.36 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Inline `opacity: 0` + animation = invisible-on-reduced-motion landmine.** Any time you write `opacity: 0` inline and rely on a CSS animation to transition it to 1, you must override that opacity inside any reduced-motion @media block that disables the animation. This is a CSS-architecture footgun, not a one-off bug — should be a checklist item for every fade-in pattern in this codebase. Audit needed: any other inline `opacity: 0` paired with a fade animation.
+2. **Test target URL matters more than you'd think.** The user thought `filmglance.com` was their staging URL because that's what they remembered. Always link or quote the exact staging preview URL when asking for verification — and verify ourselves via `gh api` that v5.10.X actually built on the URL we're asking the user to test.
+3. **`env(safe-area-inset-bottom)` is the right default for any bottom-anchored FAB.** Mobile Chrome's appearing/disappearing address bar + iOS home indicator + Android nav bar all conspire against a naive `bottom: 22px`. The safe-area-inset env var was made for this; use it everywhere a fixed element sits near the bottom edge.
+4. **Bumping a breakpoint by 80px (480→560) is often the right move.** Most "modern phone" widths cluster around 390-430px, but Samsung Z Fold-style or newer iPhone Pro Max can go up to 540. The 480 boundary is a leftover from iPhone-2016 mental models; 560 catches the 2024-2026 device generation.
+
+---
+
+## Session: April 29, 2026 (continued, round 6) — Mobile pass Phase 1 + standing mobile-parity rule (v5.10.35)
+
+PR #46 (v5.10.34) merged to main earlier today. User pulled the live site up on their phone and screenshot-audited the mobile experience. Five critical issues surfaced, four they listed plus the floating menu that was completely hidden on mobile:
+
+1. **Favourites page renders blank** — chip bar shows "All 3 / Unsorted 3" but zero cards display
+2. **Heart icon missing on some movies** — visible on Avatar, gone on Pulp Fiction
+3. **Hero text + chips overflow horizontally** — title cut off, tagline cut off, director cut off (Pulp Fiction)
+4. **Source Breakdown text overlap** — multi-word source names wrap and the score column overlaps the wrapped second line
+5. **Floating section sidebar entirely missing on mobile** — desktop has a fixed-left list of jump-to-section buttons; was `display: none !important` at ≤1379px with no mobile equivalent
+
+Plus the user's standing direction: **mobile parity should be a permanent rule going forward**, not a follow-up phase. Codified in CLAUDE.md.
+
+### Root-cause analysis (single common thread)
+
+Every issue traced back to the same pattern: layouts built for desktop assumed flex children had implicit minimum widths. On a 360px viewport:
+- Flex children without `min-width: 0` refuse to shrink below their content's intrinsic width → overflow
+- `align-items: center` on a flex column prevents children from stretching to full cross-axis → text columns overflow centered with both edges off-screen
+- Fixed-width columns (Source Breakdown's 88px score) + `1fr` siblings collide because the math doesn't work below ~480px viewport
+- `display: none !important` at narrow viewports hid features (the section sidebar) without offering a mobile equivalent
+- Hover-only action clusters (favs card actions at 0.55 opacity until hover) are invisible on touch devices
+
+### Phase 1 fixes shipped in v5.10.35
+
+**A. Favs cards.** New `@media (max-width: 640px)` block on `.fg-fav-card`: 78×117 poster (was 130×195), 12px gap (was 22), 12px padding with 38px bottom for the absolute action cluster (was 22px), score 56→38, score-col minWidth 92→56, action cluster `opacity: 1` (always visible) + `right/bottom: 8` (was 14/12 for desktop's larger card), folder-tag pill 11→9.5px.
+
+**B. Hero overflow.** Changed `.fg-hero-grid` mobile `align-items: center` → `stretch` so the text column actually fills the cross-axis. Added per-element classes + rules:
+- `.fg-hero-text-col { width: 100%; min-width: 0 }`
+- `.fg-hero-title { word-break: break-word; overflow-wrap: anywhere; font-size: 26px }` + added `min-width: 0` inline
+- `.fg-hero-tagline { white-space: normal }` (was nowrap — single biggest cause of Pulp Fiction's overflow)
+- `.fg-hero-director { white-space: normal; max-width: 100% }`
+- `.fg-hero-meta` chips drop padding 7px 13px → 5px 10px, gap 10 → 6, font 14 → 12
+- `.fg-result-card-inner` outer padding 32px 30px 28px → 20px 16px 22px
+
+The heart's "missing" was a symptom of (B) — once the row fits inside the viewport, the heart slot at the right end of the title row becomes visible.
+
+**C. Source Breakdown.** Compressed inline at ≤640px (extends slightly past 600 the user picked, since the breakage starts a bit higher):
+- `grid-template-columns: 28px minmax(0,1fr) auto 44px 16px` (was `auto 1fr 88px 1fr 28px`)
+- Logo chip 36×36 → 28×28; inner img 22 → 18
+- Name `font-size: 18 → 13` with `nowrap + ellipsis` (was wrapping)
+- Type label 12 → 9
+- Score 19 → 14
+- Padding 16px 18px → 10px 12px; gap 14 → 8
+
+**D. Header.** Added `.nav-discuss-btn`, `.nav-account-label`, `.nav-brand` classNames. At ≤480px:
+- `.nav-discuss-btn { display: none }` (drop the chat-icon arrow button entirely)
+- `.nav-account-label { display: none }` (My Account / Sign In go icon-only)
+- `.nav-btn { padding: 7px 9px; gap: 5px }`
+- `.nav-brand { font-size: 17; white-space: nowrap }` (stops "Film Glance" from breaking onto two lines)
+
+**E. ResultSidebar floating menu.** Most invasive change — refactored the component:
+- Extracted the `<nav>` list into a `navList` variable (rendered twice: once inside the desktop `<aside>`, once inside the mobile popover)
+- Added `mobileOpen` useState
+- New JSX: `<button className="fg-sidebar-fab">` (gold-gradient circular button, 50×50, bottom-right at right:18, bottom:22) + conditional `<div className="fg-sidebar-fab-backdrop">` and `<div className="fg-sidebar-fab-popover">` when open
+- New CSS: FAB hidden by default, shown at `≤1379px` (the same breakpoint where desktop sidebar hides). Popover anchored bottom-right at `right:18, bottom:84` with `width: min(280px, calc(100vw - 36px))`. Backdrop `inset:0` with blur(6px). Animation: `slideUp 0.22s` for popover, `fadeIn 0.18s` for backdrop.
+- `scrollTo(id)` now also calls `setMobileOpen(false)` so tapping a section closes the popover
+- New `Menu` icon imported from lucide-react
+
+### Standing rule added (CLAUDE.md "Mobile parity is non-negotiable")
+
+This is the more important change long-term. Six guardrails, codified from the audit:
+1. Every UI change must work on mobile AND desktop, verified before commit
+2. Target widths to verify against: 360, 390, 414, 480, 600, 860, ≥1380
+3. Verification: Chrome DevTools device emulation against Vercel preview is baseline; real-device screenshots for high-risk changes
+4. Don't ship UI work that hasn't been tested on at least one mobile width
+5. Cataloged the common pitfalls so the next session knows what to look for
+6. Mobile is one feature with desktop, not a follow-up pass
+
+### What's NOT in this commit
+
+Phase 2 (comprehensive sweep — score panel, cast scroll, awards, production/run, where-to-watch, recommendations, video reviews), Phase 3 (ticker animation visibility audit), and Phase 4 (formal responsive contract in tech-specs §11) are queued for follow-up versions. v5.10.35 is the critical-path fix for the four breakages + missing FAB; the user will re-screenshot on their phone before deciding whether to PR-and-ship or layer on Phase 2.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +238 / -74 | All five mobile fixes (A–E); FAB component refactor; Menu icon import; FG_VERSION 5.10.35 |
+| `CLAUDE.md` | +7 / -2 | New "Mobile parity is non-negotiable" rule under Hard Rules |
+| `tech-specs.md` | +1 row | Change Log: v5.10.35 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learnings
+
+1. **Backticks inside CSS comments break inline `<style dangerouslySetInnerHTML={{ __html: \`...\` }} />`.** I lost ~5 minutes to a tsc parse error after writing CSS comments like `align-items: \`center\`` — the backticks terminate the outer template literal mid-stream. From now on, in any inline CSS string literal, document with quotes or em-dashes, never backticks.
+2. **`display: none` at narrow viewports is not "mobile responsive" — it's "mobile broken".** The ResultSidebar fix exemplifies this: hiding desktop components without offering a mobile equivalent removes features. Every `display: none` in a media query is a candidate for "what's the mobile alternative?" — bottom sheet, FAB, sticky chip bar, or accordion.
+3. **`align-items: center` on a flex-direction:column container is rarely what you want for content blocks.** It centers each child on the cross-axis without stretching, so children with `flex: 1` don't actually fill width. Use `stretch` (default) and let individual children opt into centering via `align-self: center` (which is what the poster needed).
+4. **Hover-only affordances are invisible on touch.** The favs card's action cluster at `opacity: 0.55` revealing on hover means a phone user never sees the trash + move buttons. Standing rule: any interactive control must be visible at rest on touch viewports.
+5. **Codify the lesson, don't just fix the symptom.** The "Mobile parity is non-negotiable" rule in CLAUDE.md is more durable than this PR — it prevents the entire class of bug from recurring across sessions.
+
+---
+
 ## Session: April 29, 2026 (continued, round 5) — Gold scrollbar on favourites view (v5.10.34)
 
 User noticed the custom gold scroll indicator (right-edge track + draggable thumb, turns orange past 85% scroll) was missing on the favourites page after staging v5.10.33. Same indicator that's on the landing and result pages.

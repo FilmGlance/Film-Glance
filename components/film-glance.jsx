@@ -8,11 +8,12 @@ import {
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
   Music, BookOpen, Gauge,
   Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic,
-  Folder, FolderPlus, FolderOpen, FolderInput, Pencil, Plus, Inbox, Library
+  Folder, FolderPlus, FolderOpen, FolderInput, Pencil, Plus, Inbox, Library,
+  Menu
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.34";
+const FG_VERSION = "5.10.36";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -490,6 +491,7 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
    Hidden under 1280px viewport (no room beside the centered 720px main column). */
 function ResultSidebar({ result, sections }) {
   const [active, setActive] = useState(sections[0]?.id || "");
+  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -514,63 +516,102 @@ function ResultSidebar({ result, sections }) {
     const offset = 110;
     const top = el.getBoundingClientRect().top + window.scrollY - offset;
     window.scrollTo({ top, behavior: "smooth" });
+    setMobileOpen(false);
   };
 
+  const navList = (
+    <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {sections.map(s => {
+        const Icon = s.icon;
+        const isActive = active === s.id;
+        return (
+          <button
+            key={s.id}
+            onClick={() => scrollTo(s.id)}
+            className={`fg-side-link ${isActive ? "active" : ""}`}
+            style={{
+              display: "flex", alignItems: "center", gap: 11,
+              padding: "11px 13px", borderRadius: 10,
+              background: isActive ? "linear-gradient(135deg, rgba(255,215,0,0.13), rgba(255,165,0,0.04))" : "transparent",
+              border: `1px solid ${isActive ? "rgba(255,215,0,0.30)" : "transparent"}`,
+              color: isActive ? "#FFD700" : "rgba(255,255,255,0.62)",
+              fontFamily: "'Syne',sans-serif",
+              fontSize: 13.5, fontWeight: isActive ? 700 : 500,
+              letterSpacing: 0.2,
+              textAlign: "left", cursor: "pointer",
+              transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
+              boxShadow: isActive ? "0 0 22px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}
+          >
+            <Icon size={14} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   return (
-    <aside className="fg-sidebar" aria-label="Movie sections" style={{
-      position: "fixed",
-      // Anchored to the LEFT of the main column: sidebar's right edge sits 24px
-      // from the main column's left edge. Main column is centered with max-width
-      // 720px so its left edge is at viewport-50% - 360px.
-      // Sidebar right (from viewport-right) = viewport - (50% - 360) - SIDEBAR_WIDTH(264)
-      // ... easier expressed via right anchor: 50% + 360 + 24.
-      right: "calc(50% + 384px)",
-      top: 110,
-      zIndex: 30,
-      width: 264,
-      maxHeight: "calc(100vh - 140px)",
-      overflowY: "auto",
-      overflowX: "hidden",
-      background: "rgba(8,6,2,0.82)",
-      backdropFilter: "blur(28px) saturate(1.1)",
-      WebkitBackdropFilter: "blur(28px) saturate(1.1)",
-      border: "1px solid rgba(255,215,0,0.10)",
-      borderRadius: 16,
-      padding: "12px 10px",
-      boxShadow: "0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,215,0,0.04)",
-      animation: "softFade 0.55s cubic-bezier(0.16,1,0.3,1) 0.35s both",
-    }}>
-      <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        {sections.map(s => {
-          const Icon = s.icon;
-          const isActive = active === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => scrollTo(s.id)}
-              className={`fg-side-link ${isActive ? "active" : ""}`}
-              style={{
-                display: "flex", alignItems: "center", gap: 11,
-                padding: "11px 13px", borderRadius: 10,
-                background: isActive ? "linear-gradient(135deg, rgba(255,215,0,0.13), rgba(255,165,0,0.04))" : "transparent",
-                border: `1px solid ${isActive ? "rgba(255,215,0,0.30)" : "transparent"}`,
-                color: isActive ? "#FFD700" : "rgba(255,255,255,0.62)",
-                fontFamily: "'Syne',sans-serif",
-                fontSize: 13.5, fontWeight: isActive ? 700 : 500,
-                letterSpacing: 0.2,
-                textAlign: "left", cursor: "pointer",
-                transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
-                boxShadow: isActive ? "0 0 22px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}
-            >
-              <Icon size={14} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-    </aside>
+    <>
+      {/* Desktop sidebar — fixed left of the main column. Hidden under
+          1380px viewport via `.fg-sidebar` @media rule. */}
+      <aside className="fg-sidebar" aria-label="Movie sections" style={{
+        position: "fixed",
+        // Anchored to the LEFT of the main column: sidebar's right edge sits 24px
+        // from the main column's left edge. Main column is centered with max-width
+        // 720px so its left edge is at viewport-50% - 360px.
+        // Sidebar right (from viewport-right) = viewport - (50% - 360) - SIDEBAR_WIDTH(264)
+        // ... easier expressed via right anchor: 50% + 360 + 24.
+        right: "calc(50% + 384px)",
+        top: 110,
+        zIndex: 30,
+        width: 264,
+        maxHeight: "calc(100vh - 140px)",
+        overflowY: "auto",
+        overflowX: "hidden",
+        background: "rgba(8,6,2,0.82)",
+        backdropFilter: "blur(28px) saturate(1.1)",
+        WebkitBackdropFilter: "blur(28px) saturate(1.1)",
+        border: "1px solid rgba(255,215,0,0.10)",
+        borderRadius: 16,
+        padding: "12px 10px",
+        boxShadow: "0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,215,0,0.04)",
+        animation: "softFade 0.55s cubic-bezier(0.16,1,0.3,1) 0.35s both",
+      }}>
+        {navList}
+      </aside>
+
+      {/* Mobile / tablet — Floating Action Button (≤1379px). Tap opens
+          a card-style popover anchored above the FAB listing every
+          populated section. Tapping a section smooth-scrolls and closes
+          the popover (handled inside scrollTo). The IntersectionObserver
+          highlight from the desktop sidebar carries over via shared
+          `.fg-side-link.active` styling. */}
+      <button
+        type="button"
+        className="fg-sidebar-fab"
+        aria-label="Open section navigation"
+        aria-expanded={mobileOpen}
+        aria-haspopup="menu"
+        onClick={() => setMobileOpen(o => !o)}
+      >
+        {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {mobileOpen && (
+        <>
+          <div
+            className="fg-sidebar-fab-backdrop"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fg-sidebar-fab-popover" role="menu" aria-label="Movie sections">
+            {navList}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -951,6 +992,7 @@ function SourceRow({ source, idx, visible }) {
   } catch { /* ignore malformed urls */ }
   return (
     <a href={source.url} target="_blank" rel="noopener noreferrer"
+      className="fg-source-row"
       style={{
         display: "grid", gridTemplateColumns: "auto 1fr 88px 1fr 28px", alignItems: "center", gap: 14,
         padding: "16px 18px", borderRadius: 11,
@@ -2383,15 +2425,34 @@ export default function FilmGlance() {
         }
 
         /* Mobile tweaks */
+        /* Mobile favs card — shrink poster + tighter horizontal layout per
+           v5.10.35 mobile pass. The 130×195 desktop poster + 22px gaps were
+           overflowing 360–414px viewports, causing the cards to render off-
+           screen (the leftmost flex children kept their intrinsic content
+           width because none had min-width:0 on the cross-axis). New
+           geometry at ≤640px: 78×117 poster, 12px gap, 12px padding,
+           always-visible action cluster (no hover-reveal — touch has no
+           hover state). Score column drops 56→38, minWidth 92→60. Folder
+           tag pill goes 11→9.5. */
         @media (max-width: 640px) {
-          .fg-fav-card { gap: 16px !important; padding: 16px 16px 60px 14px !important; }
-          .fg-fav-card .dym-poster-wrap { width: 100px !important; height: 150px !important; }
-          .fg-fav-title { font-size: 17px !important; }
-          .fg-fav-score { font-size: 42px !important; }
-          .fg-fav-score-col { padding-right: 4px !important; }
+          /* Card frame — leave 36px bottom padding so the absolute-positioned
+             action cluster (right:14, bottom:12) doesn't overlap content. */
+          .fg-fav-card { gap: 12px !important; padding: 12px 12px 38px 12px !important; }
+          .fg-fav-card .dym-poster-wrap { width: 78px !important; height: 117px !important; }
+          .fg-fav-title { font-size: 15px !important; margin-bottom: 6px !important; }
+          .fg-fav-score { font-size: 38px !important; }
+          .fg-fav-score-col { padding-right: 2px !important; min-width: 56px !important; }
+          /* Actions always visible on touch (no hover state on a phone). */
+          .fg-fav-card .fg-fav-actions { opacity: 1 !important; gap: 4px !important; right: 8px !important; bottom: 8px !important; }
+          .fg-fav-card .fg-fav-actions button { padding: 6px !important; }
+          .fg-fav-folder-tag { font-size: 9.5px !important; padding: 2px 7px !important; }
         }
 
-        /* Reduced-motion: kill animations on the new surfaces too */
+        /* Reduced-motion: kill animations on the new surfaces too.
+           v5.10.36 fix: same opacity:0-stuck issue as .dym-card. Favs
+           cards have inline opacity:0 paired with a softFade animation;
+           when animations are killed by reduce-motion the cards stay
+           invisible. Force opacity:1 so the static fallback renders. */
         @media (prefers-reduced-motion: reduce) {
           .fg-fav-card,
           .fg-fav-card:hover,
@@ -2406,6 +2467,7 @@ export default function FilmGlance() {
             transform: none !important;
             transition: none !important;
           }
+          .fg-fav-card { opacity: 1 !important; }
         }
 
         /* Result page — recommendation cards (premium hover) */
@@ -2463,6 +2525,65 @@ export default function FilmGlance() {
         @media (max-width: 1379px) {
           .fg-sidebar { display: none !important; }
         }
+        /* Floating Action Button — replaces the sidebar at ≤1379px so
+           movie-page section navigation isn't lost on tablets/phones.
+           At ≥1380px the FAB is hidden (sidebar takes over). Position:
+           bottom-right, clear of the gold scroll indicator at right:4.
+           v5.10.36 hardening: bumped z-index 210→250 (above the
+           scrollPct>0.8 bottom-fade at z:150 and any other fixed chrome),
+           bottom uses max(28px, env(safe-area-inset-bottom)) so the FAB
+           clears mobile Chrome's appearing address bar + iOS home
+           indicator on devices with safe-area insets. */
+        .fg-sidebar-fab {
+          display: none;
+          position: fixed;
+          right: 18px;
+          bottom: max(28px, env(safe-area-inset-bottom, 28px));
+          z-index: 250;
+          width: 52px; height: 52px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #FFE89A 0%, #FFD700 48%, #E8A000 100%);
+          color: #050505;
+          border: 1px solid rgba(255, 215, 0, 0.65);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 36px rgba(255, 215, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+          cursor: pointer;
+          align-items: center;
+          justify-content: center;
+          pointer-events: auto;
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+        }
+        .fg-sidebar-fab:active { transform: translateY(1px) scale(0.96); }
+        .fg-sidebar-fab:focus-visible {
+          outline: 2px solid rgba(255, 215, 0, 0.7);
+          outline-offset: 3px;
+        }
+        .fg-sidebar-fab-backdrop {
+          position: fixed; inset: 0; z-index: 245;
+          background: rgba(0, 0, 0, 0.55);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          animation: fadeIn 0.18s ease-out;
+        }
+        .fg-sidebar-fab-popover {
+          position: fixed;
+          right: 18px;
+          bottom: calc(max(28px, env(safe-area-inset-bottom, 28px)) + 64px);
+          z-index: 255;
+          width: min(280px, calc(100vw - 36px));
+          max-height: calc(100vh - 140px);
+          overflow-y: auto;
+          background: rgba(8, 6, 2, 0.96);
+          backdrop-filter: blur(24px) saturate(1.1);
+          -webkit-backdrop-filter: blur(24px) saturate(1.1);
+          border: 1px solid rgba(255, 215, 0, 0.18);
+          border-radius: 14px;
+          padding: 10px 8px;
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 215, 0, 0.06);
+          animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @media (max-width: 1379px) {
+          .fg-sidebar-fab { display: inline-flex !important; }
+        }
         .fg-side-link:not(.active):hover {
           background: rgba(255,215,0,0.05) !important;
           border-color: rgba(255,215,0,0.14) !important;
@@ -2490,15 +2611,83 @@ export default function FilmGlance() {
             inset 0 0 0 1px rgba(255,215,0,0.18) !important;
         }
 
-        /* Mobile: hero stacks vertically with smaller poster */
+        /* Mobile: hero stacks vertically with smaller poster.
+           v5.10.35 fix: align-items center (cross-axis center for the
+           text column under flex-direction:column) was preventing the text
+           column from stretching to full width — long taglines + long
+           director names then overflowed the card and caused the entire
+           text content to render off-screen on movies like Pulp Fiction.
+           Switched to stretch (default flex behaviour for cross-axis)
+           and added explicit guards on the text column children:
+             - .fg-hero-text-col widens to 100%
+             - title h2 gets word-break + overflow-wrap so long titles
+               don't push the row past the viewport
+             - tagline drops white-space:nowrap so it can wrap instead
+               of trying to fit on one line and trigger horizontal overflow
+             - meta-row chips already have flex-wrap:wrap; that stays
+           Smaller padding on the outer card too — desktop's 30px sides
+           was eating viewport. */
         @media (max-width: 640px) {
-          .fg-hero-grid { flex-direction: column !important; gap: 18px !important; align-items: center !important; }
-          .fg-hero-poster { width: 178px !important; height: 267px !important; }
-          .fg-hero-meta { justify-content: center !important; }
+          .fg-hero-grid { flex-direction: column !important; gap: 18px !important; align-items: stretch !important; }
+          .fg-hero-poster { width: 178px !important; height: 267px !important; align-self: center !important; }
+          .fg-hero-text-col { width: 100% !important; min-width: 0 !important; }
+          .fg-hero-title { font-size: 26px !important; word-break: break-word !important; overflow-wrap: anywhere !important; }
+          .fg-hero-tagline { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+          .fg-hero-meta { justify-content: flex-start !important; gap: 6px !important; }
+          .fg-hero-meta .fg-meta-chip { font-size: 12px !important; padding: 5px 10px !important; }
+          .fg-hero-director { white-space: normal !important; max-width: 100% !important; }
+          .fg-result-card-inner { padding: 20px 16px 22px !important; }
+
+        }
+        /* Source breakdown rows — compressed inline at ≤700px. Pulled out
+           of the 640 hero block to its own @media so wider phones (480-
+           700) also get the treatment. v5.10.36: bumped breakpoint
+           640→700, added !important on every text property, added a
+           min-width:0 guard on the name container so flex items can
+           shrink properly. Original desktop columns:
+             auto | 1fr (name) | 88px (score) | 1fr (bar) | 28px (link)
+           with 14px gaps + 18px padding — needs ~480px to fit without
+           name + score colliding. Mobile columns:
+             28px chip | minmax(0,1fr) | auto score | 44px bar | 14px link
+           with 8px gaps + 10/12px padding. Name truncates via ellipsis. */
+        @media (max-width: 700px) {
+          .fg-source-row {
+            grid-template-columns: 28px minmax(0, 1fr) auto 44px 14px !important;
+            gap: 8px !important;
+            padding: 10px 12px !important;
+          }
+          .fg-source-row > div:nth-child(1) { width: 28px !important; height: 28px !important; border-radius: 7px !important; }
+          .fg-source-row > div:nth-child(1) img { width: 18px !important; height: 18px !important; }
+          .fg-source-row > div:nth-child(2) { min-width: 0 !important; }
+          .fg-source-row > div:nth-child(2) > span:first-child {
+            font-size: 13px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            display: block !important;
+            min-width: 0 !important;
+          }
+          .fg-source-row > div:nth-child(2) > span:nth-child(2) { font-size: 9px !important; letter-spacing: 0.6px !important; }
+          .fg-source-row > div:nth-child(3) { font-size: 14px !important; min-width: 0 !important; white-space: nowrap !important; }
+
+          /* True Rating Score — center the score number + description on
+             mobile per user feedback (v5.10.36). Desktop layout is
+             score-on-left + description-on-right with flex-wrap so they
+             stack on mobile; before this rule the wrapped items aligned
+             flex-start (left edge of panel), now they center. */
+          .fg-score-row { justify-content: center !important; gap: 18px !important; }
+          .fg-score-num-wrap { width: 100% !important; min-width: 0 !important; }
+          .fg-score-desc-wrap { width: 100% !important; min-width: 0 !important; align-items: center !important; text-align: center !important; }
         }
 
         /* Respect reduced-motion preference — disable stagger, rail sweep,
-           hover translate. Keep static layout, no animation. */
+           hover translate. Keep static layout, no animation. v5.10.36 fix:
+           cards have inline opacity:0 paired with a softFade animation
+           that transitions opacity 0 → 1. When animations are killed by
+           reduce-motion (Android battery saver, Samsung OneUI default,
+           iOS low-power), the cards stay at opacity:0 and never appear.
+           Force opacity:1 here so the static fallback is visible. Same
+           treatment for fg-fav-card below. */
         @media (prefers-reduced-motion: reduce) {
           .dym-card,
           .dym-card:hover,
@@ -2510,6 +2699,7 @@ export default function FilmGlance() {
             transform: none !important;
             transition: none !important;
           }
+          .dym-card { opacity: 1 !important; }
           .dym-rail { transform: scaleX(1) !important; opacity: 1 !important; }
         }
 
@@ -2524,6 +2714,20 @@ export default function FilmGlance() {
         .nav-btn:hover .arrow { transform: translateX(3px); }
         @media (max-width: 520px) {
           .nav-forum-label { display: none !important; }
+        }
+        /* v5.10.36 — bumped breakpoint 480→560 (was missing modern
+           phones in the 481-540px logical-width range; user reported
+           "Film/Glance" still wrapping on a phone they tested). At
+           ≤560px: drop the Discussion Forum chat-icon button entirely
+           (forum is still reachable via /discuss URL), make the My
+           Account / Sign In button icon-only (label hidden), and
+           tighten button padding so the "Film Glance" brand-mark stops
+           wrapping onto two lines. Also tighten header padding. */
+        @media (max-width: 560px) {
+          .nav-discuss-btn { display: none !important; }
+          .nav-account-label { display: none !important; }
+          .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
+          .nav-brand { font-size: 17px !important; }
         }
 
         /* ═══ NEW LANDING: atmosphere, hero accent, ticker, how-it-works, film-strip ═══ */
@@ -2641,7 +2845,7 @@ export default function FilmGlance() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, rgba(255,215,0,0.20), rgba(255,165,0,0.06))", border: "1px solid rgba(255, 215, 0, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 18px rgba(255, 215, 0, 0.10)" }}>
             <Film size={15} style={{ color: "#FFD700" }} />
           </div>
-          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 19, fontWeight: 700, letterSpacing: -0.4 }}>
+          <span className="nav-brand" style={{ fontFamily: "'Playfair Display', serif", fontSize: 19, fontWeight: 700, letterSpacing: -0.4, whiteSpace: "nowrap" }}>
             Film <span style={{ color: "#FFD700" }}>Glance</span>
           </span>
         </Link>
@@ -2649,7 +2853,7 @@ export default function FilmGlance() {
         <nav aria-label="Primary" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Link
             href="/discuss"
-            className="nav-btn"
+            className="nav-btn nav-discuss-btn"
             aria-label="Open Film Glance Discussion Forum"
             style={{
               display: "flex", alignItems: "center", gap: 7,
@@ -2701,7 +2905,7 @@ export default function FilmGlance() {
                   cursor: "pointer", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
                 }}
               >
-                <User size={12} /> My Account
+                <User size={12} /> <span className="nav-account-label">My Account</span>
               </button>
               {showAccountMenu && (
                 <div
@@ -2745,7 +2949,7 @@ export default function FilmGlance() {
               }}
             >
               <LogIn size={12} />
-              Sign In
+              <span className="nav-account-label">Sign In</span>
             </button>
           )}
         </nav>
@@ -3870,7 +4074,7 @@ export default function FilmGlance() {
                 pointerEvents: "none", zIndex: 0,
               }} />
 
-              <div style={{ padding: "32px 30px 28px", position: "relative", zIndex: 1 }}>
+              <div className="fg-result-card-inner" style={{ padding: "32px 30px 28px", position: "relative", zIndex: 1 }}>
                 <div className="fg-hero-grid" style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
                   <div className="fg-hero-poster" style={{
                     width: 210, height: 315,
@@ -3884,9 +4088,9 @@ export default function FilmGlance() {
                     <PosterCard title={result.title} year={result.year} genre={result.genre} posterUrl={result.poster} />
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
+                  <div className="fg-hero-text-col" style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
                     {result.tagline && (
-                      <p style={{
+                      <p className="fg-hero-tagline" style={{
                         fontFamily: "'Playfair Display',serif",
                         fontSize: 14,
                         color: "rgba(255,215,0,0.65)",
@@ -3900,12 +4104,13 @@ export default function FilmGlance() {
                     )}
 
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 11, animation: "fadeIn 0.5s 0.15s both" }}>
-                      <h2 style={{
+                      <h2 className="fg-hero-title" style={{
                         fontFamily: "'Playfair Display',serif",
                         fontSize: "clamp(26px, 4vw, 40px)",
                         fontWeight: 700, lineHeight: 1.06,
                         letterSpacing: -1,
                         flex: 1,
+                        minWidth: 0,
                         background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.78) 100%)",
                         WebkitBackgroundClip: "text", backgroundClip: "text",
                         WebkitTextFillColor: "transparent", color: "transparent",
@@ -3958,7 +4163,7 @@ export default function FilmGlance() {
                         </span>
                       )}
                       {result.director && (
-                        <span style={{
+                        <span className="fg-hero-director" style={{
                           fontFamily: "'Syne',sans-serif",
                           fontSize: 15, fontWeight: 500,
                           color: "rgba(255,255,255,0.78)",
@@ -4062,13 +4267,13 @@ export default function FilmGlance() {
                       </div>
 
                       {/* Body — huge glowing score number on the left, tagline + stars on the right */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
+                      <div className="fg-score-row" style={{ display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
                         {/* Massive gold score number — replaces the gauge.
                             line-height bumped 0.9 → 1.05 + paddingBottom on
                             the score span so descenders ("3", "5", etc.)
                             sit fully inside the line box and aren't clipped
                             by the parent's overflow. */}
-                        <div style={{
+                        <div className="fg-score-num-wrap" style={{
                           flexShrink: 0,
                           display: "inline-flex",
                           alignItems: "baseline",
@@ -4095,7 +4300,7 @@ export default function FilmGlance() {
                             letterSpacing: -0.5,
                           }}>/ 10</span>
                         </div>
-                        <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
+                        <div className="fg-score-desc-wrap" style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 14 }}>
                           <p style={{
                             fontFamily: "'Syne',sans-serif",
                             fontStyle: "normal",
