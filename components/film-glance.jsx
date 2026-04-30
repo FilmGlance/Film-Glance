@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.11.0";
+const FG_VERSION = "5.12.0";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -2890,6 +2890,7 @@ export default function FilmGlance() {
            wrapping onto two lines. Also tighten header padding. */
         @media (max-width: 560px) {
           .nav-discuss-btn { display: none !important; }
+          .nav-boxoffice-btn { display: none !important; }
           .nav-account-label { display: none !important; }
           .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
           .nav-brand { font-size: 17px !important; }
@@ -3061,6 +3062,22 @@ export default function FilmGlance() {
             <MessageSquare size={13} />
             <span className="nav-forum-label">Discussion Forum</span>
             <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
+          </Link>
+          <Link
+            href="/boxoffice"
+            className="nav-btn nav-boxoffice-btn"
+            aria-label="Open Box Office page"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 15px", borderRadius: 9,
+              border: "1px solid rgba(255, 215, 0, 0.18)",
+              background: "rgba(255, 215, 0, 0.03)",
+              color: "#FFD700", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+            }}
+          >
+            <DollarSign size={13} />
+            <span className="nav-forum-label">Box Office</span>
           </Link>
           {user && (
             <button

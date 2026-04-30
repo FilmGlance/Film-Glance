@@ -48,6 +48,7 @@ import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
 import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
+import { sanitizeQuery } from "@/lib/sanitize";
 
 // v5.11.0: Edge runtime cuts cold-start latency by ~450ms vs Node serverless.
 // All deps verified edge-safe — supabase-js v2 (fetch-based), pure-fetch lib/*,
@@ -85,16 +86,6 @@ function claudeUserPrompt(title: string, year?: number): string {
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
-
-function sanitizeQuery(q: string): string {
-  return q
-    .trim()
-    .toLowerCase()
-    .replace(/[\x00-\x1f\x7f]/g, "")
-    .replace(/[^\w\s:'\-&.!,()]/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, 200);
-}
 
 function looksLikeInjection(q: string): boolean {
   const patterns = [

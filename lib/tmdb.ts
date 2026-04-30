@@ -776,3 +776,59 @@ export async function fetchComingSoonDetails(movieId: number): Promise<{
     return null;
   }
 }
+
+// ─── Box Office Enrichment (poster + backdrop + IDs) ──────────────────────
+//
+// Lightweight TMDB lookup used by the box-office ingestion pipeline. Returns
+// just the visual + identity fields needed for `box_office_metrics` rows —
+// poster_path, backdrop_path, tmdb_id, imdb_id. Does not fetch credits,
+// trailers, recommendations, or video reviews (the existing `enrichWithTMDB`
+// is too heavy for cron-time enrichment of 10 films per period).
+
+export async function enrichBoxOfficeWithTMDB(
+  title: string,
+  year?: number
+): Promise<{
+  poster_path: string | null;
+  backdrop_path: string | null;
+  tmdb_id: number | null;
+  imdb_id: string | null;
+}> {
+  const blank = {
+    poster_path: null,
+    backdrop_path: null,
+    tmdb_id: null,
+    imdb_id: null,
+  };
+  if (!TMDB_KEY) return blank;
+  try {
+    const movie = await searchMovie(title, year);
+    if (!movie) return blank;
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) {
+      // Fall back to whatever we got from the search call
+      return {
+        poster_path: movie.poster_path ?? null,
+        backdrop_path: null,
+        tmdb_id: movie.id,
+        imdb_id: null,
+      };
+    }
+    const data = (await res.json()) as {
+      backdrop_path?: string | null;
+      poster_path?: string | null;
+      external_ids?: { imdb_id?: string | null };
+    };
+    return {
+      poster_path: data.poster_path ?? movie.poster_path ?? null,
+      backdrop_path: data.backdrop_path ?? null,
+      tmdb_id: movie.id,
+      imdb_id: data.external_ids?.imdb_id ?? null,
+    };
+  } catch {
+    return blank;
+  }
+}
