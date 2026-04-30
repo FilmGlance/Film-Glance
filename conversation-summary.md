@@ -1,5 +1,87 @@
 # Film Glance — Conversation Summary
 
+## Session: April 30, 2026 (continued, round 3) — v5.11.0 edge runtime + waitUntil migration
+
+User opened the session by asking me to read the bible docs and then "proceed with starting v5.11.0". The previous session (PR #50, v5.10.40) had captured a three-sub-round plan for v5.11.x in `tech-specs.md` §10 and committed it as `1efaa4a docs: capture user-approved v5.11.0 plan for next session`. This session implements sub-round 1.
+
+### What v5.11.0 is (per the previously approved plan)
+
+The user's plan (codified in the Apr 30 v5.10.40 row of tech-specs §10) split the latency-improvement work into three independently-shippable sub-rounds:
+
+- **v5.11.0** (this session): edge runtime + `waitUntil` migration. Mechanical, low risk. Net: −450ms cold start.
+- **v5.11.1** (later): Claude prompt split into two parallel calls (core ~1500 tokens / rich ~1000 tokens via Promise.all). Net: −1 to −2s actual latency, accepts ~2x API cost.
+- **v5.11.2** (later): streaming JSON over SSE. Net: ~500ms perceived first-paint vs 3-5s today.
+
+This session ships only sub-round 1. The user's stated risk acceptances were unchanged from the planning row.
+
+### Pre-edit audit
+
+Before touching code, audited the search route + lib/* modules for edge compatibility:
+
+| Module | Edge-safe? | Reason |
+|---|---|---|
+| `@supabase/supabase-js` v2 | ✓ | Fetch-based, no Node imports |
+| `lib/tmdb.ts` | ✓ | Pure fetch, no imports at all |
+| `lib/ratings.ts` | ✓ | Pure fetch, no imports at all |
+| `lib/score.ts` | ✓ | Pure-JS calculation |
+| `lib/rate-limit.ts` | ✓ (with caveat) | In-memory `Map` already documented as per-instance scope; on edge becomes per-isolate scope, functionally equivalent |
+| `lib/supabase-server.ts` | ✓ | Just calls `createClient` with URL + service-role key + auth options |
+
+Only one risk worth surfacing: edge has a hard 25s timeout (vs Fluid Compute's 300s). The search route uses `AbortSignal.timeout(18000)` for Anthropic plus parallel TMDB + verified-ratings calls — typical 4-10s, but slow tail could push toward 20s. Watch for 504s post-deploy; if any appear the surgical revert is to drop `runtime = "edge"` and keep the `waitUntil` migration on Node serverless (still a pure improvement on its own).
+
+### Plan correction
+
+The change-log row said "8 fireAndForget call sites at lines 122/511/521/597/605/649/771" — that's 7 line numbers but says "8 sites". Actual grep: 7 call sites. The previous session's planning miscounted by one. The 7 sites are at (post-v5.10.40) lines 122, 515, 525, 601, 609, 653, 775 — same set, just shifted slightly by intervening commits.
+
+### Implementation choice — helper rename vs literal call-site replacement
+
+The plan literally said "replace 8 `fireAndForget(...)` call sites with `waitUntil(...)`". The most literal interpretation produces 7 verbose blocks like `waitUntil((async () => { ... })().catch(err => console.error("[label]", err)))`. The cleaner alternative is to keep the helper but rename it (`fireAndForget` → `runInBackground` since it's no longer truly fire-and-forget) and update only its 1-line body to call `waitUntil`. Same end behavior, much more readable.
+
+I went with the helper-rename approach. Documented this deviation in the onboarding message before making any edits, so it's reviewable. The user can request a different shape on review.
+
+### Files touched
+
+| File | Change | Lines |
+|---|---|---|
+| `package.json` | Added `@vercel/functions: ^3.4.6` to dependencies | +1 |
+| `package-lock.json` | Lockfile update for `@vercel/functions@3.4.6` + transitive `@vercel/oidc@3.3.1` | +30 |
+| `app/api/search/route.ts` | `import { waitUntil }`, `export const runtime = "edge"`, helper rename + body migration, 7 call-site renames | +13 / −7 |
+| `components/film-glance.jsx` | `FG_VERSION` 5.10.40 → 5.11.0 | +1 / −1 |
+
+Helper before/after:
+
+```diff
+- function fireAndForget(fn: () => Promise<any>, label: string) {
+-   fn().catch((err) => console.error(`[${label}]`, err));
+- }
++ function runInBackground(fn: () => Promise<any>, label: string) {
++   waitUntil(fn().catch((err) => console.error(`[${label}]`, err)));
++ }
+```
+
+### Build verification
+
+- `npx tsc --noEmit` — clean, zero errors.
+- `npx next build` — edge bundle for `/api/search` produced (`.next/server/edge-runtime-webpack.js` exists; compiled `route.js` contains 6 `waitUntil` / `edge` literal occurrences confirming the runtime export was honored).
+- Same `next build` *also* produces prerender errors on `/`, `/preview-landing`, `/_not-found`, `/404`, `/500`. **These are pre-existing and unrelated to v5.11.0** — caused by Windows path-casing inconsistency (CWD reported as `film-glance-terminal` lowercase vs Windows-resolved `Film-Glance-Terminal` TitleCase, which makes webpack treat React as two different modules → `useContext` returns null during static generation). Absent on Vercel's Linux build because Linux is case-sensitive. Production at v5.10.40 already builds fine on Vercel; this is purely a local-shell quirk.
+
+### Key learnings
+
+1. **Plan + audit before code, even on a "mechanical" change.** The plan said "8 call sites"; reality was 7. Five minutes of grep confirmed the discrepancy before any edit, avoiding a confused diff later. Even mechanical changes benefit from a quick first-hand verification pass.
+2. **`waitUntil` is a pure improvement over fire-and-forget regardless of runtime.** The semantic guarantee (background work completes after response) holds on Node serverless and edge. The reason to bundle it with the edge migration is that they share a deploy + risk window; either one alone would still help.
+3. **Skill loading: be selective.** This session received auto-suggestions for `bootstrap`, `runtime-cache`, and `react-best-practices` — none of which were proportionate to the work. Loaded `vercel-functions` and `nextjs` because those genuinely covered `waitUntil` semantics + edge constraints (25s timeout, V8 isolate API surface). The cost of loading an unrelated skill is real (token budget + cognitive distraction), so match the skill to the task.
+
+### Next steps
+
+1. **User reviews diff on Vercel preview** at `film-glance-git-staging-rs-projects-c0025ef0.vercel.app` (the staging-branch preview URL pattern from prior sessions). Cold-search a movie that has no cache entry to test the edge cold-start path. Cold-search a movie that DOES have a cache entry to test the warm cache-hit + `waitUntil` background path.
+2. **PR `staging → main`** if preview looks clean. Watch first day's runtime logs for any 504s that suggest edge timeout — if so, drop `runtime = "edge"` (keep waitUntil) as the surgical fix.
+3. **Then v5.11.1**: Claude prompt split into two parallel calls. Different shape of risk — splits one giant prompt into two more-focused ones, doubles per-search API cost on cold cache (already accepted by user).
+4. **Then v5.11.2**: streaming JSON over SSE. Highest-effort sub-round; needs partial-JSON state handling on the client without flicker.
+
+Standing-queue items unchanged from prior session: VPS forum import (post-import cleanup queue), 6 Dependabot vulns, Supabase PAT rotation before Apr 17, 2027, dead `YOUTUBE_API_KEY` in Vercel env, missing `003_anonymous_searches.sql`, optional Stripe teardown, `2026-05-12 13:00 UTC` scheduled cleanup agent.
+
+---
+
 ## Session: April 30, 2026 (continued, round 2) — Phase 3 mobile pass — ticker + film-strip animation visibility (v5.10.38)
 
 PR #47 (Phase 1) + PR #48 (Phase 2) merged. User asked to start Phase 3.
