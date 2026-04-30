@@ -38,6 +38,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sanitizeQuery } from "@/lib/sanitize";
 import { waitUntil } from "@vercel/functions";
+import { runFullPipeline, writeCacheEntries } from "@/lib/search-pipeline";
 import {
   sendAlertEmail,
   logCronFailure,
@@ -81,11 +82,12 @@ type SeenTitle = { search_key: string; title: string };
 
 /**
  * For each title that BOM gave us, populate `movie_cache` (Film Glance score
- * source) by firing /api/search server-side with the X-Cron-Service header.
- * Runs as fire-and-forget via waitUntil so it doesn't extend the cron's
- * response time. Each search adds one Claude call (~$0.005) plus TMDB +
- * verified-ratings — typical 4-10s wall time per movie. Vercel keeps the
- * function alive past the 200 OK return until each fetch completes.
+ * source) by running the search pipeline IN-PROCESS — same code path as
+ * /api/search but called directly so we sidestep Vercel Deployment Protection
+ * entirely. Each search adds one Claude call (~$0.005) plus TMDB + verified-
+ * ratings — typical 4-10s wall time per movie. Runs via waitUntil so it
+ * doesn't extend the cron's response time; Vercel keeps the function alive
+ * past the 200 OK return until each pipeline completes.
  */
 async function triggerScoreBackfill(seen: SeenTitle[]): Promise<void> {
   if (seen.length === 0) return;
@@ -108,49 +110,44 @@ async function triggerScoreBackfill(seen: SeenTitle[]): Promise<void> {
     return;
   }
 
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-  const cronSecret = process.env.CRON_SECRET || "";
-  // Vercel auto-populates this when "Protection Bypass for Automation" is on;
-  // forwarding it lets internal fetches sail past Vercel Authentication.
-  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
-
   console.log(
-    `[score-backfill] firing ${missing.length} /api/search calls for: ${missing
+    `[score-backfill] running pipeline for ${missing.length} titles: ${missing
       .map((m) => m.title)
       .join(", ")
       .slice(0, 200)}`,
   );
 
   for (const m of missing) {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "x-cron-service": cronSecret,
-    };
-    if (bypass) headers["x-vercel-protection-bypass"] = bypass;
-
+    // Each waitUntil keeps the function alive until the inner promise settles.
+    // We run sequentially per-title so a single Claude API hiccup doesn't
+    // spawn 10 concurrent slow calls; Promise.all-style parallelism inside
+    // each runFullPipeline is preserved.
     waitUntil(
-      fetch(`${baseUrl}/api/search`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ query: m.title }),
-        signal: AbortSignal.timeout(60000),
-      })
-        .then(async (r) => {
-          if (!r.ok) {
-            console.error(
-              `[score-backfill] /api/search for "${m.title}" → ${r.status}: ${(await r
-                .text()
-                .catch(() => "")).slice(0, 200)}`,
-            );
-          } else {
-            console.log(`[score-backfill] ✓ scored "${m.title}"`);
+      (async () => {
+        const t0 = Date.now();
+        try {
+          const mv = await runFullPipeline(m.title, m.title, undefined, null);
+          if (!mv) {
+            console.warn(`[score-backfill] pipeline returned null for "${m.title}"`);
+            return;
           }
-        })
-        .catch((err) => {
-          console.error(`[score-backfill] /api/search for "${m.title}" failed:`, err.message);
-        }),
+          await writeCacheEntries(
+            m.search_key,
+            null,
+            mv.title || null,
+            mv,
+            null,
+            "cron",
+            "box-office-cron",
+          );
+          console.log(`[score-backfill] ✓ "${m.title}" cached in ${Date.now() - t0}ms`);
+        } catch (err) {
+          console.error(
+            `[score-backfill] failed for "${m.title}":`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      })(),
     );
   }
 }
