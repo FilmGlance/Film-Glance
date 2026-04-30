@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.40";
+const FG_VERSION = "5.11.0";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -493,21 +493,46 @@ function BoxOfficeRow({ label, val, rank, idx, visible }) {
 function ResultSidebar({ result, sections }) {
   const [active, setActive] = useState(sections[0]?.id || "");
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The previous IntersectionObserver implementation had two failure modes:
+  // (1) early-returned when no entries were intersecting, leaving the
+  //     highlight stuck during scrolls between section boundaries; and
+  // (2) sorted by `boundingClientRect.top` ascending, which picks the
+  //     section with the MOST-NEGATIVE top — the section furthest above the
+  //     viewport — instead of the one the user is actually reading. That
+  //     caused the highlight to occasionally jump BACKWARDS as the user
+  //     scrolled forward (visible in v5.11.0 staging testing).
+  //
+  // The replacement walks sections in document order on every scroll tick
+  // (rAF-throttled) and picks the deepest section whose top has crossed a
+  // trigger line just under the sticky header. This is the pattern used by
+  // most documentation sites and never mistracks.
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter(e => e.isIntersecting);
-        if (visible.length === 0) return;
-        const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        setActive(top.target.id);
-      },
-      { rootMargin: "-120px 0px -55% 0px", threshold: [0, 0.1, 0.5] }
-    );
-    sections.forEach(s => {
-      const el = document.getElementById(s.id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    const triggerY = 140;
+    let rafId = null;
+    const compute = () => {
+      rafId = null;
+      let activeId = sections[0]?.id || "";
+      for (const s of sections) {
+        const el = document.getElementById(s.id);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= triggerY) {
+          activeId = s.id;
+        } else {
+          break; // sections are in document order — stop once we pass triggerY
+        }
+      }
+      setActive(prev => prev === activeId ? prev : activeId);
+    };
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(compute);
+    };
+    compute(); // initial sync
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.title, sections.length]);
 
@@ -540,7 +565,11 @@ function ResultSidebar({ result, sections }) {
               fontSize: 13.5, fontWeight: isActive ? 700 : 500,
               letterSpacing: 0.2,
               textAlign: "left", cursor: "pointer",
-              transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
+              // Narrowed from `all` to specific properties so a fast active
+              // toggle doesn't ripple `transition: all`-driven changes through
+              // every animatable prop simultaneously (the visible "twitch" in
+              // v5.11.0 staging testing was the sidebar items pulsing).
+              transition: "background 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.3s ease",
               boxShadow: isActive ? "0 0 22px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.08)" : "none",
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             }}
