@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
-const FG_VERSION = "5.10.33";
+const FG_VERSION = "5.10.34";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW LANDING DATA + HELPERS (promoted from /preview-landing)
@@ -4850,8 +4850,12 @@ export default function FilmGlance() {
         </main>
       )}
 
-      {/* Gold scroll indicator — on the landing and on result pages (hidden on favourites) */}
-      {!showFavs && ((result && !result.notFound) || (!result && !loading)) && (
+      {/* Gold scroll indicator — landing, result page, and favourites view.
+          Hidden only when actively loading (search in flight) or on the
+          notFound state. The window-level scroll listener at the top of
+          the component drives scrollPct off window.scrollY so the same
+          indicator works for any scrolling view without per-view wiring. */}
+      {((result && !result.notFound) || (!result && !loading)) && (
         <>
           <div ref={scrollTrackRef} onClick={(e) => {
             const track = scrollTrackRef.current;

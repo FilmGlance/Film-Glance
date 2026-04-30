@@ -1,5 +1,39 @@
 # Film Glance — Conversation Summary
 
+## Session: April 29, 2026 (continued, round 5) — Gold scrollbar on favourites view (v5.10.34)
+
+User noticed the custom gold scroll indicator (right-edge track + draggable thumb, turns orange past 85% scroll) was missing on the favourites page after staging v5.10.33. Same indicator that's on the landing and result pages.
+
+### Single-line fix
+
+The render block for the indicator was gated:
+
+```jsx
+{!showFavs && ((result && !result.notFound) || (!result && !loading)) && (
+```
+
+The `!showFavs` gate is a historical artifact — back when favourites was a small modal-style strip with little scroll length, hiding the indicator made sense. The current full-page favourites view (DYM-style card list, optionally filtered by folder) has plenty of scroll on a full library, so the gate is wrong.
+
+Removed `!showFavs && `. The indicator now renders on landing, result, and favs.
+
+### Why no other wiring was needed
+
+The `scrollPct` state is updated by a window-level `scroll` listener installed in `useEffect` near the top of the component (line ~1317). It computes `scrollY / (scrollHeight - innerHeight)` — view-agnostic. Whatever page renders, the listener tracks scroll position correctly. The drag handler at line ~1329 also uses `window.scrollTo` which works against any scrolling document.
+
+### Files modified
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `components/film-glance.jsx` | +6 / -2 | Removed `!showFavs` gate on the gold scroll indicator; updated comment; FG_VERSION 5.10.34 |
+| `tech-specs.md` | +1 row | Change Log: v5.10.34 entry, prior CURRENT STATE row tagged SUPERSEDED |
+| `conversation-summary.md` | NEW SESSION | This entry |
+
+### Key learning
+
+**Gates outlive their justifications.** The `!showFavs` gate made sense when the favs view was a tiny strip. Two redesigns later (v5.10.30 full DYM-style cards, v5.10.31 folders + chip bar), the favs view scrolls like any other page — but the gate stayed. Worth periodic audit: when a feature changes shape, re-read every conditional that touches it.
+
+---
+
 ## Session: April 29, 2026 (continued, round 4) — Modal centering + hover-fill cure + hero static (v5.10.33)
 
 After v5.10.32 went up the user reviewed staging again and gave three more pieces of feedback. Addressed in v5.10.33.
