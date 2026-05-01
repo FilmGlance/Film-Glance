@@ -13,7 +13,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Trophy } from "lucide-react";
+import { Crown } from "lucide-react";
 import { useCountUp } from "@/lib/use-count-up";
 
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500";
@@ -133,31 +133,31 @@ function FeaturedCard({ entry }) {
           className="bom-feat-right"
           style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0, gap: 16 }}
         >
-          {/* Rank badge with trophy */}
+          {/* Rank badge — crown + #1, restrained */}
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 12,
+              gap: 9,
               alignSelf: "flex-start",
-              padding: "8px 18px",
+              padding: "6px 16px",
               borderRadius: 999,
               background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              border: "1px solid rgba(255,255,255,0.25)",
-              boxShadow: "0 6px 22px rgba(255,215,0,0.40)",
+              border: "1px solid rgba(0,0,0,0.18)",
+              boxShadow: "0 5px 18px rgba(255,215,0,0.40)",
             }}
           >
-            <Trophy size={18} style={{ color: "#0a0805" }} aria-hidden="true" />
+            <Crown size={16} style={{ color: "#0a0805" }} aria-hidden="true" strokeWidth={2.4} />
             <span
               style={{
                 fontFamily: "'JetBrains Mono', monospace",
                 fontSize: 14,
                 fontWeight: 800,
-                letterSpacing: 1.6,
+                letterSpacing: 1.4,
                 color: "#0a0805",
               }}
             >
-              #1 — TOP OF THE CHARTS
+              #1
             </span>
           </div>
 
@@ -377,23 +377,21 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
             </div>
           )}
 
-          {/* Rank — gold-gradient italic Playfair number wrapped in a dark
-              frosted-glass pill so it stays high-contrast over bright poster
-              backgrounds (the bare gold text was unreadable on yellow Hoppers
-              / Normal posters). */}
+          {/* Rank — compact dark pill so the poster art breathes. Gold-
+              gradient italic Playfair number stays readable on any poster
+              background (yellow, dark, gradient) thanks to the dark backdrop. */}
           <div
             style={{
               position: "absolute",
-              top: 12,
-              left: 12,
-              padding: "4px 16px",
-              borderRadius: 14,
-              background: "rgba(8, 6, 2, 0.78)",
-              backdropFilter: "blur(14px) saturate(1.1)",
-              WebkitBackdropFilter: "blur(14px) saturate(1.1)",
-              border: "1px solid rgba(255, 215, 0, 0.42)",
-              boxShadow:
-                "0 6px 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,215,0,0.16)",
+              top: 10,
+              left: 10,
+              padding: "2px 11px",
+              borderRadius: 10,
+              background: "rgba(8, 6, 2, 0.80)",
+              backdropFilter: "blur(12px) saturate(1.1)",
+              WebkitBackdropFilter: "blur(12px) saturate(1.1)",
+              border: "1px solid rgba(255, 215, 0, 0.38)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,215,0,0.14)",
               userSelect: "none",
               pointerEvents: "none",
               lineHeight: 0.9,
@@ -404,16 +402,16 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
                 fontFamily: "'Playfair Display', serif",
                 fontStyle: "italic",
                 fontWeight: 700,
-                fontSize: 48,
-                lineHeight: 0.9,
+                fontSize: 28,
+                lineHeight: 0.95,
                 background:
                   "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
                 WebkitBackgroundClip: "text",
                 backgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 color: "transparent",
-                filter: "drop-shadow(0 0 12px rgba(255,215,0,0.45))",
-                letterSpacing: -1.5,
+                filter: "drop-shadow(0 0 8px rgba(255,215,0,0.38))",
+                letterSpacing: -0.8,
                 display: "inline-block",
                 paddingBottom: "0.06em",
               }}

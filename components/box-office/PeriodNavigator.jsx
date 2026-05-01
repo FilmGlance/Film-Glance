@@ -4,8 +4,15 @@
 // `availablePeriods` comes from the read API as the distinct period_starts
 // for the current (period_type, region). The dropdown groups by year so
 // 40-year backfills don't render as a 2,000-row dropdown.
+//
+// v5.12.0 round 8: popover is rendered via React Portal to document.body.
+// FilterBar uses `backdrop-filter` which creates a CSS containing block for
+// fixed-positioned descendants — without the portal, position:fixed coords
+// resolve relative to the FilterBar instead of the viewport, so the popover
+// would position invisibly. Portal escapes the containing block entirely.
 
 import React, { useMemo, useRef, useState, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 function groupByYear(items) {
@@ -189,18 +196,18 @@ export default function PeriodNavigator({
         <ChevronRight size={16} />
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
           ref={popoverRef}
           role="listbox"
           style={{
-            // position:fixed escapes any ancestor stacking context, backdrop-filter
-            // containment, or overflow-clip — guaranteeing the dropdown is fully
-            // visible regardless of where it lives in the React tree.
+            // Rendered via portal to document.body so neither the FilterBar's
+            // backdrop-filter (creates a containing block for fixed descendants
+            // in Chromium) nor any other ancestor can clip or reposition this.
             position: "fixed",
             top: popoverPos.top,
             right: popoverPos.right,
-            zIndex: 1000,
+            zIndex: 9999,
             minWidth: 280,
             maxWidth: "calc(100vw - 32px)",
             maxHeight: popoverPos.maxHeight,
@@ -276,7 +283,8 @@ export default function PeriodNavigator({
               })}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

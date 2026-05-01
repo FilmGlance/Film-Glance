@@ -1,9 +1,13 @@
 "use client";
 
-// Page hero — italic Playfair "Box Office" + Syne subhead + a small
-// gold-on-dark "period stamp" chip that displays the current filter
-// state ("APRIL 2024 · DOMESTIC · TOP 10"). The stamp animates in on
-// filter change and reads more "magazine cover" than spreadsheet.
+// Page hero — two-line italic Playfair gold-gradient treatment that mirrors
+// the landing page's "Every Film. / One True Rating Score." pattern. The
+// first line carries the page name with gold gradient + halo; the second
+// line is the cinematic tagline.
+//
+// Below that: the period stamp pill ("WEEKLY · DOMESTIC 2026 WEEK 16 ·
+// DOMESTIC · TOP 10") — animates in on filter change so the user sees
+// the filter take effect immediately.
 
 import React from "react";
 
@@ -35,87 +39,79 @@ function regionLabel(r) {
   }
 }
 
-function statusBadge(status) {
-  if (!status) return null;
-  if (status === "estimate")
-    return { label: "ESTIMATE", color: "#FFD700" };
-  if (status === "actual")
-    return { label: "ACTUAL", color: "#7be38c" };
-  if (status === "historical")
-    return { label: "HISTORICAL", color: "rgba(255,255,255,0.55)" };
-  return null;
-}
-
-function timeAgo(iso) {
-  if (!iso) return null;
-  try {
-    const t = new Date(iso).getTime();
-    const diff = Date.now() - t;
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days} day${days === 1 ? "" : "s"} ago`;
-  } catch {
-    return null;
-  }
-}
-
 export default function PageHero({
   periodLabel,
   periodType,
   region,
-  dataStatus,
-  retrievedAt,
 }) {
   const stampKey = `${periodType}-${region}-${periodLabel || ""}`;
-  const status = statusBadge(dataStatus);
-  const ago = timeAgo(retrievedAt);
 
   return (
-    <header style={{ marginBottom: 28 }}>
-      {/* Hero — uses the shared `.hero-accent` class (defined in app/globals.css)
-          so the gradient + halo match the landing page's "One True Rating Score."
-          treatment exactly. Italic 700 Playfair Display sized for a page hero. */}
+    <header
+      style={{
+        position: "relative",
+        marginBottom: 36,
+        textAlign: "left",
+      }}
+    >
+      {/* Soft gold halo behind the title — same trick the landing page uses */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: -24,
+          top: -32,
+          right: -24,
+          bottom: -16,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(ellipse at 24% 50%, rgba(255,215,0,0.10), transparent 62%)",
+          filter: "blur(4px)",
+          zIndex: -1,
+        }}
+      />
+
       <h1
-        className="hero-accent"
         style={{
           fontFamily: "'Playfair Display', serif",
-          fontStyle: "italic",
           fontWeight: 700,
-          fontSize: "clamp(44px, 6vw, 72px)",
+          fontSize: "clamp(56px, 8.4vw, 116px)",
           margin: 0,
-          lineHeight: 1.18,
-          letterSpacing: -0.5,
-          paddingBottom: "0.08em",
-          display: "block",
+          lineHeight: 1.02,
+          letterSpacing: -1.8,
+          color: "#fff",
+          textShadow: "0 0 24px rgba(255,215,0,0.10)",
+          animation: "bomHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) both",
         }}
       >
-        Box Office
+        Box Office.
+        <span
+          className="hero-accent"
+          style={{
+            display: "block",
+            fontStyle: "italic",
+            fontSize: "clamp(34px, 5vw, 70px)",
+            lineHeight: 1.18,
+            paddingBottom: "0.08em",
+            letterSpacing: -0.8,
+            marginTop: 4,
+            animation: "bomHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) 0.12s both",
+          }}
+        >
+          The Movies Topping The Charts.
+        </span>
       </h1>
-      <p
-        style={{
-          fontFamily: "'Syne', sans-serif",
-          fontSize: 16,
-          color: "rgba(255,255,255,0.72)",
-          margin: "8px 0 0",
-          letterSpacing: 0.2,
-        }}
-      >
-        The Movies Topping The Box Office Charts.
-      </p>
 
       {periodLabel && (
         <div
           key={stampKey}
           style={{
-            marginTop: 18,
+            marginTop: 22,
             display: "flex",
             flexWrap: "wrap",
             alignItems: "center",
             gap: 10,
-            animation: "bomStampIn 0.55s cubic-bezier(0.16,1,0.3,1) both",
+            animation: "bomStampIn 0.55s cubic-bezier(0.16,1,0.3,1) 0.28s both",
           }}
         >
           <span
@@ -123,13 +119,13 @@ export default function PageHero({
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              padding: "6px 12px",
+              padding: "7px 14px",
               borderRadius: 999,
               border: "1px solid rgba(255, 215, 0, 0.32)",
               background:
-                "linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,165,0,0.02))",
+                "linear-gradient(135deg, rgba(255,215,0,0.10), rgba(255,165,0,0.02))",
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 11.5,
+              fontSize: 12,
               letterSpacing: 1.6,
               color: "#FFD700",
               textTransform: "uppercase",
@@ -148,15 +144,13 @@ export default function PageHero({
       )}
 
       <style jsx global>{`
+        @keyframes bomHeroLineIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         @keyframes bomStampIn {
-          from {
-            opacity: 0;
-            transform: scale(0.96) translateY(-2px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
+          from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
     </header>
