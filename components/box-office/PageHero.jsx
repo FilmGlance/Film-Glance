@@ -106,7 +106,7 @@ export default function PageHero({
         The Movies Topping The Box Office Charts.
       </p>
 
-      {(periodLabel || dataStatus || ago) && (
+      {periodLabel && (
         <div
           key={stampKey}
           style={{
@@ -118,67 +118,32 @@ export default function PageHero({
             animation: "bomStampIn 0.55s cubic-bezier(0.16,1,0.3,1) both",
           }}
         >
-          {periodLabel && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 12px",
-                borderRadius: 999,
-                border: "1px solid rgba(255, 215, 0, 0.32)",
-                background:
-                  "linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,165,0,0.02))",
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11.5,
-                letterSpacing: 1.6,
-                color: "#FFD700",
-                textTransform: "uppercase",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span>{periodTypeLabel(periodType)}</span>
-              <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
-              <span style={{ color: "#fff", letterSpacing: 1.2 }}>
-                {periodLabel}
-              </span>
-              <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
-              <span>{regionLabel(region)}</span>
-              <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
-              <span>TOP 10</span>
-            </span>
-          )}
-          {status && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 10px",
-                borderRadius: 999,
-                background: "rgba(0,0,0,0.4)",
-                border: `1px solid ${status.color}55`,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10.5,
-                letterSpacing: 1.4,
-                color: status.color,
-              }}
-            >
-              {status.label}
-            </span>
-          )}
-          {ago && (
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11,
-                color: "rgba(255,255,255,0.4)",
-                letterSpacing: 0.6,
-              }}
-            >
-              retrieved {ago}
-            </span>
-          )}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255, 215, 0, 0.32)",
+              background:
+                "linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,165,0,0.02))",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11.5,
+              letterSpacing: 1.6,
+              color: "#FFD700",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>{periodTypeLabel(periodType)}</span>
+            <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
+            <span style={{ color: "#fff", letterSpacing: 1.2 }}>{periodLabel}</span>
+            <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
+            <span>{regionLabel(region)}</span>
+            <span style={{ color: "rgba(255,215,0,0.4)" }}>·</span>
+            <span>TOP 10</span>
+          </span>
         </div>
       )}
 

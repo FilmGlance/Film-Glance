@@ -148,49 +148,66 @@ export default function BoxOfficePage() {
           />
         )}
         {data && data.entries?.length > 0 && (
-          <div
-            className="bom-grid"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 18,
-            }}
-          >
-            {allEntries.map((entry, i) => (
-              <PosterCard
-                key={`card-${entry.search_key}-${data.period_start}`}
-                entry={entry}
-                featured={i === 0}
-                staggerDelayMs={i * 60}
-              />
-            ))}
-          </div>
+          <>
+            {/* Row 1 — featured #1, full width, horizontal hero */}
+            {heroEntry && (
+              <div style={{ marginBottom: 28 }}>
+                <PosterCard
+                  key={`hero-${heroEntry.search_key}-${data.period_start}`}
+                  entry={heroEntry}
+                  featured
+                />
+              </div>
+            )}
+            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform */}
+            <div
+              className="bom-grid"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 18,
+                gridAutoRows: "1fr",
+              }}
+            >
+              {allEntries.slice(1).map((entry, i) => (
+                <PosterCard
+                  key={`card-${entry.search_key}-${data.period_start}`}
+                  entry={entry}
+                  staggerDelayMs={i * 60}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         <style jsx global>{`
-          /* 2 cols × 4 cols × 5 cols responsive grid.
-             #1 (featured) spans the full row on tablet & mobile so it
-             stays visually elevated rather than getting cramped. */
-          @media (max-width: 1280px) {
-            .bom-grid {
-              grid-template-columns: repeat(4, 1fr) !important;
-            }
-          }
+          /* Featured #1 uses its own row (mb:28) above; below grid is
+             3×3 standard cards. Tablet collapses to 2 cols, mobile to 1.
+             grid-auto-rows: 1fr makes all card rows equal height; combined
+             with the fixed-structure StandardCard (line-clamped title +
+             flex spacer + bottom-anchored gross/stats) every card lines
+             up identically. */
           @media (max-width: 960px) {
             .bom-grid {
-              grid-template-columns: repeat(3, 1fr) !important;
-            }
-            .bom-grid > .bom-pcard-featured {
-              grid-column: span 3;
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 16px !important;
             }
           }
           @media (max-width: 640px) {
             .bom-grid {
-              grid-template-columns: repeat(2, 1fr) !important;
+              grid-template-columns: 1fr !important;
               gap: 14px !important;
             }
-            .bom-grid > .bom-pcard-featured {
-              grid-column: span 2;
+          }
+          /* Featured card collapses gracefully on narrow viewports. */
+          @media (max-width: 720px) {
+            .bom-pcard-featured {
+              grid-template-columns: 1fr !important;
+              padding: 18px !important;
+              gap: 18px !important;
+            }
+            .bom-pcard-featured .bom-feat-right h2 {
+              font-size: 32px !important;
             }
           }
         `}</style>

@@ -41,21 +41,38 @@ export default function PeriodNavigator({
     [groups],
   );
 
-  // Position the popover via viewport coords so no ancestor's overflow,
-  // backdrop-filter, or transform can clip it. Anchored to the trigger
-  // button's getBoundingClientRect — recomputed on open + on resize/scroll.
+  // Compute popover position synchronously from the trigger's bounding rect.
+  // Called by the toggle click + by resize/scroll listeners. Sets coords BEFORE
+  // the popover renders so first render is at correct viewport coords (not the
+  // 0,0 default which would render offscreen behind the sticky header).
+  const computePopoverPos = () => {
+    if (!triggerRef.current) return null;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const margin = 8;
+    const top = rect.bottom + margin;
+    const right = window.innerWidth - rect.right;
+    const maxHeight = Math.max(160, window.innerHeight - top - 16);
+    return { top, right, maxHeight };
+  };
+
+  const togglePopover = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const pos = computePopoverPos();
+    if (pos) setPopoverPos(pos);
+    setOpen(true);
+  };
+
+  // Reposition while open on resize/scroll (popover is position:fixed so it
+  // stays put visually as user scrolls — but if the trigger moves, follow it).
   useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
+    if (!open) return;
     const reposition = () => {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const margin = 8;
-      const viewportH = window.innerHeight;
-      const top = rect.bottom + margin;
-      const right = window.innerWidth - rect.right;
-      const maxHeight = Math.max(160, viewportH - top - 16);
-      setPopoverPos({ top, right, maxHeight });
+      const pos = computePopoverPos();
+      if (pos) setPopoverPos(pos);
     };
-    reposition();
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
     return () => {
@@ -129,7 +146,7 @@ export default function PeriodNavigator({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={togglePopover}
         style={{
           display: "inline-flex",
           alignItems: "center",
