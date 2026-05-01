@@ -20,6 +20,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import SiteHeader from "../SiteHeader";
+import GoldScrollbar from "../GoldScrollbar";
 import BackdropLayer from "./BackdropLayer";
 import PageHero from "./PageHero";
 import FilterBar from "./FilterBar";
@@ -162,9 +163,12 @@ export default function BoxOfficePage() {
     >
       <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
 
-      <div style={{ position: "relative", zIndex: 3 }}>
-        <SiteHeader active="boxoffice" />
-      </div>
+      {/* SiteHeader is rendered as a direct child of the page wrapper so its
+          `position: sticky` actually sticks against the body's scroll context.
+          Wrapping it in a fixed-height parent (as we did pre-round-10) makes
+          the sticky element only "stick" within that ~64px parent, which means
+          it scrolls away as soon as the user gets past 64px of scroll. */}
+      <SiteHeader active="boxoffice" />
 
       <main
         style={{
@@ -261,6 +265,9 @@ export default function BoxOfficePage() {
           }
         `}</style>
       </main>
+
+      {/* Site-wide gold scrollbar — same as landing/result pages. */}
+      <GoldScrollbar />
     </div>
   );
 }
