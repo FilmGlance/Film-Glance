@@ -1,145 +1,181 @@
 "use client";
 
-// Filter bar — period chips (Yearly → Seasonal → Monthly → Weekly), region
-// chips (Domestic active, International "Coming Soon"), and the period
-// navigator. Uses the shared `.fg-shiny` chip pattern from app/globals.css
-// so chips match the rest of the site (Favourites filter bar, modals).
+// FilterBar — three independent dropdowns (Year / Month / Week) + Region.
+//
+// Logic per user spec:
+//   • Year only       → yearly Top 10 of that year
+//   • Year + Month    → monthly Top 10 of that month
+//   • Year + Month + Week → weekly Top 10 of that week
+//
+// Selecting "(Whole year)" in the Month dropdown clears month + week (drops to
+// yearly view). Selecting "(Whole month)" in the Week dropdown clears just
+// week (drops to monthly view). Year is always required.
+//
+// Default state on page load: latest week (= year + month + week all filled to
+// the most recent ingested values), giving the user the freshest weekly chart
+// immediately. Resolved by the parent (BoxOfficePage) before this component
+// renders.
 
-import React from "react";
-import PeriodNavigator from "./PeriodNavigator";
+import React, { useMemo } from "react";
+import FilterDropdown from "./FilterDropdown";
 
-// Ordered largest-period → smallest-period per user spec (v5.12.0 round 2):
-const PERIOD_OPTIONS = [
-  { id: "yearly", label: "Yearly" },
-  { id: "seasonal", label: "Seasonal" },
-  { id: "monthly", label: "Monthly" },
-  { id: "weekly", label: "Weekly" },
+const MONTH_LABELS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-function ShinyChip({ active, disabled, comingSoon, onClick, ariaLabel, children }) {
-  const cls = [
-    "fg-shiny",
-    active ? "active" : "",
-    disabled ? "fg-shiny-disabled" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      className={cls}
-      aria-label={ariaLabel}
-      aria-pressed={active ? true : undefined}
-      title={comingSoon ? "International coverage shipping in a future update" : undefined}
-      style={{
-        // Slightly larger than the base .fg-shiny defaults to feel like
-        // primary filter affordances rather than secondary chips.
-        padding: "10px 18px",
-        fontSize: 13.5,
-      }}
-    >
-      <span className="fg-shiny-label">
-        {children}
-        {comingSoon && <span className="fg-shiny-coming-soon">Coming Soon</span>}
-      </span>
-    </button>
-  );
+const REGION_OPTIONS = [
+  { value: "domestic", label: "Domestic" },
+  { value: "international", label: "International — Coming Soon", disabled: true, italic: true },
+];
+
+function formatWeekRange(periodStart) {
+  // periodStart is YYYY-MM-DD (Monday of the ISO week). Format as "Mon DD".
+  const d = new Date(periodStart + "T00:00:00Z");
+  const end = new Date(d);
+  end.setUTCDate(d.getUTCDate() + 6);
+  const fmt = (x) =>
+    `${x.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
+  return `${fmt(d)} – ${fmt(end)}`;
 }
 
 export default function FilterBar({
-  period,
+  year,
+  month, // 1-12 (number) or null
+  week, // ISO-week period_start string (YYYY-MM-DD) or null — uniquely identifies the week
   region,
-  date,
-  availablePeriods,
-  onChange,
+  availableYearly,    // [{ period_start, period_label }, ...]
+  availableMonthly,   // ...
+  availableWeekly,    // ...
+  onChange,           // ({ year?, month?, week?, region? }) => void
 }) {
+  // --- Build year options from available_yearly ---
+  const yearOptions = useMemo(
+    () =>
+      availableYearly.map((y) => {
+        const yr = y.period_start.slice(0, 4);
+        return { value: yr, label: yr };
+      }),
+    [availableYearly],
+  );
+
+  // --- Build month options for the selected year ---
+  // Each option is { value: 1..12, label: "January", disabled: !hasData }
+  const monthOptions = useMemo(() => {
+    if (!year) return [];
+    const monthsWithData = new Set();
+    for (const m of availableMonthly) {
+      const mYear = m.period_start.slice(0, 4);
+      if (mYear !== year) continue;
+      const monthIdx = parseInt(m.period_start.slice(5, 7), 10); // 1-12
+      monthsWithData.add(monthIdx);
+    }
+    const opts = [
+      { value: null, label: "(Whole year — no month selected)", italic: true },
+      ...Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        return {
+          value: m,
+          label: MONTH_LABELS[i],
+          disabled: !monthsWithData.has(m),
+        };
+      }),
+    ];
+    return opts;
+  }, [year, availableMonthly]);
+
+  // --- Build week options for the selected year + month ---
+  // Each weekly period_start is the Monday of an ISO week. We bucket by which
+  // calendar month contains the Monday — so "Week 1 of October 2025" is the
+  // first ISO week whose Monday falls in October.
+  const weekOptions = useMemo(() => {
+    if (!year || !month) return [];
+    const monthStr = String(month).padStart(2, "0");
+    const matching = availableWeekly
+      .filter((w) => {
+        const wYear = w.period_start.slice(0, 4);
+        const wMonth = w.period_start.slice(5, 7);
+        return wYear === year && wMonth === monthStr;
+      })
+      // Sort ASC chronologically so "Week 1" is the earliest
+      .sort((a, b) => a.period_start.localeCompare(b.period_start));
+
+    const opts = [
+      { value: null, label: "(Whole month — no week selected)", italic: true },
+      ...matching.map((w, i) => ({
+        value: w.period_start,
+        label: `Week ${i + 1} — ${formatWeekRange(w.period_start)}`,
+      })),
+    ];
+    return opts;
+  }, [year, month, availableWeekly]);
+
   return (
     <section
       style={{
+        // No backdrop-filter here — moved the visual dark-glass treatment to
+        // a child wrapper so the parent doesn't create a containing block for
+        // any portal-rendered children. (Technically irrelevant since the
+        // dropdowns now use portals — but cleaner separation.)
         display: "flex",
-        flexWrap: "wrap",
-        gap: 14,
-        alignItems: "center",
-        padding: "16px 18px",
-        marginBottom: 28,
+        flexDirection: "column",
+        gap: 16,
+        padding: "18px 20px",
+        marginBottom: 32,
         background: "rgba(8,6,2,0.62)",
         border: "1px solid rgba(255,215,0,0.10)",
         borderRadius: 16,
-        backdropFilter: "blur(20px) saturate(1.1)",
-        WebkitBackdropFilter: "blur(20px) saturate(1.1)",
       }}
     >
       <div
+        className="bom-filterbar-row"
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 8,
-          alignItems: "center",
+          gap: 18,
+          alignItems: "flex-end",
         }}
       >
-        {PERIOD_OPTIONS.map((p) => (
-          <ShinyChip
-            key={p.id}
-            active={period === p.id}
-            ariaLabel={`Show ${p.label.toLowerCase()} chart`}
-            onClick={() => onChange({ period: p.id, date: null })}
-          >
-            {p.label}
-          </ShinyChip>
-        ))}
+        <FilterDropdown
+          label="Year"
+          value={year}
+          options={yearOptions}
+          onChange={(y) => onChange({ year: y, month: null, week: null })}
+          placeholder="Pick a year…"
+          width={140}
+        />
+
+        <FilterDropdown
+          label="Month"
+          value={month}
+          options={monthOptions}
+          onChange={(m) => onChange({ month: m, week: null })}
+          placeholder="(Whole year)"
+          disabled={!year}
+          width={210}
+        />
+
+        <FilterDropdown
+          label="Week"
+          value={week}
+          options={weekOptions}
+          onChange={(w) => onChange({ week: w })}
+          placeholder="(Whole month)"
+          disabled={!month}
+          width={260}
+        />
+
+        {/* Spacer pushes Region to the right */}
+        <div style={{ flex: 1, minWidth: 12 }} />
+
+        <FilterDropdown
+          label="Region"
+          value={region}
+          options={REGION_OPTIONS}
+          onChange={(r) => onChange({ region: r })}
+          width={180}
+        />
       </div>
-
-      <div
-        style={{
-          width: 1,
-          height: 26,
-          background: "rgba(255,215,0,0.18)",
-          margin: "0 4px",
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
-        <ShinyChip
-          active={region === "domestic"}
-          ariaLabel="Domestic chart"
-          onClick={() => onChange({ region: "domestic" })}
-        >
-          Domestic
-        </ShinyChip>
-        <ShinyChip
-          active={false}
-          disabled={true}
-          comingSoon={true}
-          ariaLabel="International chart — coming soon"
-        >
-          International
-        </ShinyChip>
-      </div>
-
-      <div
-        style={{
-          width: 1,
-          height: 26,
-          background: "rgba(255,215,0,0.18)",
-          margin: "0 4px",
-        }}
-      />
-
-      <PeriodNavigator
-        period={period}
-        date={date}
-        availablePeriods={availablePeriods}
-        onChange={(d) => onChange({ date: d })}
-      />
     </section>
   );
 }

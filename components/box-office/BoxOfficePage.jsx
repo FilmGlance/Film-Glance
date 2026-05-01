@@ -2,19 +2,21 @@
 
 // components/box-office/BoxOfficePage.jsx
 //
-// Main client component for /boxoffice. Owns:
-//   • URL-state wiring (period, region, date params)
-//   • Data fetch from /api/boxoffice on filter change
-//   • Composition of: BackdropLayer + PageHero + FilterBar + HeroCard
-//     (#1) + BoxOfficeRow (#2..#10) + EmptyState / SkeletonRows
+// Main client component for /boxoffice. v5.12.0 round 9 reworked the filter
+// model from a single period_type chip strip + period-navigator dropdown to
+// THREE independent dropdowns: Year, Month, Week.
 //
-// Visual register matches the existing site theme — dark + gold, italic
-// Playfair headers, Syne body, JetBrains Mono numerics. The cinematic
-// feel comes from real movie posters/backdrops, oversized gold-gradient
-// typography, count-up animation, and stagger-fade row entry. No "AI slop"
-// chrome — every element earns its visual weight.
+// Filter logic:
+//   • Year only       → yearly Top 10 (period_type=yearly)
+//   • Year + Month    → monthly Top 10 (period_type=monthly)
+//   • Year + Month + Week → weekly Top 10 (period_type=weekly)
+//
+// Default state on first load (no URL params): fetch weekly latest, derive
+// year/month/week from the response's period_start, push to URL. From there
+// URL is the source of truth — every dropdown change updates the URL, which
+// triggers a re-fetch.
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import SiteHeader from "../SiteHeader";
@@ -25,60 +27,88 @@ import PosterCard from "./PosterCard";
 import EmptyState from "./EmptyState";
 import SkeletonRows from "./SkeletonRows";
 
-const VALID_PERIODS = ["weekly", "monthly", "seasonal", "yearly"];
 const VALID_REGIONS = ["domestic", "international"];
+
+function parseInitialFilters(params) {
+  const yearParam = params?.get("year") || null;
+  const monthParam = params?.get("month");
+  const weekParam = params?.get("week") || null;
+  const regionParam = (params?.get("region") || "domestic").toLowerCase();
+  return {
+    year: yearParam,
+    month: monthParam ? parseInt(monthParam, 10) || null : null,
+    week: weekParam,
+    region: VALID_REGIONS.includes(regionParam) ? regionParam : "domestic",
+  };
+}
 
 export default function BoxOfficePage() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const periodRaw = (params?.get("period") || "weekly").toLowerCase();
-  const regionRaw = (params?.get("region") || "domestic").toLowerCase();
-  const date = params?.get("date") || null;
-
-  const period = VALID_PERIODS.includes(periodRaw) ? periodRaw : "weekly";
-  const region = VALID_REGIONS.includes(regionRaw) ? regionRaw : "domestic";
+  const [year, setYear] = useState(() => parseInitialFilters(params).year);
+  const [month, setMonth] = useState(() => parseInitialFilters(params).month);
+  const [week, setWeek] = useState(() => parseInitialFilters(params).week);
+  const [region, setRegion] = useState(() => parseInitialFilters(params).region);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const setFilter = useCallback(
-    (patch) => {
-      const next = new URLSearchParams(params?.toString() || "");
-      Object.entries(patch).forEach(([k, v]) => {
-        if (v == null || v === "") next.delete(k);
-        else next.set(k, v);
-      });
-      router.replace(`/boxoffice?${next.toString()}`, { scroll: false });
-    },
-    [params, router],
-  );
-
-  // International is locked v1 — clicks are no-op, displays "Coming Soon"
+  // International is locked v1 — silently force back to domestic
   useEffect(() => {
-    if (region === "international") {
-      // Force back to domestic in URL silently
-      const next = new URLSearchParams(params?.toString() || "");
-      next.set("region", "domestic");
-      router.replace(`/boxoffice?${next.toString()}`, { scroll: false });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (region === "international") setRegion("domestic");
   }, [region]);
 
+  // Derive period_type + date for the API call from the current filter state
+  const apiQuery = useMemo(() => {
+    if (!year) return { period: "weekly" }; // initial fetch — latest weekly
+    if (week) return { period: "weekly", date: week };
+    if (month) return { period: "monthly", date: `${year}-${String(month).padStart(2, "0")}-01` };
+    return { period: "yearly", date: `${year}-01-01` };
+  }, [year, month, week]);
+
+  // Push current filter state to URL (replaces, no scroll, doesn't add history)
+  const syncURL = useCallback(
+    (next) => {
+      const qs = new URLSearchParams();
+      if (next.year) qs.set("year", next.year);
+      if (next.month != null) qs.set("month", String(next.month));
+      if (next.week) qs.set("week", next.week);
+      if (next.region && next.region !== "domestic") qs.set("region", next.region);
+      const q = qs.toString();
+      router.replace(q ? `/boxoffice?${q}` : "/boxoffice", { scroll: false });
+    },
+    [router],
+  );
+
+  // Fetch box office data whenever the API query changes
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const qs = new URLSearchParams({ period, region });
-    if (date) qs.set("date", date);
+    const qs = new URLSearchParams({ period: apiQuery.period, region });
+    if (apiQuery.date) qs.set("date", apiQuery.date);
     fetch(`/api/boxoffice?${qs.toString()}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`API ${r.status}`);
         return r.json();
       })
       .then((d) => {
-        if (!cancelled) setData(d);
+        if (cancelled) return;
+        setData(d);
+        // First-load default-derivation: if the URL had no year, take it
+        // from the response's period_start and seed the dropdowns.
+        if (!year && d?.period_start) {
+          const ps = d.period_start;
+          const y = ps.slice(0, 4);
+          const m = parseInt(ps.slice(5, 7), 10) || null;
+          const w = ps;
+          setYear(y);
+          setMonth(m);
+          setWeek(w);
+          syncURL({ year: y, month: m, week: w, region });
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(String(e));
@@ -89,7 +119,35 @@ export default function BoxOfficePage() {
     return () => {
       cancelled = true;
     };
-  }, [period, region, date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiQuery.period, apiQuery.date, region]);
+
+  // Handle filter changes from FilterBar
+  const onFilterChange = useCallback(
+    (patch) => {
+      let nextYear = year;
+      let nextMonth = month;
+      let nextWeek = week;
+      let nextRegion = region;
+      if ("year" in patch) {
+        nextYear = patch.year;
+        nextMonth = null;
+        nextWeek = null;
+      }
+      if ("month" in patch) {
+        nextMonth = patch.month;
+        nextWeek = null;
+      }
+      if ("week" in patch) nextWeek = patch.week;
+      if ("region" in patch) nextRegion = patch.region;
+      setYear(nextYear);
+      setMonth(nextMonth);
+      setWeek(nextWeek);
+      setRegion(nextRegion);
+      syncURL({ year: nextYear, month: nextMonth, week: nextWeek, region: nextRegion });
+    },
+    [year, month, week, region, syncURL],
+  );
 
   const allEntries = (data?.entries || []).slice(0, 10);
   const heroEntry = allEntries[0] || null;
@@ -118,20 +176,17 @@ export default function BoxOfficePage() {
           fontFamily: "'Syne', sans-serif",
         }}
       >
-        <PageHero
-          periodLabel={data?.period_label}
-          periodType={period}
-          region={region}
-          dataStatus={data?.data_status}
-          retrievedAt={data?.retrieved_at}
-        />
+        <PageHero />
 
         <FilterBar
-          period={period}
+          year={year}
+          month={month}
+          week={week}
           region={region}
-          date={date}
-          availablePeriods={data?.available_periods || []}
-          onChange={setFilter}
+          availableYearly={data?.available_yearly || []}
+          availableMonthly={data?.available_monthly || []}
+          availableWeekly={data?.available_weekly || []}
+          onChange={onFilterChange}
         />
 
         {loading && !data && <SkeletonRows />}
@@ -159,9 +214,7 @@ export default function BoxOfficePage() {
                 />
               </div>
             )}
-            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform.
-                Cards capped at 300px wide on desktop so posters don't dominate
-                the page; grid centers any leftover space. */}
+            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform */}
             <div
               className="bom-grid"
               style={{
@@ -184,12 +237,6 @@ export default function BoxOfficePage() {
         )}
 
         <style jsx global>{`
-          /* Featured #1 uses its own row (mb:28) above; below grid is
-             3×3 standard cards. Tablet collapses to 2 cols, mobile to 1.
-             grid-auto-rows: 1fr makes all card rows equal height; combined
-             with the fixed-structure StandardCard (line-clamped title +
-             flex spacer + bottom-anchored gross/stats) every card lines
-             up identically. */
           @media (max-width: 960px) {
             .bom-grid {
               grid-template-columns: repeat(2, minmax(0, 300px)) !important;
@@ -202,7 +249,6 @@ export default function BoxOfficePage() {
               gap: 16px !important;
             }
           }
-          /* Featured card collapses gracefully on narrow viewports. */
           @media (max-width: 720px) {
             .bom-pcard-featured {
               grid-template-columns: 1fr !important;

@@ -83,31 +83,53 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 1. Discover available periods for the navigator dropdown
-  const { data: availData, error: availErr } = await supabaseAdmin
-    .from("box_office_metrics")
-    .select("period_start, period_label")
-    .eq("period_type", period)
-    .eq("region", region)
-    .order("period_start", { ascending: false });
+  // 1. Discover available periods. v5.12.0 round 9: the new three-dropdown
+  // UI (Year / Month / Week) needs all THREE period_type catalogs available
+  // at once, not just the currently-selected one. Fetch in parallel.
+  async function fetchAvail(pt: string) {
+    const { data, error } = await supabaseAdmin
+      .from("box_office_metrics")
+      .select("period_start, period_label")
+      .eq("period_type", pt)
+      .eq("region", region)
+      .order("period_start", { ascending: false });
+    if (error) throw error;
+    const seen = new Set<string>();
+    return (data || [])
+      .filter((r: any) => {
+        if (!r.period_start || seen.has(r.period_start)) return false;
+        seen.add(r.period_start);
+        return true;
+      })
+      .map((r: any) => ({
+        period_start: r.period_start as string,
+        period_label: r.period_label as string,
+      }));
+  }
 
-  if (availErr) {
-    console.error("[boxoffice-read] available_periods query failed:", availErr);
+  let available_yearly: { period_start: string; period_label: string }[] = [];
+  let available_monthly: { period_start: string; period_label: string }[] = [];
+  let available_weekly: { period_start: string; period_label: string }[] = [];
+  try {
+    [available_yearly, available_monthly, available_weekly] = await Promise.all([
+      fetchAvail("yearly"),
+      fetchAvail("monthly"),
+      fetchAvail("weekly"),
+    ]);
+  } catch (err) {
+    console.error("[boxoffice-read] available periods query failed:", err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 
-  // Dedup by period_start (one row per movie, but we want distinct periods)
-  const seen = new Set<string>();
-  const available_periods = (availData || [])
-    .filter((r) => {
-      if (!r.period_start || seen.has(r.period_start)) return false;
-      seen.add(r.period_start);
-      return true;
-    })
-    .map((r) => ({
-      period_start: r.period_start as string,
-      period_label: r.period_label as string,
-    }));
+  // Currently-selected period's catalog (for the existing API contract)
+  const available_periods =
+    period === "yearly"
+      ? available_yearly
+      : period === "monthly"
+        ? available_monthly
+        : period === "weekly"
+          ? available_weekly
+          : [];
 
   if (available_periods.length === 0) {
     return NextResponse.json({
@@ -120,6 +142,9 @@ export async function GET(req: NextRequest) {
       data_status: null,
       source: null,
       available_periods: [],
+      available_yearly,
+      available_monthly,
+      available_weekly,
       entries: [],
     });
   }
@@ -159,6 +184,9 @@ export async function GET(req: NextRequest) {
       data_status: null,
       source: null,
       available_periods,
+      available_yearly,
+      available_monthly,
+      available_weekly,
       entries: [],
     });
   }
@@ -229,6 +257,9 @@ export async function GET(req: NextRequest) {
     data_status: head.data_status,
     source: head.source,
     available_periods,
+    available_yearly,
+    available_monthly,
+    available_weekly,
     entries,
   });
 }
