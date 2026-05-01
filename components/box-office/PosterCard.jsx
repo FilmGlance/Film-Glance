@@ -183,12 +183,12 @@ function FeaturedCard({ entry }) {
                 style={{
                   marginTop: 10,
                   fontFamily: "'Syne', sans-serif",
-                  fontSize: 16,
-                  color: "rgba(255,255,255,0.72)",
+                  fontSize: 17,
+                  color: "rgba(255,255,255,0.78)",
                   letterSpacing: 0.2,
                 }}
               >
-                {entry.director ? <span>Dir. {entry.director}</span> : null}
+                {entry.director ? <span>Director: {entry.director}</span> : null}
                 {entry.director && entry.year ? <span> · </span> : null}
                 {entry.year ? <span>{entry.year}</span> : null}
               </div>
@@ -377,31 +377,49 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
             </div>
           )}
 
-          {/* Big italic Playfair rank overlay — gold gradient with halo */}
+          {/* Rank — gold-gradient italic Playfair number wrapped in a dark
+              frosted-glass pill so it stays high-contrast over bright poster
+              backgrounds (the bare gold text was unreadable on yellow Hoppers
+              / Normal posters). */}
           <div
             style={{
               position: "absolute",
               top: 12,
               left: 12,
-              fontFamily: "'Playfair Display', serif",
-              fontStyle: "italic",
-              fontWeight: 700,
-              fontSize: 64,
-              lineHeight: 0.9,
-              background:
-                "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              color: "transparent",
-              filter:
-                "drop-shadow(0 4px 8px rgba(0,0,0,0.95)) drop-shadow(0 0 18px rgba(255,215,0,0.55))",
-              letterSpacing: -2,
+              padding: "4px 16px",
+              borderRadius: 14,
+              background: "rgba(8, 6, 2, 0.78)",
+              backdropFilter: "blur(14px) saturate(1.1)",
+              WebkitBackdropFilter: "blur(14px) saturate(1.1)",
+              border: "1px solid rgba(255, 215, 0, 0.42)",
+              boxShadow:
+                "0 6px 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,215,0,0.18), inset 0 1px 0 rgba(255,215,0,0.16)",
               userSelect: "none",
               pointerEvents: "none",
+              lineHeight: 0.9,
             }}
           >
-            #{entry.rank}
+            <span
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontStyle: "italic",
+                fontWeight: 700,
+                fontSize: 48,
+                lineHeight: 0.9,
+                background:
+                  "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                color: "transparent",
+                filter: "drop-shadow(0 0 12px rgba(255,215,0,0.45))",
+                letterSpacing: -1.5,
+                display: "inline-block",
+                paddingBottom: "0.06em",
+              }}
+            >
+              #{entry.rank}
+            </span>
           </div>
 
           {/* Subtle bottom-of-poster gradient for legibility if title intrudes */}
@@ -452,8 +470,8 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
           <div
             style={{
               fontFamily: "'Syne', sans-serif",
-              fontSize: 11.5,
-              color: "rgba(255,255,255,0.62)",
+              fontSize: 13.5,
+              color: "rgba(255,255,255,0.72)",
               letterSpacing: 0.2,
               lineHeight: 1.35,
               whiteSpace: "nowrap",
@@ -462,7 +480,7 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
               minHeight: "1.35em",
             }}
           >
-            {entry.director ? <span>Dir. {entry.director}</span> : null}
+            {entry.director ? <span>Director: {entry.director}</span> : null}
             {entry.director && entry.year ? <span> · </span> : null}
             {entry.year ? <span>{entry.year}</span> : null}
           </div>
@@ -475,7 +493,7 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
             style={{
               fontFamily: "'Playfair Display', serif",
               fontWeight: 700,
-              fontSize: 28,
+              fontSize: 34,
               lineHeight: 1,
               background:
                 "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
@@ -483,7 +501,7 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
               backgroundClip: "text",
               WebkitTextFillColor: "transparent",
               color: "transparent",
-              filter: "drop-shadow(0 0 10px rgba(255,215,0,0.32))",
+              filter: "drop-shadow(0 0 12px rgba(255,215,0,0.38))",
               letterSpacing: -0.5,
               paddingBottom: "0.06em",
               whiteSpace: "nowrap",
@@ -526,7 +544,7 @@ function StandardStat({ label, value, isScore, scoreLoaded }) {
         style={{
           fontFamily: isScore ? "'Playfair Display', serif" : "'Syne', sans-serif",
           fontWeight: 700,
-          fontSize: 15,
+          fontSize: 18,
           lineHeight: 1,
           color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
           letterSpacing: -0.2,
@@ -539,12 +557,13 @@ function StandardStat({ label, value, isScore, scoreLoaded }) {
       </div>
       <div
         style={{
-          marginTop: 4,
+          marginTop: 5,
           fontFamily: "'Syne', sans-serif",
-          fontSize: 9.5,
+          fontSize: 11,
           letterSpacing: 1.2,
           textTransform: "uppercase",
-          color: "rgba(255,255,255,0.45)",
+          color: "rgba(255,255,255,0.55)",
+          fontWeight: 600,
         }}
       >
         {label}

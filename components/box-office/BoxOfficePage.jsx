@@ -159,13 +159,16 @@ export default function BoxOfficePage() {
                 />
               </div>
             )}
-            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform */}
+            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform.
+                Cards capped at 300px wide on desktop so posters don't dominate
+                the page; grid centers any leftover space. */}
             <div
               className="bom-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 18,
+                gridTemplateColumns: "repeat(3, minmax(0, 300px))",
+                justifyContent: "center",
+                gap: 22,
                 gridAutoRows: "1fr",
               }}
             >
@@ -189,14 +192,14 @@ export default function BoxOfficePage() {
              up identically. */
           @media (max-width: 960px) {
             .bom-grid {
-              grid-template-columns: repeat(2, 1fr) !important;
-              gap: 16px !important;
+              grid-template-columns: repeat(2, minmax(0, 300px)) !important;
+              gap: 18px !important;
             }
           }
           @media (max-width: 640px) {
             .bom-grid {
-              grid-template-columns: 1fr !important;
-              gap: 14px !important;
+              grid-template-columns: minmax(0, 360px) !important;
+              gap: 16px !important;
             }
           }
           /* Featured card collapses gracefully on narrow viewports. */
