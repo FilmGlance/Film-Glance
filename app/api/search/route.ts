@@ -483,7 +483,7 @@ export async function POST(req: NextRequest) {
           ? parseInt(releaseInfo.releaseDate.substring(0, 4))
           : pipelineYear;
       } else {
-        // Check similarity. Two complementary heuristics:
+        // Check similarity. Three complementary heuristics:
         //
         //   (a) Substring containment with close length — handles "the matrix"
         //       vs "Matrix" or short typos where the user dropped/added a few
@@ -492,6 +492,15 @@ export async function POST(req: NextRequest) {
         //   (b) ORDERED word-subsequence — handles "lord rings fellowship"
         //       vs "The Lord of the Rings: The Fellowship of the Ring" where
         //       every query word appears in the title in the same order.
+        //
+        //   (c) Stripped-whitespace containment (v5.12.4) — handles the case
+        //       where TMDB stores a canonical title concatenated with no
+        //       spaces ("EverAfter") while the user types the longer human-
+        //       readable form ("Ever After: A Cinderella Story"). Strip ALL
+        //       spaces and check if either side is a substring of the other.
+        //       Min-length 5 guard prevents 2-3-char coincidences. This
+        //       sidesteps the lenRatio gate for the "user typed full
+        //       canonical title; TMDB has shorthand" case.
         //
         // v5.12.2 swap from set-based wordMatch → ordered-subsequence: the
         // old heuristic accepted any 75%+ word overlap regardless of order,
@@ -511,7 +520,13 @@ export async function POST(req: NextRequest) {
         }
         const isOrderedSubsequence = qWords.length > 0 && qIdx === qWords.length;
 
-        if (isCloseSubstring || isOrderedSubsequence) {
+        const sQ = normQ.replace(/\s+/g, "");
+        const sT = normT.replace(/\s+/g, "");
+        const minStrippedLen = Math.min(sQ.length, sT.length);
+        const isStrippedContains =
+          minStrippedLen >= 5 && (sQ.includes(sT) || sT.includes(sQ));
+
+        if (isCloseSubstring || isOrderedSubsequence || isStrippedContains) {
           // Close enough — redirect pipeline to use the correct TMDB title
           console.log(`[title-gate] Redirecting "${query}" → "${releaseInfo.officialTitle}" (close match)`);
           pipelineTitle = releaseInfo.officialTitle;

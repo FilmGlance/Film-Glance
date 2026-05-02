@@ -1,5 +1,58 @@
 # Film Glance — Conversation Summary
 
+## Session: May 2, 2026 (late PM) — v5.12.4 stripped-containment match (Ever After: A Cinderella Story)
+
+User retested staging post-v5.12.3 and reported: typing the full IMDb canonical title `"Ever After: A Cinderella Story"` returns 404 / "Did you mean…" instead of resolving to the 1998 Drew Barrymore film. Screenshots showed Cinderella: After Ever After (2019) and A Cinderella Story (2004) as the DYM suggestions — clearly wrong matches.
+
+### Diagnosis (via scratch/trace-ever-after-full.mjs)
+
+1. TMDB stores the 1998 Drew Barrymore film as just `"EverAfter"` (one word, no space).
+2. searchMovie's parallel original+concat search returns ONLY EverAfter 1998 (the concat search "EverAfter:ACinderellaStory" returns 0 because TMDB's tokenizer doesn't split it).
+3. searchMovie's Stage 1 (whitespace-insensitive exact match) fails: stripped query `everafteracinderellastory` ≠ stripped title `everafter`.
+4. searchMovie's Stage 2 (ordered word-subsequence) fails: qWords `[ever, after, cinderella, story]` can't be a subsequence of tWords `[everafter]` (only 1 word in TMDB's title).
+5. searchMovie's Stage 3 returns EverAfter as the fallback (correctly).
+6. Title gate then rejects: `normQ="ever after a cinderella story"` (29 chars) vs `normT="everafter"` (9 chars). lenRatio = 0.31, well below the 0.75 substring gate. Word-subsequence fails for same reason as Stage 2.
+7. → 404 / DYM.
+
+### Fix (v5.12.4)
+
+Added a **stripped-whitespace containment check** at both the search layer and the title gate:
+
+- `lib/tmdb.ts` searchMovie: new Stage 3 (between ordered-subsequence and the original results[0] fallback) — strip ALL whitespace from query and each candidate title; if the shorter side is ≥5 chars and either is a substring of the other, accept.
+- `app/api/search/route.ts` title gate (line 461): added `isStrippedContains` to the OR with `isCloseSubstring` and `isOrderedSubsequence`.
+
+For "Ever After: A Cinderella Story" vs "EverAfter": stripped query `everafteracinderellastory`, stripped title `everafter`, `everafter` ⊂ `everafteracinderellastory` → MATCH.
+
+The 5-char minimum prevents 2-3-letter coincidences (e.g., short-query "lol" matching some random title containing "lol").
+
+### Validation
+
+- `scratch/test-title-match.mjs` expanded to 46 cases including the user's exact failing input ("Ever After: A Cinderella Story" + lowercase variant). 44/46 pass. Both new cases resolve correctly to EverAfter (1998).
+- Trace script (`scratch/trace-ever-after-full.mjs`) confirms `isStrippedContains` evaluates true for the user's exact query.
+- The 2 remaining failures (Mad Max 2016, The Matrix 2004) are unrelated TMDB metadata oddities from concat-search noise — both technically valid exact matches per the no-popularity-filter rule.
+- Stale cache entries (`ever after`, `ever after: a cinderella story`, `everafter` etc.) cleared via service-role key so the next user search re-runs the pipeline.
+
+### What rides on PR #53
+
+PR #53 (staging→main) was opened just before this fix, so it'll automatically pick up the new commit when staging is updated. Bundled scope:
+- v5.12.1: Ever After Dutch poster + mobile nav restore
+- v5.12.2: search title-match (Ever After → EverAfter via parallel concat search + 3-stage match)
+- v5.12.3: same-title ambiguity picker (Carrie/Pet Sematary/etc. → "There are a few with that name.")
+- v5.12.4: stripped-containment fallback (this fix)
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `app/api/search/route.ts` | Title gate: added `isStrippedContains` check |
+| `lib/tmdb.ts` | searchMovie: new stripped-containment Stage 3 between ordered-subsequence and results[0] fallback |
+| `tech-specs.md` | New ✅ CURRENT STATE row; old PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/trace-ever-after-full.mjs`, `scratch/clear-ever-after-full.mjs`.
+
+---
+
 ## Session: May 2, 2026 (PM) — v5.12.2 search title-match fix + v5.12.3 same-title ambiguity picker
 
 PR #52 (v5.12.0 /boxoffice + rounds 1-14b) merged at 01:25 UTC. v5.12.1 (Ever After Dutch poster + mobile nav) was committed to staging at 02:06 — 41 minutes too late to ride along, so it sits unmerged. User reported two more bugs after that, plus scoped a new disambiguation feature.

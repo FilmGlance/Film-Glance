@@ -184,6 +184,32 @@ async function searchMovie(
       return orderedMatches[0];
     }
 
+    // v5.12.4: stripped-containment match — handles the case where TMDB
+    // stores a canonical title concatenated with no spaces ("EverAfter")
+    // while the user types the human-readable longer form ("Ever After:
+    // A Cinderella Story"). Both Stage 1 (whitespace-insensitive exact)
+    // and Stage 2 (ordered word subsequence) miss this because: Stage 1
+    // requires equality after stripping, and the longer query has extra
+    // words; Stage 2 needs the TMDB title's words to span the query in
+    // order, but TMDB's title has fewer words. Stripped-containment
+    // catches it: "everafter" ⊂ "everafteracinderellastory". Min length
+    // 5 guard avoids 2-3-letter coincidences.
+    const containedMatches = results.filter((r) => {
+      const tStripped = normExact(r.title);
+      const minLen = Math.min(tStripped.length, queryExact.length);
+      if (minLen < 5) return false;
+      return tStripped.includes(queryExact) || queryExact.includes(tStripped);
+    });
+    if (containedMatches.length > 0) {
+      if (year) {
+        const yr = containedMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return containedMatches[0];
+    }
+
     if (year) {
       const yr = results.find(
         (r) => r.release_date && r.release_date.startsWith(String(year)),
