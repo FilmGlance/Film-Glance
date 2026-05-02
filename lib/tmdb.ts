@@ -73,48 +73,122 @@ async function searchMovie(
 ): Promise<TMDBMovie | null> {
   if (!TMDB_KEY) return null;
   try {
-    const params = new URLSearchParams({
-      api_key: TMDB_KEY,
-      query: title,
-      include_adult: "false",
-      language: "en-US",
-      region: "US",
-    });
-    // Use primary_release_year for strict matching (avoids sequels)
-    if (year && year > 1900) params.set("primary_release_year", String(year));
-
-    const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    let results = data.results as TMDBMovie[];
-    if (!results || results.length === 0) {
-      // Retry without year constraint if strict search found nothing
-      if (year) {
-        const params2 = new URLSearchParams({
-          api_key: TMDB_KEY,
-          query: title,
-          include_adult: "false",
-          language: "en-US",
-          region: "US",
-        });
-        const res2 = await fetch(`${TMDB_BASE}/search/movie?${params2}`, { signal: AbortSignal.timeout(5000) });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          results = data2.results as TMDBMovie[];
-        }
-      }
-      if (!results || results.length === 0) return null;
+    async function tmdbFetch(q: string, withYear: boolean): Promise<TMDBMovie[]> {
+      const p = new URLSearchParams({
+        api_key: TMDB_KEY!,
+        query: q,
+        include_adult: "false",
+        language: "en-US",
+        region: "US",
+      });
+      if (withYear && year && year > 1900) p.set("primary_release_year", String(year));
+      const r = await fetch(`${TMDB_BASE}/search/movie?${p}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return (d.results as TMDBMovie[]) || [];
     }
 
-    // Prefer exact year match
+    // v5.12.2: parallel search — original query + concatenated form. TMDB
+    // stores some canonical titles without spaces ("EverAfter" 1998 Drew
+    // Barrymore vs the user's "Ever After"), and the spaced search returns
+    // 100+ unrelated obscure results before surfacing the no-space match.
+    // Concat results lead the merged list so the canonical no-space title
+    // wins the "first exact match in natural order" tiebreaker — for
+    // queries without whitespace this is a no-op (concat = original).
+    const wantConcat = /\s/.test(title);
+    const concatenated = title.replace(/\s+/g, "");
+    let [rOrig, rConcat] = await Promise.all([
+      tmdbFetch(title, true),
+      wantConcat ? tmdbFetch(concatenated, true) : Promise.resolve([]),
+    ]);
+
+    if (rOrig.length === 0 && rConcat.length === 0 && year) {
+      [rOrig, rConcat] = await Promise.all([
+        tmdbFetch(title, false),
+        wantConcat ? tmdbFetch(concatenated, false) : Promise.resolve([]),
+      ]);
+    }
+
+    const seen = new Set<number>();
+    const results: TMDBMovie[] = [];
+    // Concat first so its top result leads the merge; original next.
+    // Skip entries with no release_date — those are TMDB placeholders /
+    // unfinished metadata records that would otherwise win the "first
+    // exact match" tiebreaker (e.g. "It Follows ()" with no date).
+    for (const r of [...rConcat, ...rOrig]) {
+      if (!r.release_date || r.release_date.length === 0) continue;
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        results.push(r);
+      }
+    }
+    if (results.length === 0) return null;
+
+    // v5.12.2: title-match preference with NO vote_count filtering (per user
+    // direction — an obscure exact-title match can be the user's real
+    // intent). Tiebreaker among multiple exact matches is "first in merged
+    // order", which respects TMDB's own popularity-driven ranking; the
+    // concat-form search results lead the merge so canonical no-space TMDB
+    // titles ("EverAfter" 1998) come ahead of the spaced-search noise.
+    //
+    // Two normalizations:
+    //   normExact — case-insensitive, strips leading article ("The"/"A"/"An")
+    //     AND all whitespace + punctuation. Lets "Ever After" match "EverAfter"
+    //     and "Avengers" match "The Avengers".
+    //   normWords — case-insensitive, keeps spaces. For ordered-subsequence
+    //     matching where word order matters (rejects "After Ever Happy" for
+    //     query "Ever After").
+    //
+    // STAGE 1: whitespace+article-insensitive exact match. If any exist,
+    //   prefer year hint, else FIRST in merged order.
+    // STAGE 2: ordered-word-subsequence. Same year/first preference.
+    // STAGE 3 (fallback): TMDB's first result.
+    const normExact = (s: string) =>
+      (s || "")
+        .toLowerCase()
+        .replace(/^(the|a|an)\s+/, "")
+        .replace(/[\s:.,!?\-_'"&]+/g, "");
+    const normWords = (s: string) =>
+      (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+
+    const queryExact = normExact(title);
+    const exactMatches = results.filter((r) => normExact(r.title) === queryExact);
+    if (exactMatches.length > 0) {
+      if (year) {
+        const yr = exactMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return exactMatches[0];
+    }
+
+    const qWords = normWords(title).split(" ").filter((w) => w.length > 1);
+    const orderedMatches = results.filter((r) => {
+      const tWords = normWords(r.title || "").split(" ").filter((w) => w.length > 1);
+      let qi = 0;
+      for (const tw of tWords) {
+        if (qi < qWords.length && tw === qWords[qi]) qi++;
+      }
+      return qWords.length > 0 && qi === qWords.length;
+    });
+    if (orderedMatches.length > 0) {
+      if (year) {
+        const yr = orderedMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return orderedMatches[0];
+    }
+
     if (year) {
-      const exactYear = results.find(
-        (r) => r.release_date && r.release_date.startsWith(String(year))
+      const yr = results.find(
+        (r) => r.release_date && r.release_date.startsWith(String(year)),
       );
-      if (exactYear) return exactYear;
+      if (yr) return yr;
     }
     return results[0];
   } catch {

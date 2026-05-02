@@ -459,16 +459,35 @@ export async function POST(req: NextRequest) {
           ? parseInt(releaseInfo.releaseDate.substring(0, 4))
           : pipelineYear;
       } else {
-        // Check similarity: substring with close length, or high word overlap
+        // Check similarity. Two complementary heuristics:
+        //
+        //   (a) Substring containment with close length — handles "the matrix"
+        //       vs "Matrix" or short typos where the user dropped/added a few
+        //       characters but the bulk of the string matches.
+        //
+        //   (b) ORDERED word-subsequence — handles "lord rings fellowship"
+        //       vs "The Lord of the Rings: The Fellowship of the Ring" where
+        //       every query word appears in the title in the same order.
+        //
+        // v5.12.2 swap from set-based wordMatch → ordered-subsequence: the
+        // old heuristic accepted any 75%+ word overlap regardless of order,
+        // which mismatched "ever after" (1998) → "After Ever Happy" (2022).
+        // Both query words appear in the TMDB title (overlap=2/2=100%) but
+        // not in the right order, so it should NOT match. Ordered subsequence
+        // catches this: "after, ever, happy" never satisfies "ever, after"
+        // because once we pass "ever" we'd need "after" to come AFTER it.
         const lenRatio = Math.min(normQ.length, normT.length) / Math.max(normQ.length, normT.length);
         const isCloseSubstring = (normT.includes(normQ) || normQ.includes(normT)) && lenRatio >= 0.75;
-        const wordsQ = new Set(normQ.split(" ").filter(w => w.length > 1));
-        const wordsT = new Set(normT.split(" ").filter(w => w.length > 1));
-        const overlap = [...wordsQ].filter(w => wordsT.has(w)).length;
-        const minWords = Math.min(wordsQ.size, wordsT.size);
-        const wordMatch = minWords > 0 && overlap / minWords >= 0.75;
 
-        if (isCloseSubstring || wordMatch) {
+        const qWords = normQ.split(" ").filter(w => w.length > 1);
+        const tWords = normT.split(" ").filter(w => w.length > 1);
+        let qIdx = 0;
+        for (const tw of tWords) {
+          if (qIdx < qWords.length && tw === qWords[qIdx]) qIdx++;
+        }
+        const isOrderedSubsequence = qWords.length > 0 && qIdx === qWords.length;
+
+        if (isCloseSubstring || isOrderedSubsequence) {
           // Close enough — redirect pipeline to use the correct TMDB title
           console.log(`[title-gate] Redirecting "${query}" → "${releaseInfo.officialTitle}" (close match)`);
           pipelineTitle = releaseInfo.officialTitle;
