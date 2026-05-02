@@ -1,5 +1,70 @@
 # Film Glance — Conversation Summary
 
+## Session: May 2, 2026 (continued) — v5.12.1 hotfix (TMDB poster localization + restore mobile nav)
+
+After PR #52 was opened, user reported two bugs needing fix-before-merge.
+
+### Bug 1: Ever After poster wrong (Dutch instead of English)
+
+User's tester searched "Ever after" — the result page rendered with a Dutch DVD compilation cover ("Lang & Gelukkig", the Dutch theatrical title for Ever After) instead of the English poster. Title, year, director, and tagline were correct; only the poster was foreign.
+
+**Root cause:** TMDB's `/search/movie` and `/movie/{id}` endpoints return a community-curated `poster_path` that doesn't honor user language preference unless explicitly told. The site's TMDB calls in `lib/tmdb.ts` and `app/api/suggest/route.ts` were calling without `language=en-US` / `region=US`, so for some titles the primary poster TMDB ranked highest happened to be a non-English upload (Ever After's most-voted poster on TMDB is the Dutch DVD cover).
+
+**Fix:**
+- Added `language=en-US&region=US` to every `/search/movie` call.
+- Added new `fetchBestEnglishPoster(movieId)` helper in `lib/tmdb.ts` that hits `/movie/{id}/images?include_image_language=en,null` and picks the highest-voted poster (rank: explicit `en` > language-agnostic `null` > other; tiebreaker `vote_average` desc). Falls back to the search-result `poster_path` when TMDB has no English poster.
+- Wired into `enrichWithTMDB` (parallel to existing fetches), `enrichBoxOfficeWithTMDB` (bundled into the existing `/movie/{id}` call via `append_to_response=images` so no extra round-trip), and the suggest endpoint's `tmdbDetails`/`tmdbSuggestions`.
+- Deleted the stale `ever after` cache entry in `movie_cache` via service-role key so the user's next search re-runs the pipeline with the new TMDB code.
+
+### Bug 2: Discussion Forum + Box Office nav links missing on mobile (repeat mobile-parity violation)
+
+User reported BOTH nav links hidden on a real iPhone visit. CLAUDE.md's "Mobile parity is non-negotiable" section was already in place (Apr 29, 2026, after the v5.10.34 mobile audit) — this was a repeat violation that crept in when the Box Office nav was added in round 1.
+
+**Root cause:** `components/film-glance.jsx:2891-2893` and `components/SiteHeader.jsx:161-163` had:
+```css
+@media (max-width: 560px) {
+  .nav-discuss-btn { display: none !important; }
+  .nav-boxoffice-btn { display: none !important; }  // film-glance.jsx only
+}
+```
+
+**Fix:** removed both `display: none` rules. The links now collapse to icon-only on mobile via the existing `.nav-forum-label { display: none }` rule at ≤520px — they remain tappable on every viewport down to 360px.
+
+### Memory hardcoding (per user demand)
+
+User said: *"I thought we hard coded that you HAVE to consider and implement ANY site change to mobile for all changes? Please HARD CODE this into claude memory file as well as our bible docs"*
+
+Done:
+- Saved `~/.claude/projects/.../memory/feedback_mobile_nav_never_hidden.md` with the rule + a pre-commit grep check (`\.nav-[a-z-]+\s*\{[^}]*display:\s*none`) so the rule survives across sessions.
+- Added a pointer to `MEMORY.md`.
+- Reinforced CLAUDE.md's mobile-parity section with an explicit nav-link bullet pointing back to the same grep check.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | `language=en-US&region=US` on `/search/movie`; new `fetchBestEnglishPoster` helper; `enrichWithTMDB` and `enrichBoxOfficeWithTMDB` now prefer English posters |
+| `app/api/suggest/route.ts` | Same language/region params + English-poster selection in `tmdbDetails` and `tmdbSuggestions` |
+| `components/film-glance.jsx` | Removed `.nav-discuss-btn` and `.nav-boxoffice-btn` `display: none` rules at ≤560px |
+| `components/SiteHeader.jsx` | Removed `.nav-discuss-btn` `display: none` rule at ≤560px |
+| `CLAUDE.md` | New nav-link bullet under the mobile-parity section + pre-commit grep check |
+| `~/.claude/projects/.../memory/feedback_mobile_nav_never_hidden.md` | NEW — feedback memory hardcoding the rule |
+| `~/.claude/projects/.../memory/MEMORY.md` | New pointer to the feedback memory |
+| `tech-specs.md` | New ✅ CURRENT STATE row for v5.12.1; old May 2 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Side artifact: `scratch/invalidate-ever-after.mjs` (gitignored) used to delete the stale cache entry.
+
+### Lesson logged
+
+The Box Office nav link was added in round 1 (Apr 30) and the `.nav-boxoffice-btn { display: none }` rule rode along — a fresh nav addition that didn't get a mobile-parity check. The mobile-parity rule was followed for new components (cards, filters, modals) but not retroactively applied to the headers when a nav link was added. Going forward: any change to a header nav must trigger a 360px viewport check, codified in CLAUDE.md.
+
+### Next steps
+
+User re-tests staging on a real iPhone — Discussion Forum + Box Office both visible (icon-only) at the top, Ever After search shows the English poster. On approval, merge PR #52 to main as the v5.12.0 official ship.
+
+---
+
 ## Session: May 2, 2026 — v5.12.0 /boxoffice round 14 (historical week-catalog truncation, definitive fix)
 
 User re-tested the round-13 staging deploy and reported the same bug from round 12 was still present — picking 1987-Jan / 1994-Mar / 2001-Feb showed an empty Week dropdown even though the monthly Top-10 rendered correctly for the same cells. Asked me to "spin up 10 agents and run 200 tests" to find a definitive fix.

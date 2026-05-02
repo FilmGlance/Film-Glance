@@ -61,6 +61,11 @@ export interface TMDBEnrichment {
 }
 
 // ─── Search Movie ──────────────────────────────────────────────────────────
+//
+// `language=en-US` makes TMDB return English-localized title/overview AND
+// affects which poster TMDB ranks as primary. Without it, /search/movie can
+// surface a localized poster as the default (e.g. Ever After 1998 returned
+// the Dutch "Lang & Gelukkig" cover) — fix verified against the live API.
 
 async function searchMovie(
   title: string,
@@ -72,6 +77,8 @@ async function searchMovie(
       api_key: TMDB_KEY,
       query: title,
       include_adult: "false",
+      language: "en-US",
+      region: "US",
     });
     // Use primary_release_year for strict matching (avoids sequels)
     if (year && year > 1900) params.set("primary_release_year", String(year));
@@ -86,7 +93,13 @@ async function searchMovie(
     if (!results || results.length === 0) {
       // Retry without year constraint if strict search found nothing
       if (year) {
-        const params2 = new URLSearchParams({ api_key: TMDB_KEY, query: title, include_adult: "false" });
+        const params2 = new URLSearchParams({
+          api_key: TMDB_KEY,
+          query: title,
+          include_adult: "false",
+          language: "en-US",
+          region: "US",
+        });
         const res2 = await fetch(`${TMDB_BASE}/search/movie?${params2}`, { signal: AbortSignal.timeout(5000) });
         if (res2.ok) {
           const data2 = await res2.json();
@@ -104,6 +117,41 @@ async function searchMovie(
       if (exactYear) return exactYear;
     }
     return results[0];
+  } catch {
+    return null;
+  }
+}
+
+// ─── Best English Poster ───────────────────────────────────────────────────
+//
+// TMDB's /movie/{id} endpoint exposes a community-curated `poster_path` that
+// ignores user language preference — for some titles this is a foreign-
+// language cover. Fix: fetch /movie/{id}/images with `include_image_language=
+// en,null` (English-tagged posters + language-agnostic posters) and pick the
+// highest-voted one. Returns null if no English poster found, so callers can
+// fall back to whatever poster_path the search returned.
+async function fetchBestEnglishPoster(movieId: number): Promise<string | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}/images?api_key=${TMDB_KEY}&include_image_language=en,null`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      posters?: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }>;
+    };
+    const posters = data.posters || [];
+    if (posters.length === 0) return null;
+    // Rank: explicit `en` first, then language-agnostic (`null`), then by
+    // vote_average desc as tiebreaker.
+    const sorted = [...posters].sort((a, b) => {
+      const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+      const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+      if (aRank !== bRank) return bRank - aRank;
+      return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+    });
+    return sorted[0]?.file_path ?? null;
   } catch {
     return null;
   }
@@ -577,18 +625,23 @@ export async function enrichWithTMDB(
     const movie = await searchMovie(title, year);
     if (!movie) return result;
 
-    result.poster_path = movie.poster_path;
-
-    // Fetch everything in parallel for speed
-    const [credits, streaming, trailerKey, recommendations, videoReviews] =
+    // Fetch everything in parallel for speed.
+    // fetchBestEnglishPoster overrides movie.poster_path when TMDB has an
+    // English poster — guards against the localization bug where /search
+    // returns a foreign-language cover (Ever After 1998 → Dutch "Lang &
+    // Gelukkig"). Falls back to the search result's poster_path when no
+    // English poster exists.
+    const [credits, streaming, trailerKey, recommendations, videoReviews, englishPoster] =
       await Promise.all([
         fetchCredits(movie.id, 20),
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
         options?.skipYouTube ? Promise.resolve([]) : fetchVideoReviews(title, year, 3),
+        fetchBestEnglishPoster(movie.id),
       ]);
 
+    result.poster_path = englishPoster ?? movie.poster_path;
     result.streaming = streaming;
     result.trailer_key = trailerKey;
     result.recommendations = recommendations;
@@ -806,10 +859,14 @@ export async function enrichBoxOfficeWithTMDB(
   try {
     const movie = await searchMovie(title, year);
     if (!movie) return blank;
-    // Single /movie/{id} call appends external_ids + credits so we get
-    // poster + backdrop + IMDb id + director (from crew) in one round-trip.
+    // Single /movie/{id} call appends external_ids + credits + images so we
+    // get poster + backdrop + IMDb id + director + English poster candidates
+    // in one round-trip. include_image_language=en,null filters images to
+    // English + language-agnostic — same logic as fetchBestEnglishPoster but
+    // bundled into the existing call to avoid an extra round-trip per cron
+    // run (10 movies × N period_types).
     const res = await fetch(
-      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids,credits`,
+      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids,credits,images&include_image_language=en,null&language=en-US`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!res.ok) {
@@ -826,11 +883,27 @@ export async function enrichBoxOfficeWithTMDB(
       poster_path?: string | null;
       external_ids?: { imdb_id?: string | null };
       credits?: { crew?: { name: string; job: string }[] };
+      images?: {
+        posters?: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }>;
+      };
     };
     const director =
       (data.credits?.crew || []).find((c) => c.job === "Director")?.name ?? null;
+    // Best English poster from the appended images, ranked en > null > other,
+    // then by vote_average. Fall back to data.poster_path then search result.
+    const posters = data.images?.posters || [];
+    let bestPoster: string | null = null;
+    if (posters.length > 0) {
+      const sorted = [...posters].sort((a, b) => {
+        const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+        const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+        if (aRank !== bRank) return bRank - aRank;
+        return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+      });
+      bestPoster = sorted[0]?.file_path ?? null;
+    }
     return {
-      poster_path: data.poster_path ?? movie.poster_path ?? null,
+      poster_path: bestPoster ?? data.poster_path ?? movie.poster_path ?? null,
       backdrop_path: data.backdrop_path ?? null,
       tmdb_id: movie.id,
       imdb_id: data.external_ids?.imdb_id ?? null,

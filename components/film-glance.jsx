@@ -2888,9 +2888,10 @@ export default function FilmGlance() {
            Account / Sign In button icon-only (label hidden), and
            tighten button padding so the "Film Glance" brand-mark stops
            wrapping onto two lines. Also tighten header padding. */
+        /* v5.12.1: nav buttons stay visible on mobile (icon-only via the
+           ≤520px .nav-forum-label rule above). Mobile parity is mandatory —
+           nav links must never be hidden on smaller viewports. */
         @media (max-width: 560px) {
-          .nav-discuss-btn { display: none !important; }
-          .nav-boxoffice-btn { display: none !important; }
           .nav-account-label { display: none !important; }
           .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
           .nav-brand { font-size: 17px !important; }
