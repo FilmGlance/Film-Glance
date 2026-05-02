@@ -1,5 +1,73 @@
 # Film Glance — Conversation Summary
 
+## Session: May 1, 2026 — v5.12.0 /boxoffice rounds 6-13 (filter rewrite, sticky/scrollbar parity, favorites with folder picker, historical-data fix, pending-fav handler, self-review corrections)
+
+Continuation of the same v5.12.0 staging cycle. User shipped rounds 2-5 in the previous session (real BOM data flowing, posters polished); this session iterated on filter UX, parity with the rest of the site, full-fidelity favorites, and a hard self-review pass. By the end, /boxoffice has folder-picker favorites matching the result page, three independent Year/Month/Week dropdowns, sticky header + gold scroll indicator parity, the full historical period catalog (no PostgREST 1000-row truncation), a sign-in flow that survives auth round-trips without losing favorite intent, and dead code removed. Bible docs caught up in one consolidated row.
+
+### Round 6 — Rank-pill contrast on poster art
+
+Problem: yellow/Hopper-style posters made the gold rank pill invisible. Fix: replaced the solid-gold pill with a compact dark-frosted pill (`rgba(8,6,2,0.80)` + 12px backdrop-blur + 1px gold-38% border) showing italic Playfair gold-gradient `#N` at 28px so rank stays readable on any background.
+
+### Round 7 — Slim featured pill
+
+The "TOP OF THE CHARTS" pill on the #1 hero card dominated the layout. Replaced with a Crown lucide icon + `#1` mono badge (font 48→14, padding 4×16→6×16) so the rank reads at a glance without overpowering the title and gross.
+
+### Round 8 — Dropdown portal fix + dramatized hero
+
+The period-navigator dropdown was clipped because its `position: fixed` was being containing-blocked by an ancestor `backdrop-filter` (CSS quirk: any non-`none` filter on an ancestor turns it into the containing block for fixed descendants). Fix: `createPortal(jsx, document.body)`. Also redesigned PageHero into a two-line landing-style header with italic gold-gradient `.hero-accent` accent line and dropped the period stamp pill.
+
+### Round 9 — Filter model rewrite (3 independent dropdowns)
+
+User spec: replace the period chip strip + period-navigator dropdown with three independent dropdowns — Year / Month / Week. Logic: Year only → yearly Top 10; Year + Month → monthly; Year + Month + Week → weekly. NEW `components/box-office/FilterDropdown.jsx` (reusable portal-based dropdown that computes its position synchronously in `toggle()` so the first render lands at correct viewport coords). NEW `components/box-office/FilterBar.jsx` builds month options filtered by selected year (disables months without data) and week options filtered by year+month, with "(Whole year)" / "(Whole month)" clear options. URL state model rewritten to `year/month/week/region`; first-load default-derives all three from the response's `period_start`. Region locked to Domestic v1.
+
+### Round 10 — Parity fixes (backfill, sticky header, gold scrollbar)
+
+- **Missing months 2026-Jan/Feb/Mar:** cron only ingests current month, not historical months. Backfilled via `/api/admin/backfill-bom?year=2026&period_type=monthly`: 40 monthly + 20 seasonal + 170 weekly rows added.
+- **Sticky header fix:** SiteHeader was wrapped in a 64px-tall `<div style={{ position:relative, zIndex:3 }}>`. `position: sticky` only sticks within the parent box, so the header scrolled away after 64px of body scroll. Removed the wrapping div; SiteHeader now renders as a direct child of the page wrapper and sticks against the body's scroll context.
+- **GoldScrollbar parity:** extracted the existing landing-page right-edge gold scroll indicator into `components/GoldScrollbar.jsx` (fixed track + draggable thumb that turns orange past 85%, bottom-fade overlay >80% scroll, rAF-throttled scroll listener, 1%-precision setState). Mounted on /boxoffice.
+
+### Round 11 — Favorites (heart button parity)
+
+Added the heart button to every PosterCard (size 42 on featured, 36 on standard, top-right of poster, stop-propagation so the card `<Link>` doesn't fire). NEW `lib/use-favorites.ts` hook tracks Supabase session, fetches `/api/favorites`, exposes `isFavorited`/`addFavorite`/`removeFavorite` with optimistic update + revert-on-error matching `film-glance.jsx:1642 toggleFav`.
+
+### Round 12 — Historical-data fix + sign-in intent persistence
+
+- **Massive missing months/weeks in older years:** PostgREST default 1000-row response cap was truncating the `available_periods` query. Weekly table has 22,997 rows so the response only included the most-recent ~1000, deduping client-side to ~100 distinct period_starts (so almost everything pre-2008 was invisible). Switched the read endpoint from `.select()` to a new Postgres RPC `public.box_office_periods(p_period_type text, p_region text)` (SECURITY DEFINER, server-side DISTINCT on period_start). RPC returns 2,425 weekly + 584 monthly + 195 seasonal + 50 yearly distinct rows — no client-side dedup needed. RPC created via the Supabase Management API at `https://api.supabase.com/v1/projects/{ref}/database/query` with PAT (`sbp_*`).
+- **Sign-in flow lost favorite intent:** signed-out heart click on Titanic correctly bounced to /#signin but after auth the favorite was forgotten because `useFavorites` only retried within its own component lifecycle (the user might land back on `/` after OAuth, where the boxoffice hook isn't mounted). Fix: localStorage now persists the click intent under `pendingFavorite` (title, year, search_key, poster_path, fg_score, source_path, ts) before redirect. New global `<PendingFavoriteHandler />` mounted in `app/layout.tsx` listens to supabase auth changes everywhere and on session-appearing reads localStorage, POSTs `/api/favorites` with the new token, clears the entry, and redirects back to `source_path`. 30-min stale guard so a forgotten click doesn't surprise the user days later.
+
+### Round 13 — Self-review corrections (max-effort harshest-evaluation pass)
+
+User explicitly asked for a full review of rounds 5-12 and corrections. Found and fixed five issues:
+
+1. **PendingFavoriteHandler race + premature lock.** `handledRef.current = true` was set BEFORE `await processPending(token)` — so a transient API failure permanently locked retry. AND two rapid auth signals (initial `getSession` + `onAuthStateChange`) could both fire `processPending` in parallel and double-insert. Fix: `handledRef` flips true only after a confirmed-success POST; new `processingRef` guards concurrency so a second auth event sees an in-flight attempt and bails.
+2. **Dead code removed:** deleted `components/box-office/PeriodNavigator.jsx` (superseded by FilterDropdown in round 9), `components/box-office/HeroCard.jsx` + `components/box-office/BoxOfficeRow.jsx` (superseded by PosterCard in round 4) — confirmed via grep that nothing else imports them.
+3. **`X-Cron-Service` header bypass cleared from `/api/search/route.ts`:** the round-3 attempt at HTTP-based score backfill (cron POSTing /api/search through the public URL with this header to skip rate limit) was abandoned in round 4 when the in-process `runFullPipeline` import landed. The header-check + `isCronService` branches were left behind. Removed: cleaner attack surface, no live caller.
+4. **Folder-picker parity for /boxoffice favorites.** The result page's heart click opens a folder picker; round 11's /boxoffice was instant-saving to Unsorted, which broke the user's explicit ask "look and operate as the favorite function does on the main movie page." Built `components/box-office/FolderPickerModal.jsx` (italic gold heading, Syne body, .fg-shiny-flat row buttons, inline "New folder…" reveal — mirrors `film-glance.jsx:3216-3354`). Extended `/api/favorites` POST to accept a `folder_id` field with server-side ownership validation (selects from `favorite_folders` filtered by user_id before insert so a hostile client can't slot favorites into someone else's folder by spoofing an id). Refactored `lib/use-favorites.ts` from a single `toggleFavorite` into separate `addFavorite(entry, folderId|null)` / `removeFavorite` / `createFolder(name)` / `requestSignIn` primitives + folders state. BoxOfficePage handles heart-click dispatch (signed-out → requestSignIn; signed-in + favorited → removeFavorite; signed-in + not favorited → opens picker → on confirm addFavorite with folder).
+5. **Mobile FilterBar wrap glitch.** The `flex: 1` spacer pushing Region right wrapped onto its own line at narrow viewports, leaving a ~280px blank gap above Region. Fix: `display: none` the spacer at ≤720px via the new `.bom-filterbar-spacer` class.
+
+Bible-doc catchup: rounds 6-13 were not appended to tech-specs.md or conversation-summary.md as they happened (standing-deliverable violation acknowledged); this session entry + the v5.12.0 May 1 row in tech-specs.md §10 are the consolidated catchup.
+
+### Files modified (round 13 only)
+
+| File | Changes |
+|------|---------|
+| `app/api/favorites/route.ts` | POST accepts `folder_id`; server validates folder ownership before insert |
+| `app/api/search/route.ts` | Removed `X-Cron-Service` header bypass + `isCronService` branches |
+| `components/PendingFavoriteHandler.jsx` | `handledRef` only flips after success; new `processingRef` guards concurrency |
+| `components/box-office/BoxOfficePage.jsx` | Imports + renders FolderPickerModal; heart-click dispatcher routes signed-out / favorited / new-fav cases |
+| `components/box-office/FilterBar.jsx` | Hide `.bom-filterbar-spacer` at ≤720px |
+| `components/box-office/FolderPickerModal.jsx` | NEW — modal mirroring film-glance.jsx picker for /boxoffice |
+| `lib/use-favorites.ts` | Refactor: split into addFavorite / removeFavorite / createFolder / requestSignIn + folders state |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering rounds 5-13; old Apr 30 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+| Deleted: `components/box-office/PeriodNavigator.jsx`, `components/box-office/HeroCard.jsx`, `components/box-office/BoxOfficeRow.jsx` | Dead since rounds 4 + 9 |
+
+### Next steps
+
+User reviews on the staging Vercel preview after the round-13 commit pushes. On approval, PR `staging` → `main` as the v5.12.0 official ship. Optional follow-up after merge: `/schedule` a watchdog to verify cron freshness weekly.
+
+---
+
 ## Session: April 30, 2026 (continued, round 7) — v5.12.0 /boxoffice rounds 2-5 (UI feedback iteration with real BOM data)
 
 User-driven iteration after first staging deploy of /boxoffice. Each round addressed a fresh batch of feedback. By the end of this session, /boxoffice on staging has real BOM Top-10 data, all 10 weekly entries showing directors (Aaron Horvath, Phil Lord, Lee Cronin, etc.) and real Film Glance scores (6.4, 8.7, 6.0, 7.0, 6.2, 7.8, 7.1, 9.5, 4.2, 7.7) — visually polished and ready for end-to-end review before merge.

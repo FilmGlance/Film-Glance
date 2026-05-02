@@ -165,8 +165,11 @@ export default function FilterBar({
           width={260}
         />
 
-        {/* Spacer pushes Region to the right */}
-        <div style={{ flex: 1, minWidth: 12 }} />
+        {/* Spacer pushes Region to the right on desktop. Hidden on narrow
+            viewports where the row already wraps — without `display: none`
+            the spacer's flex:1 forces Region onto its own line with a
+            blank ~280px gap above, which looks broken on mobile. */}
+        <div className="bom-filterbar-spacer" style={{ flex: 1, minWidth: 12 }} />
 
         <FilterDropdown
           label="Region"
@@ -176,6 +179,13 @@ export default function FilterBar({
           width={180}
         />
       </div>
+      <style jsx>{`
+        @media (max-width: 720px) {
+          .bom-filterbar-spacer {
+            display: none;
+          }
+        }
+      `}</style>
     </section>
   );
 }

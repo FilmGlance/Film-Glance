@@ -117,18 +117,6 @@ function backfillVideoReviews(cacheKey: string, movieData: Record<string, unknow
 
 export async function POST(req: NextRequest) {
   try {
-    // v5.12.0: cron-service bypass — when the box-office cron upserts a new
-    // BOM Top-10 entry, it fires a server-to-server /api/search call so the
-    // movie_cache gets populated and fg_score loads on the page. The header
-    // `X-Cron-Service: <CRON_SECRET>` lets that internal call skip the
-    // anonymous rate limit + daily limit. CRON_SECRET is server-only so an
-    // attacker can't fake it from the public internet.
-    const cronServiceHeader = req.headers.get("x-cron-service");
-    const isCronService =
-      !!cronServiceHeader &&
-      !!process.env.CRON_SECRET &&
-      cronServiceHeader === process.env.CRON_SECRET;
-
     // 1. Auth check — OPTIONAL (anonymous users get daily limit)
     const authHeader = req.headers.get("Authorization");
     let user: any = null;
@@ -146,9 +134,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Rate limit — user ID if authenticated, IP if anonymous, skipped for cron service
+    // 2. Rate limit — user ID if authenticated, IP if anonymous
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-    if (!isCronService) {
+    {
       const rl = rateLimit(`search:${user?.id || `anon:${ip}`}`, SEARCH_LIMIT);
       if (!rl.allowed) {
         return NextResponse.json(
@@ -190,8 +178,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4a. Anonymous daily limit check (15 searches/day per IP) — skipped for cron service
-    if (!user && !isCronService) {
+    // 4a. Anonymous daily limit check (15 searches/day per IP)
+    if (!user) {
       try {
         const { data: limitCheck, error: limitErr } = await supabaseAdmin.rpc(
           "check_anonymous_limit",

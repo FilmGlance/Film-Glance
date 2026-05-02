@@ -27,6 +27,7 @@ import FilterBar from "./FilterBar";
 import PosterCard from "./PosterCard";
 import EmptyState from "./EmptyState";
 import SkeletonRows from "./SkeletonRows";
+import FolderPickerModal from "./FolderPickerModal";
 import { useFavorites } from "@/lib/use-favorites";
 
 const VALID_REGIONS = ["domestic", "international"];
@@ -154,9 +155,41 @@ export default function BoxOfficePage() {
   const allEntries = (data?.entries || []).slice(0, 10);
   const heroEntry = allEntries[0] || null;
 
-  // Favorites — heart button on each card. Hook handles auth, optimistic
-  // update, and fallback-to-signin redirect when the user is signed out.
-  const { isFavorited, toggleFavorite } = useFavorites();
+  // Favorites — heart button on each card.
+  //   • Signed-out heart click → requestSignIn (persists intent + bounces to
+  //     /#signin; PendingFavoriteHandler completes the save post-auth, into
+  //     Unsorted since the picker can't show without a session).
+  //   • Signed-in + already favorited → removeFavorite (optimistic delete).
+  //   • Signed-in + not yet favorited → opens the folder picker; on confirm
+  //     we addFavorite(entry, folderId) so the user picks a destination
+  //     (matches the result-page UX exactly).
+  const { signedIn, folders, isFavorited, addFavorite, removeFavorite, createFolder, requestSignIn } =
+    useFavorites();
+  const [pickerEntry, setPickerEntry] = useState(null);
+
+  const handleHeartClick = useCallback(
+    (entry) => {
+      if (!signedIn) {
+        requestSignIn(entry);
+        return;
+      }
+      if (isFavorited(entry)) {
+        removeFavorite(entry);
+        return;
+      }
+      setPickerEntry(entry);
+    },
+    [signedIn, isFavorited, removeFavorite, requestSignIn],
+  );
+
+  const handlePickerConfirm = useCallback(
+    (folderId) => {
+      const entry = pickerEntry;
+      setPickerEntry(null);
+      if (entry) addFavorite(entry, folderId);
+    },
+    [pickerEntry, addFavorite],
+  );
 
   return (
     <div
@@ -221,7 +254,7 @@ export default function BoxOfficePage() {
                   entry={heroEntry}
                   featured
                   favorited={isFavorited(heroEntry)}
-                  onToggleFavorite={toggleFavorite}
+                  onToggleFavorite={handleHeartClick}
                 />
               </div>
             )}
@@ -242,7 +275,7 @@ export default function BoxOfficePage() {
                   entry={entry}
                   staggerDelayMs={i * 60}
                   favorited={isFavorited(entry)}
-                  onToggleFavorite={toggleFavorite}
+                  onToggleFavorite={handleHeartClick}
                 />
               ))}
             </div>
@@ -277,6 +310,20 @@ export default function BoxOfficePage() {
 
       {/* Site-wide gold scrollbar — same as landing/result pages. */}
       <GoldScrollbar />
+
+      {/* Folder picker — opens on heart click for signed-in users adding a
+          new favorite. Mirrors the result-page picker (italic gold heading,
+          shiny rows, inline new-folder reveal). Cancelling closes without
+          saving. */}
+      {pickerEntry && (
+        <FolderPickerModal
+          entry={pickerEntry}
+          folders={folders}
+          onConfirm={handlePickerConfirm}
+          onCreateFolder={createFolder}
+          onClose={() => setPickerEntry(null)}
+        />
+      )}
     </div>
   );
 }

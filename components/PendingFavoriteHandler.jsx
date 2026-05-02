@@ -84,28 +84,40 @@ async function processPending(token) {
 }
 
 export default function PendingFavoriteHandler() {
+  // handledRef: set to true ONLY after a successful processPending. A
+  //   transient failure (network blip, 5xx) leaves it false so the next auth
+  //   event (or a page reload) retries.
+  // processingRef: prevents race conditions when getSession + onAuthStateChange
+  //   fire near-simultaneously — without it, both callbacks would POST in
+  //   parallel, double-inserting the favorite.
   const handledRef = useRef(false);
+  const processingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    async function attempt(token) {
+      if (handledRef.current || processingRef.current) return;
+      if (!token) return;
+      processingRef.current = true;
+      try {
+        const ok = await processPending(token);
+        if (ok) handledRef.current = true;
+      } catch {
+        // Leave handledRef false so the next auth event retries.
+      } finally {
+        processingRef.current = false;
+      }
+    }
+
     // Initial check — if user landed on a page already signed-in (e.g. after
     // a fresh OAuth redirect that auto-set the session), process pending fav.
     supabase.auth.getSession().then(({ data }) => {
-      if (handledRef.current) return;
-      const token = data.session?.access_token;
-      if (token) {
-        handledRef.current = true;
-        processPending(token).catch(() => {});
-      }
+      attempt(data.session?.access_token);
     });
 
     const { data: subData } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (handledRef.current) return;
-      const token = session?.access_token;
-      if (!token) return;
-      handledRef.current = true;
-      processPending(token).catch(() => {});
+      attempt(session?.access_token);
     });
 
     return () => {

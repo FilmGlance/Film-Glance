@@ -35,15 +35,37 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/favorites — add a movie to favorites
+//
+// Optional `folder_id` routes the favorite into a specific folder; null/missing
+// → Unsorted. The server verifies the folder belongs to the requesting user
+// before insert so a hostile client can't slot a favorite into someone else's
+// folder by spoofing the id.
 export async function POST(req: NextRequest) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { title, year, genre, poster_url, score_ten, score_stars, search_key } = body;
+  const { title, year, genre, poster_url, score_ten, score_stars, search_key, folder_id } = body;
 
   if (!title || !search_key) {
     return NextResponse.json({ error: "title and search_key are required" }, { status: 400 });
+  }
+
+  // Verify folder ownership when folder_id is provided. RLS would catch a
+  // cross-user write at insert time, but checking up front gives a clearer
+  // error and avoids a half-applied state.
+  let validatedFolderId: string | null = null;
+  if (folder_id) {
+    const { data: folderRow, error: folderErr } = await supabaseAdmin
+      .from("favorite_folders")
+      .select("id")
+      .eq("id", folder_id)
+      .eq("user_id", user.id)
+      .single();
+    if (folderErr || !folderRow) {
+      return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+    }
+    validatedFolderId = folderRow.id;
   }
 
   const { data, error } = await supabaseAdmin
@@ -58,6 +80,7 @@ export async function POST(req: NextRequest) {
         score_ten: score_ten ? Number(score_ten) : null,
         score_stars: score_stars ? Number(score_stars) : null,
         search_key: String(search_key).toLowerCase().slice(0, 500),
+        folder_id: validatedFolderId,
       },
       { onConflict: "user_id,title,year" }
     )
