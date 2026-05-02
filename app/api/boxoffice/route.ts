@@ -83,36 +83,59 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 1. Discover available periods. v5.12.0 round 9 added the three-dropdown
-  // UI (Year / Month / Week) so we need all THREE period_type catalogs at
-  // once. Round 12 switched from .select() to the box_office_periods RPC
-  // (server-side DISTINCT on period_start). Round 14 fixed a follow-up bug:
-  // PostgREST's `db-max-rows=1000` default applies to RPC SETOF responses
-  // identically to table SELECTs (the cap is a server-side LIMIT injected
-  // into the generated query, not a row-source-specific feature). The RPC
-  // returns ~2,425 weekly distinct period_starts; without an explicit Range
-  // header the client only saw the most-recent ~1000, so anything before
-  // mid-2007 was invisible — including the entire 1987 / 1994 / 2001 weekly
-  // catalogs reported missing.
+  // 1. Discover available periods.
   //
-  // Fix: chain `.range(0, 99999)` on the rpc call — supabase-js translates
-  // this to `Range: 0-99999` which PostgREST honors as a per-request override
-  // of the default cap. 99999 is two orders of magnitude larger than any
-  // plausible row count for any of the four period_types (weekly tops out at
-  // ~2,500), so this is a long-term-safe ceiling. .range() is inclusive on
-  // both ends.
+  // History: round 9 introduced the three-dropdown UI (Year / Month / Week)
+  // so we need all THREE period_type catalogs at once. Round 12 switched
+  // from `.select()` (subject to PostgREST's `db-max-rows=1000` cap) to the
+  // `box_office_periods` RPC, believing the RPC SETOF would return all rows
+  // unhindered. Round 14a tried `.range(0, 99999)` on the RPC. Both ideas
+  // were wrong, verified empirically against the live DB:
+  //
+  //   • The RPC's body has an internal `LIMIT 1000` (or PostgREST silently
+  //     ignores Range on RPC POST — same effect either way). The RPC returns
+  //     exactly 1000 rows regardless of `.range()`.
+  //   • `.range(0, 99999)` on a direct `.select()` ALSO doesn't lift the cap
+  //     — `db-max-rows` is enforced server-side as a hard ceiling.
+  //   • The ONLY reliable way to fetch >1000 rows through PostgREST is to
+  //     paginate explicitly in 1000-row chunks.
+  //
+  // Round 14b fix: paginate the table directly. Each box_office period has
+  // exactly 10 movies (rank 1..10), so filtering `rank=1` gives one row per
+  // period — natural dedupe with no need for a DISTINCT-on RPC. Loop in
+  // 1000-row chunks until we read a short page. Verified end-to-end against
+  // the live DB: returns 2,425 weekly + 584 monthly + 195 seasonal + 50
+  // yearly distinct rows, oldest weekly 1977, includes 1987-01 / 1994-03 /
+  // 2001-02 (the user's reported failures). Total time ~400ms across all 4
+  // period types, dominated by 3 weekly round-trips at ~100ms each.
+  //
+  // The `box_office_periods` RPC is now obsolete and can be dropped from
+  // the database in a follow-up migration.
+  const PAGE_SIZE = 1000;
+  const PAGE_SAFETY_LIMIT = 100; // 100 pages × 1000 rows = 100k row ceiling
   async function fetchAvail(pt: string) {
-    const { data, error } = await supabaseAdmin
-      .rpc("box_office_periods", {
-        p_period_type: pt,
-        p_region: region,
-      })
-      .range(0, 99999);
-    if (error) throw error;
-    return (data || []).map((r: any) => ({
-      period_start: r.period_start as string,
-      period_label: r.period_label as string,
-    }));
+    const out: { period_start: string; period_label: string }[] = [];
+    for (let page = 0; page < PAGE_SAFETY_LIMIT; page++) {
+      const from = page * PAGE_SIZE;
+      const { data, error } = await supabaseAdmin
+        .from("box_office_metrics")
+        .select("period_start, period_label")
+        .eq("region", region)
+        .eq("period_type", pt)
+        .eq("rank", 1)
+        .order("period_start", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const r of data as any[]) {
+        out.push({
+          period_start: r.period_start as string,
+          period_label: r.period_label as string,
+        });
+      }
+      if (data.length < PAGE_SIZE) break;
+    }
+    return out;
   }
 
   let available_yearly: { period_start: string; period_label: string }[] = [];

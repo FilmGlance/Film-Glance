@@ -1,5 +1,55 @@
 # Film Glance — Conversation Summary
 
+## Session: May 2, 2026 — v5.12.0 /boxoffice round 14 (historical week-catalog truncation, definitive fix)
+
+User re-tested the round-13 staging deploy and reported the same bug from round 12 was still present — picking 1987-Jan / 1994-Mar / 2001-Feb showed an empty Week dropdown even though the monthly Top-10 rendered correctly for the same cells. Asked me to "spin up 10 agents and run 200 tests" to find a definitive fix.
+
+### Investigation
+
+Spawned two investigation agents in parallel:
+- **Agent A** (web research): confirmed that PostgREST's `db-max-rows=1000` default applies to RPC SETOF responses identically to table SELECTs — it's a server-side LIMIT injected into the generated query. Recommended `.range(0, 99999)` on the `.rpc()` call to override per-request.
+- **Agent B** (code trace): mapped the data flow but speculated the RPC body itself might have an internal LIMIT or DISTINCT-ON ordering bug.
+
+Took Agent A's high-confidence recommendation and shipped `.range(0, 99999)` as round 14a. Wrote a 287-check validation suite (`scratch/verify-rpc-cap.mjs`) using the service-role key against the live Supabase. **The fix did not work.** Both capped and uncapped weekly returned exactly 1000 rows. Even `range(1000, 1999)` returned 1000 rows.
+
+That ruled out Agent A's hypothesis. Wrote a focused diagnostic (`scratch/diagnose-cap.mjs`) and confirmed empirically:
+
+1. **box_office_metrics HAS the historical data** — 1987: 510 weekly rows; 1994: 522; 2001: 530; 23,157 total weekly rows. The historical backfill is intact.
+2. **The `box_office_periods` RPC is the bottleneck.** Its body contains a hard `LIMIT 1000` (or PostgREST silently ignores Range on RPC POST — same effect). `.range()` does not budge it.
+3. **`.range()` doesn't bypass the cap on direct table SELECTs either.** Tested with `range(0, 99999)` — still returned exactly 1000.
+
+Wrote `scratch/probe-bypass.mjs` to compare strategies:
+- Strategy A (single `.select()` + `range(0, 99999)`): 1000 rows. Bug.
+- Strategy B (paginated `.select()` in 1000-row chunks via repeated `range(offset, offset+999)`): 2,425 weekly rows in 396ms total, oldest 1977, including all the user's failing cells. Works.
+
+### Round 14 fix
+
+Replaced the RPC dependency in `app/api/boxoffice/route.ts` `fetchAvail()` with a paginated direct-table query. Each box_office period has exactly 10 movies (rank 1..10), so filtering `rank=1` gives one row per period — natural dedupe with no need for the broken DISTINCT-on RPC. Loop in 1000-row chunks until a short page. Safety limit of 100 pages.
+
+Validation: `scratch/verify-final.mjs` (294-check suite). 293 pass; the single fail is 1978-01 which is a real BOM data gap (their weekly tracking is sparse pre-1980, verified independently — 1978 only has data for Mar/Apr/Jun/Nov/Dec). Total fetchAvail latency ~430ms across all 4 period types in parallel.
+
+### Lessons
+
+- The round-12 commit message claimed the RPC returned 2,425 rows — but that must have been measured at the SQL level (e.g. via the Supabase web SQL editor), not through the PostgREST API surface that the route actually uses. Round 13's self-review missed this because it treated round 12 as a verified fix instead of re-testing.
+- Future principle for "fix verification" rounds: validate against the actual API surface (HTTP roundtrip), not just the underlying SQL. Fast iteration loops that hit the live DB through the service-role key would have caught this.
+- The obsolete `box_office_periods` RPC stays in the live DB but is now uncalled — safe to drop in a follow-up migration.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `app/api/boxoffice/route.ts` | `fetchAvail()` switched from broken RPC + `.range()` to paginated direct-table query with `rank=1` filter |
+| `tech-specs.md` | New ✅ CURRENT STATE row for round 14; old May 1 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/diagnose-cap.mjs`, `scratch/probe-bypass.mjs`, `scratch/verify-final.mjs`.
+
+### Next steps
+
+User re-tests staging — picking 1987-Jan / 1994-Mar / 2001-Feb should now populate the Week dropdown. On approval, PR staging → main as v5.12.0 official ship.
+
+---
+
 ## Session: May 1, 2026 — v5.12.0 /boxoffice rounds 6-13 (filter rewrite, sticky/scrollbar parity, favorites with folder picker, historical-data fix, pending-fav handler, self-review corrections)
 
 Continuation of the same v5.12.0 staging cycle. User shipped rounds 2-5 in the previous session (real BOM data flowing, posters polished); this session iterated on filter UX, parity with the rest of the site, full-fidelity favorites, and a hard self-review pass. By the end, /boxoffice has folder-picker favorites matching the result page, three independent Year/Month/Week dropdowns, sticky header + gold scroll indicator parity, the full historical period catalog (no PostgREST 1000-row truncation), a sign-in flow that survives auth round-trips without losing favorite intent, and dead code removed. Bible docs caught up in one consolidated row.
