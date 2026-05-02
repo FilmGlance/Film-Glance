@@ -27,6 +27,7 @@ import FilterBar from "./FilterBar";
 import PosterCard from "./PosterCard";
 import EmptyState from "./EmptyState";
 import SkeletonRows from "./SkeletonRows";
+import { useFavorites } from "@/lib/use-favorites";
 
 const VALID_REGIONS = ["domestic", "international"];
 
@@ -153,6 +154,10 @@ export default function BoxOfficePage() {
   const allEntries = (data?.entries || []).slice(0, 10);
   const heroEntry = allEntries[0] || null;
 
+  // Favorites — heart button on each card. Hook handles auth, optimistic
+  // update, and fallback-to-signin redirect when the user is signed out.
+  const { isFavorited, toggleFavorite } = useFavorites();
+
   return (
     <div
       style={{
@@ -215,6 +220,8 @@ export default function BoxOfficePage() {
                   key={`hero-${heroEntry.search_key}-${data.period_start}`}
                   entry={heroEntry}
                   featured
+                  favorited={isFavorited(heroEntry)}
+                  onToggleFavorite={toggleFavorite}
                 />
               </div>
             )}
@@ -234,6 +241,8 @@ export default function BoxOfficePage() {
                   key={`card-${entry.search_key}-${data.period_start}`}
                   entry={entry}
                   staggerDelayMs={i * 60}
+                  favorited={isFavorited(entry)}
+                  onToggleFavorite={toggleFavorite}
                 />
               ))}
             </div>

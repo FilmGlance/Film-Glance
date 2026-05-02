@@ -13,8 +13,59 @@
 
 import React from "react";
 import Link from "next/link";
-import { Crown } from "lucide-react";
+import { Crown, Heart } from "lucide-react";
 import { useCountUp } from "@/lib/use-count-up";
+
+// Reusable heart button used by both card variants. Stop-propagates the click
+// so the card's <Link> doesn't fire alongside the heart toggle.
+function FavoriteButton({ favorited, onToggle, size = 36, ariaLabel }) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel || (favorited ? "Remove from favorites" : "Save to favorites")}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }}
+      style={{
+        position: "absolute",
+        top: 10,
+        right: 10,
+        width: size,
+        height: size,
+        borderRadius: 999,
+        background: favorited ? "rgba(255, 215, 0, 0.18)" : "rgba(8, 6, 2, 0.78)",
+        border: `1px solid ${favorited ? "rgba(255, 215, 0, 0.62)" : "rgba(255, 215, 0, 0.32)"}`,
+        backdropFilter: "blur(12px) saturate(1.1)",
+        WebkitBackdropFilter: "blur(12px) saturate(1.1)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        boxShadow: favorited
+          ? "0 4px 16px rgba(255, 215, 0, 0.35), 0 0 18px rgba(255, 215, 0, 0.22)"
+          : "0 4px 14px rgba(0, 0, 0, 0.5)",
+        transition: "transform 0.2s ease, background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease",
+        zIndex: 3,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "scale(1.08)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "scale(1)";
+      }}
+    >
+      <Heart
+        size={size * 0.5}
+        strokeWidth={2.2}
+        fill={favorited ? "#FFD700" : "none"}
+        color={favorited ? "#FFD700" : "rgba(255, 215, 0, 0.88)"}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
 
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500";
 
@@ -44,7 +95,7 @@ function buildHref(entry) {
 
 // ── Featured variant — #1 hero, horizontal layout ───────────────────────────
 
-function FeaturedCard({ entry }) {
+function FeaturedCard({ entry, favorited, onToggleFavorite }) {
   const grossAnimated = useCountUp(entry.gross || 0, 800);
   const theatersAnimated = useCountUp(entry.theaters || 0, 800);
   const ptaAnimated = useCountUp(entry.pta || 0, 800);
@@ -125,6 +176,18 @@ function FeaturedCard({ entry }) {
             >
               {entry.title.charAt(0)}
             </div>
+          )}
+          {onToggleFavorite && (
+            <FavoriteButton
+              favorited={!!favorited}
+              onToggle={() => onToggleFavorite(entry)}
+              size={42}
+              ariaLabel={
+                favorited
+                  ? `Remove ${entry.title} from favorites`
+                  : `Save ${entry.title} to favorites`
+              }
+            />
           )}
         </div>
 
@@ -295,7 +358,7 @@ function FeaturedStat({ label, value, sub, isScore, scoreLoaded }) {
 
 // ── Standard variant — #2..#10 uniform vertical card ────────────────────────
 
-function StandardCard({ entry, staggerDelayMs = 0 }) {
+function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }) {
   const grossAnimated = useCountUp(entry.gross || 0, 800);
   const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
 
@@ -430,6 +493,19 @@ function StandardCard({ entry, staggerDelayMs = 0 }) {
               pointerEvents: "none",
             }}
           />
+
+          {onToggleFavorite && (
+            <FavoriteButton
+              favorited={!!favorited}
+              onToggle={() => onToggleFavorite(entry)}
+              size={36}
+              ariaLabel={
+                favorited
+                  ? `Remove ${entry.title} from favorites`
+                  : `Save ${entry.title} to favorites`
+              }
+            />
+          )}
         </div>
 
         {/* Card body — fixed structure, consistent across all cards */}
@@ -572,10 +648,30 @@ function StandardStat({ label, value, isScore, scoreLoaded }) {
 
 // ── Default export — chooses variant based on featured prop ────────────────
 
-export default function PosterCard({ entry, featured = false, staggerDelayMs = 0 }) {
+export default function PosterCard({
+  entry,
+  featured = false,
+  staggerDelayMs = 0,
+  favorited = false,
+  onToggleFavorite, // (entry) => void; if omitted, the heart button is hidden
+}) {
   if (!entry) return null;
-  if (featured) return <FeaturedCard entry={entry} />;
-  return <StandardCard entry={entry} staggerDelayMs={staggerDelayMs} />;
+  if (featured)
+    return (
+      <FeaturedCard
+        entry={entry}
+        favorited={favorited}
+        onToggleFavorite={onToggleFavorite}
+      />
+    );
+  return (
+    <StandardCard
+      entry={entry}
+      staggerDelayMs={staggerDelayMs}
+      favorited={favorited}
+      onToggleFavorite={onToggleFavorite}
+    />
+  );
 }
 
 // Global keyframes (used by both variants)
