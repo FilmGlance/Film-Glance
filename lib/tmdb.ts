@@ -817,6 +817,136 @@ export async function enrichWithTMDB(
   }
 }
 
+// ─── Exact-Title Ambiguity (v5.12.3) ─────────────────────────────────────
+//
+// Some queries hit multiple distinct films with the SAME canonical title
+// across different decades — Carrie (1976/2002/2013), Pet Sematary
+// (1989/2019), The Mummy (1932/1999/2017), Halloween (1978/2018), etc.
+// silentlypicking one (even with year-earliest or first-in-merged-order)
+// is guessing. v5.12.3 surfaces a picker page when 2+ "real" exact-title
+// matches exist so the user disambiguates explicitly.
+//
+// "Real" eligibility: vote_count >= AMBIGUITY_VOTE_FLOOR. This is NOT a
+// popularity ranking (the user objected to ranking by votes — an obscure
+// film is a valid pick). It's a minimum-metadata-completeness floor that
+// filters out TMDB placeholders / unreleased / 5-vote shorts that share
+// the title by coincidence. Below 50 votes, a film is effectively unrated
+// and almost never the user's intent. Tunable in one place.
+
+const AMBIGUITY_VOTE_FLOOR = 50;
+
+export interface AmbiguityCandidate {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  release_date: string | null;
+  poster_path: string | null;
+  overview: string;
+}
+
+/**
+ * Detects 100%-letter-by-letter same-title collisions. Returns 2+
+ * candidates if the search is genuinely ambiguous, otherwise null.
+ * Uses the same parallel original+concat search as searchMovie so the
+ * picker surfaces canonical no-space TMDB titles ("EverAfter") next to
+ * spaced ones — but in practice EverAfter is alone and so won't trigger
+ * the picker (only 1 qualifying match).
+ */
+export async function findExactTitleCandidates(
+  title: string,
+): Promise<AmbiguityCandidate[] | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    async function tmdbFetch(q: string): Promise<TMDBMovie[]> {
+      const p = new URLSearchParams({
+        api_key: TMDB_KEY!,
+        query: q,
+        include_adult: "false",
+        language: "en-US",
+        region: "US",
+      });
+      const r = await fetch(`${TMDB_BASE}/search/movie?${p}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return (d.results as TMDBMovie[]) || [];
+    }
+
+    const wantConcat = /\s/.test(title);
+    const concatenated = title.replace(/\s+/g, "");
+    const [rOrig, rConcat] = await Promise.all([
+      tmdbFetch(title),
+      wantConcat ? tmdbFetch(concatenated) : Promise.resolve([]),
+    ]);
+
+    const seen = new Set<number>();
+    const merged: TMDBMovie[] = [];
+    for (const r of [...rConcat, ...rOrig]) {
+      if (!r.release_date) continue;
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        merged.push(r);
+      }
+    }
+
+    // Strict normalization for ambiguity — case-insensitive only. No
+    // article-strip, no punct-strip, no whitespace-strip. The user's rule
+    // is "100% letter-by-letter match" so "The Heat" does NOT collide with
+    // "Heat", "Up!" does NOT collide with "Up". The silent-pick path in
+    // searchMovie() uses LENIENT normalization (handles "EverAfter" /
+    // "Ever After"), but the picker only fires for true title clones.
+    const normStrict = (s: string) =>
+      (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+    const queryNorm = normStrict(title);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Eligibility: strict 100%-letter-by-letter title match + vote_count
+    // >= floor + already released + has a release date.
+    const candidates = merged.filter((r) => {
+      if (normStrict(r.title) !== queryNorm) return false;
+      if (!r.release_date) return false;
+      const released = new Date(r.release_date) <= today;
+      if (!released) return false;
+      const votes = (r as any).vote_count ?? 0;
+      return votes >= AMBIGUITY_VOTE_FLOOR;
+    });
+
+    // Dedupe near-duplicates: TMDB occasionally lists the same film twice
+    // with different release_dates (re-release / restored cut). If two
+    // candidates have release_dates within 1 year of each other, treat as
+    // one and keep the earlier-dated entry — they're the same movie.
+    candidates.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
+    const deduped: TMDBMovie[] = [];
+    for (const c of candidates) {
+      const cYear = parseInt((c.release_date || "").slice(0, 4)) || 0;
+      const dup = deduped.some((d) => {
+        const dYear = parseInt((d.release_date || "").slice(0, 4)) || 0;
+        return Math.abs(dYear - cYear) <= 1;
+      });
+      if (!dup) deduped.push(c);
+    }
+
+    if (deduped.length < 2) return null;
+
+    // Sort by year ascending so picker shows oldest → newest, then cap at
+    // 6 entries to keep the grid scannable.
+    deduped.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
+    return deduped.slice(0, 6).map((m) => ({
+      tmdb_id: m.id,
+      title: m.title,
+      year: m.release_date ? parseInt(m.release_date.slice(0, 4)) || null : null,
+      release_date: m.release_date || null,
+      poster_path: m.poster_path || null,
+      overview: (m as any).overview || "",
+    }));
+  } catch {
+    return null;
+  }
+}
+
 // ─── Release Date Gate (v5.7) ────────────────────────────────────────────
 
 /**

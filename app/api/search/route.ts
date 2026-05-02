@@ -46,7 +46,7 @@ import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
-import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails } from "@/lib/tmdb";
+import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails, findExactTitleCandidates } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 import { sanitizeQuery } from "@/lib/sanitize";
 import {
@@ -362,6 +362,30 @@ export async function POST(req: NextRequest) {
           });
         }
       } catch { /* continue to API */ }
+    }
+
+    // 5.7. Exact-title ambiguity check (v5.12.3). If 2+ released films
+    //      share the EXACT same canonical title (Carrie 1976/2002/2013, Pet
+    //      Sematary 1989/2019, The Mummy 1932/1999/2017, etc.) and the user
+    //      didn't disambiguate with a year hint, return a picker payload so
+    //      the frontend can render the "There are a few with that name"
+    //      page. Each candidate is ≥AMBIGUITY_VOTE_FLOOR votes (filters out
+    //      placeholder shorts that share the title by coincidence — this is
+    //      NOT a popularity ranking, just a minimum-viability gate). Skip
+    //      this check entirely when the user typed a year ("carrie 1976")
+    //      because the year already disambiguates.
+    if (!userYearHint) {
+      const ambigTitle = sequelResolution ? resolvedTitle : searchTitle;
+      const candidates = await findExactTitleCandidates(ambigTitle).catch(() => null);
+      if (candidates && candidates.length >= 2) {
+        console.log(`[ambiguity] "${query}" → ${candidates.length} same-title films, returning picker`);
+        return NextResponse.json({
+          ambiguous: true,
+          query,
+          candidates,
+          _source: "ambiguity-picker",
+        });
+      }
     }
 
     // 5.75. Release date gate — check if movie is unreleased (v5.7)
