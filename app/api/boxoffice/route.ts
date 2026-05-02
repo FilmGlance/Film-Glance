@@ -83,28 +83,23 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 1. Discover available periods. v5.12.0 round 9: the new three-dropdown
-  // UI (Year / Month / Week) needs all THREE period_type catalogs available
-  // at once, not just the currently-selected one. Fetch in parallel.
+  // 1. Discover available periods. v5.12.0 round 9 added the three-dropdown
+  // UI (Year / Month / Week) so we need all THREE period_type catalogs at
+  // once. Round 12 fix: switched from .select() (which hits PostgREST's
+  // default 1000-row response cap, missing pre-2008 weeks) to the
+  // box_office_periods RPC that does SERVER-SIDE distinct on period_start.
+  // RPC returns ~2,425 weekly + 584 monthly + 195 seasonal + 50 yearly rows
+  // for domestic — all distinct period_starts, no client-side dedup needed.
   async function fetchAvail(pt: string) {
-    const { data, error } = await supabaseAdmin
-      .from("box_office_metrics")
-      .select("period_start, period_label")
-      .eq("period_type", pt)
-      .eq("region", region)
-      .order("period_start", { ascending: false });
+    const { data, error } = await supabaseAdmin.rpc("box_office_periods", {
+      p_period_type: pt,
+      p_region: region,
+    });
     if (error) throw error;
-    const seen = new Set<string>();
-    return (data || [])
-      .filter((r: any) => {
-        if (!r.period_start || seen.has(r.period_start)) return false;
-        seen.add(r.period_start);
-        return true;
-      })
-      .map((r: any) => ({
-        period_start: r.period_start as string,
-        period_label: r.period_label as string,
-      }));
+    return (data || []).map((r: any) => ({
+      period_start: r.period_start as string,
+      period_label: r.period_label as string,
+    }));
   }
 
   let available_yearly: { period_start: string; period_label: string }[] = [];

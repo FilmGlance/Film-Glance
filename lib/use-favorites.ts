@@ -116,11 +116,32 @@ export function useFavorites() {
   const toggleFavorite = useCallback(
     async (entry: CardEntry): Promise<void> => {
       if (!authToken) {
-        // Bounce to landing with the sign-in modal flag — the existing
-        // FilmGlance auto-handler reads `?signin=1` (actually it's `#signin`
-        // per film-glance.jsx:1424; but the landing also handles ?signin
-        // via the existing query-param hook). Use the hash form to match.
+        // Persist the heart-click intent so the global PendingFavoriteHandler
+        // (mounted in app/layout.tsx) can complete the favorite after sign-in
+        // — even if the user lands on / after auth instead of returning to
+        // the page they clicked from. Stored as localStorage so it survives
+        // the OAuth round-trip / page reload.
         if (typeof window !== "undefined") {
+          try {
+            const yearForStorage =
+              typeof entry.year === "number"
+                ? entry.year
+                : entry.year != null
+                  ? parseInt(String(entry.year), 10) || null
+                  : null;
+            const payload = {
+              title: entry.title,
+              year: yearForStorage,
+              search_key: entry.search_key,
+              poster_path: entry.poster_path ?? null,
+              fg_score: entry.fg_score ?? null,
+              source_path: window.location.pathname + window.location.search,
+              ts: Date.now(),
+            };
+            localStorage.setItem("pendingFavorite", JSON.stringify(payload));
+          } catch (_e) {
+            // localStorage unavailable / quota exceeded — proceed with bounce anyway
+          }
           window.location.href = "/#signin";
         }
         return;
