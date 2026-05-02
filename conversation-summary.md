@@ -1,5 +1,62 @@
 # Film Glance — Conversation Summary
 
+## Session: May 2, 2026 (PM) — v5.12.2 search title-match fix + v5.12.3 same-title ambiguity picker
+
+PR #52 (v5.12.0 /boxoffice + rounds 1-14b) merged at 01:25 UTC. v5.12.1 (Ever After Dutch poster + mobile nav) was committed to staging at 02:06 — 41 minutes too late to ride along, so it sits unmerged. User reported two more bugs after that, plus scoped a new disambiguation feature.
+
+### Bug 1 (v5.12.2) — "Ever After" returned "After Ever Happy"
+
+User had a tester search "Ever after" → result page showed "After Ever Happy" (2022 Wattpad/TikTok hit) with Castille Landon as director. Two-layer root cause:
+
+- TMDB `/search/movie` ranks by popularity. "After Ever Happy" massively outranked the actual 1998 Drew Barrymore film.
+- Search route's title gate had a `wordMatch` heuristic that accepted any 75% set-overlap regardless of order. "Ever After" → "After Ever Happy" had 100% set overlap (both query words present in title) but in the wrong order.
+
+Investigation discovered TMDB's actual title for the 1998 film is **"EverAfter"** (one word, no space). Spaced search "Ever After" doesn't surface it on any of 6 result pages — the canonical match is buried under unrelated obscure entries. Searching "EverAfter" (concatenated) returns it as the top result.
+
+Fix: rewrote `searchMovie` in `lib/tmdb.ts` with parallel original + concatenated TMDB search. Three-stage match preference, no vote_count filtering at any stage (per user direction — obscure films are valid intent):
+1. Whitespace + leading-article-insensitive exact match → first in merged order
+2. Ordered word-subsequence (rejects "ever after" → "after ever happy" because words are out of order)
+3. TMDB's first result fallback
+
+Title gate's set-based `wordMatch` replaced with ordered-subsequence requirement. Skips empty-release_date placeholders.
+
+Validated against live TMDB across 44 high-risk titles via `scratch/test-title-match.mjs`: 42/44 pass. The 2 remaining (Mad Max 2016, The Matrix 2004 surfaced over canonical originals via concat search noise) are technically valid exact matches per the no-popularity-filter rule, refinable with year hint.
+
+### Bug 2 (v5.12.3) — Same-title ambiguity picker
+
+User explicitly scoped this: "create a separate page of instances where there are several versions of a movie with the EXACT SAME name (100% match - letter by letter)."
+
+When 2+ released films share the exact canonical title (Carrie 1976/2002/2013, Pet Sematary 1989/2019, The Mummy 1932/1959/1999/2017, Halloween 1978/2007/2018, Cinderella 1950/1997/2015/2021, Total Recall 1990/2012, Cape Fear 1962/1991, etc.), heuristics inevitably mismatch user intent for some class of ambiguity. v5.12.3 surfaces a chooser instead of guessing.
+
+Trigger logic in `lib/tmdb.ts` `findExactTitleCandidates(title)`:
+- STRICT 100%-letter-by-letter title match (case-insensitive only, NO article/punct/whitespace stripping). Critical distinction from searchMovie's silent-pick normalization which is lenient (catches "EverAfter" / "Ever After"). The picker fires only for true title clones — "The Heat" does NOT collide with "Heat", "Up!" does NOT collide with "Up".
+- Released as of today (no future placeholders).
+- vote_count >= 50: minimum-viability gate. User pushed back hard on vote_count being a "factor" earlier in the session, but accepted this distinction: the floor is for picker ELIGIBILITY (filtering placeholder shorts / unrated obscurities that share the title by coincidence), NOT for ranking among candidates. Among qualifying candidates we don't rank by votes; the picker just lists oldest → newest.
+- 1-year dedupe (re-releases / restored cuts).
+- Cap at 6 candidates.
+
+Wired into search route at point 5.7 (after cache miss + sequel resolution, before release-date gate). Skipped entirely when user typed a year hint. Returns `{ambiguous: true, candidates}` with 200 status. Frontend `fetchMovieAPI` + `doSearch` gain an ambiguous branch that bypasses the pipeline. Picker UI in `film-glance.jsx` reuses the existing dym-card visual treatment for site consistency — italic Playfair gold heading + Syne body + per-card poster + year pill + 3-line clamped overview. Click-through re-issues search with `"${title} ${year}"` so the year-hint path in searchMovie picks the disambiguated film cleanly (no new pipeline code path).
+
+Validated via `scratch/test-ambiguity.mjs` across 30 cases: **30/30 pass**. 16 true collisions trigger picker; 14 unique-title queries silent-pick.
+
+### What's next
+
+Three patches stranded on staging — v5.12.1 (poster + nav), v5.12.2 (search title-match), v5.12.3 (ambiguity picker). Production at filmglance.com still has the Dutch poster bug AND the missing mobile nav until the next PR ships. Push staging, open PR `staging → main`, user reviews preview.
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | v5.12.2: searchMovie 3-stage rewrite; v5.12.3: new `findExactTitleCandidates` + AmbiguityCandidate interface |
+| `app/api/search/route.ts` | v5.12.2: title gate ordered-subsequence; v5.12.3: ambiguity check at point 5.7 |
+| `components/film-glance.jsx` | v5.12.3: `ambiguousMatches` state, ambiguous branch in doSearch, picker render before result section |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.1+.2+.3; old May 2 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/test-title-match.mjs`, `scratch/test-ambiguity.mjs`, `scratch/debug-ambiguous.mjs`, `scratch/find-ever-after.mjs`, `scratch/clear-ever-after-cache.mjs`.
+
+---
+
 ## Session: May 2, 2026 (continued) — v5.12.1 hotfix (TMDB poster localization + restore mobile nav)
 
 After PR #52 was opened, user reported two bugs needing fix-before-merge.
