@@ -1,0 +1,251 @@
+/* app/globals.css
+ *
+ * Global stylesheet — fonts and shared chip styles available on every route.
+ * v5.12.0: extracted from components/film-glance.jsx so /boxoffice and any
+ * future route shares the typography + filter-chip aesthetic without rendering
+ * the 5500-line film-glance component.
+ *
+ * The Google Fonts @import lived inside film-glance.jsx; that meant /boxoffice
+ * and other pages without that component were falling back to system serif
+ * for headers (the "Box Office font looks different from the rest" symptom).
+ * Lifting it here fixes that for every page.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* ── Hero accent (gold gradient italic) ──────────────────────────────────── */
+.hero-accent {
+  background: linear-gradient(135deg, #FFE27A 0%, #FFD700 32%, #E8A000 62%, #FFD700 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  text-shadow: 0 0 14px rgba(255, 215, 0, 0.26);
+}
+
+/* ── Shiny chip — adapted from aliimam/shiny-button (21st.dev), recolored
+ *    to Film Glance gold. Used on filter bars, CTA pills, and folder pickers.
+ *    Layered conic-gradient border + dotted ::before shimmer + ::after arc
+ *    gleam + span::before breathe pulse. ─────────────────────────────────── */
+
+@property --fg-shiny-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@property --fg-shiny-offset {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@property --fg-shiny-pct {
+  syntax: '<percentage>';
+  initial-value: 5%;
+  inherits: false;
+}
+@property --fg-shiny-shine {
+  syntax: '<color>';
+  initial-value: #FFFFFF;
+  inherits: false;
+}
+@keyframes fgShinyAngle { to { --fg-shiny-angle: 360deg; } }
+@keyframes fgShinyArc   { to { rotate: 360deg; } }
+@keyframes fgShinyBreathe { from, to { scale: 1; } 50% { scale: 1.2; } }
+
+.fg-shiny {
+  --shiny-bg: #0a0805;
+  --shiny-bg-sub: #1a1308;
+  --shiny-fg: rgba(255, 255, 255, 0.86);
+  --shiny-hi: #FFD700;
+  --shiny-hi-soft: #FFE89A;
+  --shiny-anim: fgShinyAngle linear infinite;
+  --shiny-dur: 3s;
+  --shiny-ring: 1.5px;
+  --shiny-trans: 600ms cubic-bezier(0.25, 1, 0.5, 1);
+  isolation: isolate;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  color: var(--shiny-fg);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--shiny-bg), var(--shiny-bg)) padding-box,
+    conic-gradient(
+      from calc(var(--fg-shiny-angle) - var(--fg-shiny-offset)),
+      transparent,
+      var(--shiny-hi) var(--fg-shiny-pct),
+      var(--fg-shiny-shine) calc(var(--fg-shiny-pct) * 2),
+      var(--shiny-hi) calc(var(--fg-shiny-pct) * 3),
+      transparent calc(var(--fg-shiny-pct) * 4)
+    ) border-box;
+  box-shadow: inset 0 0 0 1px var(--shiny-bg-sub);
+  transition: var(--shiny-trans);
+  transition-property: --fg-shiny-offset, --fg-shiny-pct, --fg-shiny-shine, color, transform;
+}
+.fg-shiny > * { position: relative; z-index: 1; }
+.fg-shiny:active { translate: 0 1px; }
+
+.fg-shiny::before,
+.fg-shiny::after,
+.fg-shiny .fg-shiny-label::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  translate: -50% -50%;
+  z-index: -1;
+}
+.fg-shiny::before {
+  --size: calc(100% - 6px);
+  --pos: 2px;
+  --space: calc(var(--pos) * 2);
+  width: var(--size);
+  height: var(--size);
+  background: radial-gradient(
+    circle at var(--pos) var(--pos),
+    rgba(255, 240, 180, 0.95) calc(var(--pos) / 4),
+    transparent 0
+  ) padding-box;
+  background-size: var(--space) var(--space);
+  background-repeat: space;
+  mask-image: conic-gradient(
+    from calc(var(--fg-shiny-angle) + 45deg),
+    black,
+    transparent 12% 88%,
+    black
+  );
+  border-radius: inherit;
+  opacity: 0.32;
+}
+.fg-shiny::after {
+  width: 130%;
+  aspect-ratio: 1;
+  background: linear-gradient(
+    -50deg,
+    transparent 38%,
+    var(--shiny-hi) 50%,
+    transparent 62%
+  );
+  mask-image: radial-gradient(circle at bottom, transparent 52%, black);
+  opacity: 0.18;
+  animation: fgShinyArc linear infinite var(--shiny-dur);
+}
+.fg-shiny.active::after,
+.fg-shiny.fg-shiny-cta::after { opacity: 0.22; }
+.fg-shiny .fg-shiny-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+}
+.fg-shiny .fg-shiny-label::before {
+  --size: calc(100% + 0.6rem);
+  width: var(--size);
+  height: var(--size);
+  box-shadow: inset 0 -1.6ex 1.4rem 3px var(--shiny-hi);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--shiny-trans);
+  animation: calc(var(--shiny-dur) * 1.5) fgShinyBreathe linear infinite;
+}
+.fg-shiny,
+.fg-shiny::before,
+.fg-shiny::after {
+  animation: var(--shiny-anim) var(--shiny-dur),
+    var(--shiny-anim) calc(var(--shiny-dur) / 0.4) reverse paused;
+  animation-composition: add;
+}
+.fg-shiny:is(:hover, :focus-visible, :focus-within) {
+  --fg-shiny-pct: 18%;
+  --fg-shiny-offset: 90deg;
+  --fg-shiny-shine: var(--shiny-hi-soft);
+  color: #FFFFFF;
+}
+.fg-shiny:is(:hover, :focus-visible, :focus-within),
+.fg-shiny:is(:hover, :focus-visible, :focus-within)::before,
+.fg-shiny:is(:hover, :focus-visible, :focus-within)::after {
+  animation-play-state: running;
+}
+.fg-shiny:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0.22; }
+
+.fg-shiny.active {
+  --shiny-fg: #FFD700;
+  --fg-shiny-pct: 7%;
+  --fg-shiny-shine: var(--shiny-hi-soft);
+  --shiny-bg-sub: #1f1604;
+  color: #FFD700;
+}
+.fg-shiny.active,
+.fg-shiny.active::before,
+.fg-shiny.active::after { animation-play-state: running; }
+.fg-shiny.active .fg-shiny-label::before { opacity: 0; }
+
+.fg-shiny.fg-shiny-cta {
+  --shiny-bg-sub: #1f1604;
+  --fg-shiny-pct: 7%;
+  color: #FFD700;
+}
+.fg-shiny.fg-shiny-cta,
+.fg-shiny.fg-shiny-cta::before,
+.fg-shiny.fg-shiny-cta::after { animation-play-state: running; }
+.fg-shiny.fg-shiny-cta .fg-shiny-label::before { opacity: 0; }
+
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) {
+  --fg-shiny-pct: 7%;
+  --fg-shiny-shine: var(--shiny-hi);
+  color: var(--shiny-fg);
+}
+.fg-shiny.fg-shiny-flat:is(:hover, :focus-visible, :focus-within) .fg-shiny-label::before { opacity: 0; }
+
+/* Disabled "Coming Soon" variant — locks the chip in a dim state, no
+ * animation, cursor:not-allowed. Used for the International chip on
+ * /boxoffice until v2 ships. */
+.fg-shiny.fg-shiny-disabled {
+  --shiny-fg: rgba(255, 255, 255, 0.42);
+  --shiny-bg-sub: #14100a;
+  color: rgba(255, 255, 255, 0.42);
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.fg-shiny.fg-shiny-disabled,
+.fg-shiny.fg-shiny-disabled::before,
+.fg-shiny.fg-shiny-disabled::after { animation-play-state: paused; }
+.fg-shiny.fg-shiny-disabled:hover { color: rgba(255, 255, 255, 0.42); }
+.fg-shiny.fg-shiny-disabled .fg-shiny-coming-soon {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.16);
+  color: #FFD700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.fg-shiny .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: rgba(255, 215, 0, 0.78);
+  background: rgba(255, 215, 0, 0.10);
+  padding: 2px 7px;
+  border-radius: 999px;
+  line-height: 1;
+}
+.fg-shiny.active .count { color: #FFD700; background: rgba(255, 215, 0, 0.20); }

@@ -1,6 +1,8 @@
 // app/layout.tsx
+import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import PendingFavoriteHandler from "@/components/PendingFavoriteHandler";
 
 export const metadata = {
   title: "Film Glance — Every Film. One Rating at a Glance.",
@@ -36,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" style={{ overflowX: "clip" }}>
       <body style={{ margin: 0, padding: 0, background: "#050505", overflowX: "clip", maxWidth: "100vw" }}>
         {children}
+        <PendingFavoriteHandler />
         <Analytics />
         <SpeedInsights />
       </body>
