@@ -3186,7 +3186,7 @@ export default function FilmGlance() {
       </header>
 
       {/* ───── Atmosphere layers — only on the idle landing ───── */}
-      {!result && !loading && !showFavs && (
+      {!result && !loading && !showFavs && !ambiguousMatches && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
           <div className="fg-particles-wrap" aria-hidden="true">
@@ -4054,10 +4054,10 @@ export default function FilmGlance() {
           </div>
         );
       })() : (
-        <main style={{ maxWidth: (result || loading) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
+        <main style={{ maxWidth: (result || loading || ambiguousMatches) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
           {/* Search area */}
-          <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
-            {!result && !loading && (
+          <div style={{ textAlign: "center", paddingTop: (result || loading || ambiguousMatches) ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: (result || loading || ambiguousMatches) ? 10 : 32, ...((result || loading || ambiguousMatches) ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
+            {!result && !loading && !ambiguousMatches && (
               <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44 }}>
                 <LetterLine text="Every Film." offset={0.15} />
                 <span
@@ -5359,7 +5359,9 @@ export default function FilmGlance() {
           })()}
 
           {/* ───── New landing below-fold (ticker + how-it-works + film-strip) — idle only ───── */}
-          {!result && !loading && (
+          {/* v5.12.8: also hide when the ambiguity picker is showing — same
+              UX as the DYM page (no marketing chrome below an active result). */}
+          {!result && !loading && !ambiguousMatches && (
             <>
               <Ornament marginTop={0} marginBottom={0} />
 
@@ -5482,7 +5484,7 @@ export default function FilmGlance() {
           notFound state. The window-level scroll listener at the top of
           the component drives scrollPct off window.scrollY so the same
           indicator works for any scrolling view without per-view wiring. */}
-      {((result && !result.notFound) || (!result && !loading)) && (
+      {((result && !result.notFound) || (!result && !loading && !ambiguousMatches)) && (
         <>
           <div ref={scrollTrackRef} onClick={(e) => {
             const track = scrollTrackRef.current;
