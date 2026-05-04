@@ -868,6 +868,8 @@ export interface AmbiguityCandidate {
   release_date: string | null;
   poster_path: string | null;
   overview: string;
+  runtime: string | null;   // formatted "2h 8m" / "98m"
+  director: string | null;
 }
 
 /**
@@ -960,14 +962,44 @@ export async function findExactTitleCandidates(
     // Sort by year ascending so picker shows oldest → newest, then cap at
     // 6 entries to keep the grid scannable.
     deduped.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
-    return deduped.slice(0, 6).map((m) => ({
-      tmdb_id: m.id,
-      title: m.title,
-      year: m.release_date ? parseInt(m.release_date.slice(0, 4)) || null : null,
-      release_date: m.release_date || null,
-      poster_path: m.poster_path || null,
-      overview: (m as any).overview || "",
-    }));
+    const top = deduped.slice(0, 6);
+
+    // v5.12.6: enrich with runtime + director so picker cards match the
+    // info density of the Did-You-Mean cards. One /movie/{id} call per
+    // candidate, all parallel — ~150ms for 6 candidates.
+    const enriched = await Promise.all(
+      top.map(async (m) => {
+        const out: AmbiguityCandidate = {
+          tmdb_id: m.id,
+          title: m.title,
+          year: m.release_date ? parseInt(m.release_date.slice(0, 4)) || null : null,
+          release_date: m.release_date || null,
+          poster_path: m.poster_path || null,
+          overview: (m as any).overview || "",
+          runtime: null,
+          director: null,
+        };
+        try {
+          const res = await fetch(
+            `${TMDB_BASE}/movie/${m.id}?api_key=${TMDB_KEY}&append_to_response=credits&language=en-US`,
+            { signal: AbortSignal.timeout(4000) },
+          );
+          if (!res.ok) return out;
+          const d: any = await res.json();
+          if (typeof d.runtime === "number" && d.runtime > 0) {
+            const h = Math.floor(d.runtime / 60);
+            const mm = d.runtime % 60;
+            out.runtime = h > 0 && mm > 0 ? `${h}h ${mm}m` : h > 0 ? `${h}h` : `${mm}m`;
+          }
+          const directors = (d.credits?.crew || [])
+            .filter((c: any) => c.job === "Director")
+            .map((c: any) => c.name);
+          if (directors.length > 0) out.director = directors.join(", ");
+        } catch { /* fall through with nulls */ }
+        return out;
+      }),
+    );
+    return enriched;
   } catch {
     return null;
   }

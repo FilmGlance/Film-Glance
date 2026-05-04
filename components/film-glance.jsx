@@ -4120,34 +4120,49 @@ export default function FilmGlance() {
               consistency. Click → re-search with "title YEAR" so the year-hint
               path in lib/tmdb.ts searchMovie picks the disambiguated film. */}
           {ambiguousMatches && (
-            <div style={{ animation: "slideUp 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
-              <div style={{ marginBottom: 18 }}>
-                <h2 style={{
-                  fontFamily: "'Playfair Display', serif",
-                  fontStyle: "italic",
-                  fontWeight: 600,
-                  fontSize: "clamp(28px, 4vw, 38px)",
-                  letterSpacing: -0.6,
-                  lineHeight: 1.08,
-                  color: "#FFD700",
-                  margin: 0,
-                }}>
-                  There are a few with that name.
-                </h2>
-                <p style={{
-                  fontFamily: "'Syne', sans-serif",
-                  fontSize: 16,
-                  color: "rgba(255, 255, 255, 0.72)",
-                  margin: "10px 0 0",
-                  lineHeight: 1.5,
-                }}>
-                  Pick the one you meant for "{ambiguousMatches.query}".
+            <div style={{ padding: "32px 0 36px", animation: "fadeIn 0.5s ease-out" }}>
+              <div className="dym-rail dym-rail-top" aria-hidden="true" />
+
+              <div style={{ textAlign: "center", padding: "36px 18px 24px" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "0 16px",
+                    color: "rgba(255, 255, 255, 0.78)",
+                    fontSize: 11.5,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 700,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    wordBreak: "break-word",
+                    animation: "softFade 0.5s ease-out 0.1s both",
+                  }}
+                >
+                  <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>searched&nbsp;&middot;&nbsp;</span>
+                  <span style={{ color: "#fff", textTransform: "none", letterSpacing: 0.2, fontSize: 12.5, fontWeight: 700 }}>&ldquo;{ambiguousMatches.query}&rdquo;</span>
                 </p>
+
+                <h2
+                  className="dym-headline"
+                  style={{
+                    marginTop: 14,
+                    fontFamily: "'Playfair Display', serif",
+                    fontStyle: "italic",
+                    fontSize: "clamp(30px, 6vw, 44px)",
+                    fontWeight: 600,
+                    letterSpacing: -0.8,
+                    lineHeight: 1.05,
+                    margin: "14px 0 0",
+                    animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both",
+                  }}
+                >
+                  There are a few with that name…
+                </h2>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 4px", marginBottom: 28 }}>
                 {ambiguousMatches.candidates.map((c, i) => {
-                  const ariaLabel = `${c.title} (${c.year || "year unknown"})${c.overview ? ` — ${c.overview.slice(0, 120)}` : ""}`;
+                  const ariaLabel = `${c.title} (${c.year || "year unknown"})${c.director ? `, directed by ${c.director}` : ""}`;
                   return (
                     <button
                       key={`${c.tmdb_id}-${i}`}
@@ -4166,7 +4181,7 @@ export default function FilmGlance() {
                       className="dym-card"
                       style={{
                         display: "flex", alignItems: "center", gap: 22,
-                        padding: "20px 22px",
+                        padding: "20px 22px 20px 22px",
                         background: "rgba(10, 8, 4, 0.62)",
                         border: "1px solid rgba(255, 215, 0, 0.10)",
                         borderRadius: 14,
@@ -4176,7 +4191,7 @@ export default function FilmGlance() {
                         position: "relative",
                         overflow: "hidden",
                         opacity: 0,
-                        animation: `softFade 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${0.18 + i * 0.08}s both`,
+                        animation: `softFade 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${0.42 + i * 0.08}s both`,
                         transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease, filter 0.2s ease",
                       }}
                     >
@@ -4218,7 +4233,7 @@ export default function FilmGlance() {
                         </div>
                         <div style={{
                           display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
-                          marginBottom: c.overview ? 12 : 0,
+                          marginBottom: (c.overview || c.director) ? 12 : 0,
                         }}>
                           {c.year && (
                             <span style={{
@@ -4232,6 +4247,27 @@ export default function FilmGlance() {
                               background: "rgba(255, 215, 0, 0.06)",
                               border: "1px solid rgba(255, 215, 0, 0.18)",
                             }}>{c.year}</span>
+                          )}
+                          {c.runtime && (
+                            <span style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: 1.2,
+                              color: "rgba(255, 255, 255, 0.66)",
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              background: "rgba(255, 255, 255, 0.04)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                            }}>{c.runtime}</span>
+                          )}
+                          {c.director && (
+                            <span style={{
+                              fontFamily: "'Syne', sans-serif",
+                              fontSize: 12.5,
+                              color: "rgba(255, 255, 255, 0.62)",
+                              fontStyle: "italic",
+                            }}>Directed by {c.director}</span>
                           )}
                         </div>
                         {c.overview && (
@@ -4264,6 +4300,8 @@ export default function FilmGlance() {
                   );
                 })}
               </div>
+
+              <div className="dym-rail dym-rail-bottom" aria-hidden="true" />
             </div>
           )}
 
