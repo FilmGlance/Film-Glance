@@ -1,5 +1,94 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 (PM) — v5.12.6 + v5.12.7 + v5.12.8 + v5.12.9 (ambiguity picker hardening: visual parity, cache lock-in fix, own-page treatment, descending order)
+
+Four follow-up patches landed in quick succession after user retesting v5.12.5 surfaced UX + design issues with the picker. All ride on PR #53 alongside v5.12.1–.5.
+
+### v5.12.6 — picker matches DYM format
+
+User feedback after v5.12.3-.5 deployed: "design the page in the same format as the Did You Mean page regarding formatting, layout, and amount of information presented."
+
+Aligned the picker visually + info-density to the Did-You-Mean section:
+- `dym-rail` top + bottom decorative lines.
+- Centered "SEARCHED · {query}" monospace footnote (JetBrains Mono small caps).
+- Italic Playfair gold "There are a few with that name…" headline (`clamp(30px, 6vw, 44px)`).
+- Cards reuse the existing `dym-card` class so hover/focus/animation are identical.
+- New: runtime + director chips on each card. `findExactTitleCandidates` now does a parallel `/movie/{id}?append_to_response=credits` per candidate (~150ms for 6 in parallel) to populate them. AmbiguityCandidate interface gains `runtime` + `director`.
+
+### v5.12.7 — promote ambiguity check before cache lookup (cache lock-in fix)
+
+User searched `michael` after v5.12.6 and got Michael 2026 directly — no picker. Diagnosis (`scratch/check-michael-state.mjs`): cache had `michael` → Michael 2026 written 19 min before the user's search. Cache hit at point 5 of `/api/search` returned instantly, bypassing the v5.12.3 ambiguity check at point 5.7.
+
+**This was a fundamental design flaw**: once ANY user searches an ambiguous bare title, whichever movie the pipeline silent-picked caches under that search_key, and ALL subsequent users skip the picker forever (until cache expiry).
+
+Fix: moved ambiguity check from point 5.7 to point 4.5 — BEFORE the cache lookup. Bare-title queries (no year hint) now ALWAYS check ambiguity first. Ambiguous queries return picker payload directly without consulting OR writing to cache. Year-hinted queries (`michael 1996`) skip ambiguity entirely → cache lookup → pipeline.
+
+Cost: ~80-150ms TMDB call on every no-year-hint search. TMDB CDN-caches search hits so realistic latency closer to the lower end.
+
+### v5.12.8 — picker claims its own page (hides hero + marketing chrome)
+
+User: *"What is this design??? I said MAKE IT LIKE THE DID YOU MEAN PAGE? It should be on it's own page, stylized with great clean ui. You have parts of the home page on this new page. HORRIFIC."*
+
+The picker rendered SANDWICHED between the hero ("Every Film. One True Rating Score." 104px h1) and the homepage marketing sections (Review Sites Included + How It Works). Cause: those gates only checked `!result && !loading`. When `ambiguousMatches` was set, `result` stayed null and `loading` was false, so all the homepage chrome rendered alongside the picker.
+
+DYM works because `result` IS set to `{notFound: true, query: q}` which truthy-passes all the `!result` gates. Picker uses a separate `ambiguousMatches` state the gates didn't know about.
+
+Four gates updated to also exclude `ambiguousMatches`:
+- Atmosphere bg-spotlight + grid layer (line 3189)
+- Main wrapper width/padding/sticky-search (line 4057)
+- Hero h1 "Every Film. One True Rating Score." (line 4060)
+- Marketing sections — Review Sites Included + How It Works ticker (line 5364)
+- GoldScrollbar (line 5487 — matches DYM's "small list view, hide the indicator" behavior)
+
+Picker now visually owns the viewport identical to DYM.
+
+### v5.12.9 — descending order (newest → oldest)
+
+User: "let's make it so that ORDER is in descending order. So we start from the most recent movie to the oldest."
+
+Flipped the final sort in `findExactTitleCandidates` from ascending to descending (`b.release_date.localeCompare(a.release_date)`). The earlier ascending sort (for the 1-year-dedupe pass — keeps the earlier of two near-duplicate release-dates as canonical rep) stays.
+
+For `michael`: order is now Michael 2026 → 1996 → 1924 (was 1924 → 1996 → 2026). Same applies across all picker cases.
+
+### What's on PR #53 now
+
+Nine commits, v5.12.1 → v5.12.9:
+1. v5.12.1 — Ever After Dutch poster + mobile nav restore
+2. v5.12.2 — search title-match (Ever After → EverAfter via parallel concat search)
+3. v5.12.3 — same-title ambiguity picker
+4. v5.12.4 — stripped-containment match (Ever After: A Cinderella Story)
+5. v5.12.5 — always-refresh-on-read SWR (foundational cache freshness)
+6. v5.12.6 — picker visual format matches DYM (rail + searched footnote + runtime/director chips)
+7. v5.12.7 — promote ambiguity check before cache lookup (cache lock-in fix)
+8. v5.12.8 — picker hides hero + marketing chrome (own-page visual treatment)
+9. v5.12.9 — picker descending order (newest → oldest)
+
+### Three follow-up scopes deferred to separate sessions/PRs
+
+| Scope | Why deferred | Estimated effort |
+|---|---|---|
+| **Rating discrepancy audit** (500-movie test) | Needs focused agent session with own context budget | 2-3 hr |
+| **Next 14 → Next 16 security migration (v6.0.0)** | All 8 Dependabot CVEs gated on Next major version; 14.2.35 is the last 14.2.x patch ever. App Router + edge runtime (`/api/search`) + RSC have breaking changes — full route regression testing required | 1-2 dedicated days |
+| **VPS forum import** | Running healthy as of May 4 21:45 UTC; let it cook | Monitoring only |
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | v5.12.6 enrichment for runtime/director; v5.12.9 sort flipped to descending |
+| `app/api/search/route.ts` | v5.12.7 ambiguity check moved to point 4.5; old check at point 5.7 removed |
+| `components/film-glance.jsx` | v5.12.6 picker layout matches DYM; v5.12.8 four gates updated to exclude `ambiguousMatches` |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.6–.9; old May 4 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/check-michael-state.mjs`, `scratch/clear-michael.mjs`, `scratch/diagnose-michael.mjs`.
+
+### Production status
+
+Production at filmglance.com is still on v5.12.0 (the merge of PR #52). All nine patches in PR #53 will ship together when merged.
+
+---
+
 ## Session: May 4, 2026 — v5.12.5 always-refresh-on-read SWR (foundational cache freshness fix) + Michael cache clear
 
 User retested staging post-v5.12.4 and reported:
