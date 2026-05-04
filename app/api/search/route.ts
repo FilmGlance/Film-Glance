@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error } = await supabaseAdmin
         .from("movie_cache")
-        .select("data, hit_count, expires_at")
+        .select("data, hit_count, expires_at, cached_at")
         .eq("search_key", query)
         .single();
       if (!error && data) cached = data;
@@ -243,6 +243,29 @@ export async function POST(req: NextRequest) {
     if (cached) {
       const isStale = new Date(cached.expires_at) < new Date();
 
+      // v5.12.5 — always-refresh-on-read with two gates:
+      //   • cache_age > 1 hour: prevents identical queries from triggering N
+      //     parallel refreshes; bounds Anthropic spend.
+      //   • sources < 6 (underpopulated): forces immediate retry even within
+      //     the dedup window. Catches the "newly-released movie cached
+      //     with sparse APIs at write time" case (Michael 2026 had only
+      //     TMDB / Simkl / Letterboxd; IMDb / RT / Metacritic / Trakt
+      //     showed up days later but the cache was stuck).
+      // Healthy non–Coming-Soon entries have 9 sources; 6 means at least
+      // two-thirds populated. Some genuinely-rare films may never reach 6,
+      // which is fine — the 1-hour dedup keeps cost bounded even in that
+      // pathological case.
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const SOURCE_FLOOR = 6;
+      const cacheAgeMs = cached.cached_at
+        ? Date.now() - new Date(cached.cached_at).getTime()
+        : Number.POSITIVE_INFINITY;
+      const sourceCount = ((cached.data as any)?.sources as any[] | undefined)?.length ?? 0;
+      const isComingSoon = (cached.data as any)?.coming_soon === true;
+      const isUnderpopulated = !isComingSoon && sourceCount < SOURCE_FLOOR;
+      const isPastHourly = cacheAgeMs > ONE_HOUR_MS;
+      const shouldRefresh = isStale || isUnderpopulated || isPastHourly;
+
       // Fire-and-forget: update hit count + log
       runInBackground(async () => {
         await Promise.all([
@@ -251,9 +274,9 @@ export async function POST(req: NextRequest) {
         ]);
       }, "cache-hit-log");
 
-      // If stale, fire background refresh (non-blocking)
-      if (isStale && ANTHROPIC_API_KEY) {
-        const isComingSoon = (cached.data as any).coming_soon === true;
+      // Always-refresh-on-read SWR. Fires when stale, underpopulated, or
+      // > 1h since last refresh. Background; zero user-latency impact.
+      if (shouldRefresh && ANTHROPIC_API_KEY) {
         runInBackground(async () => {
           if (isComingSoon) {
             // Re-check release date — movie might have released since last cache
@@ -323,12 +346,25 @@ export async function POST(req: NextRequest) {
         const resolvedKey = sanitizeQuery(resolvedTitle);
         const { data, error } = await supabaseAdmin
           .from("movie_cache")
-          .select("data, hit_count, expires_at")
+          .select("data, hit_count, expires_at, cached_at")
           .eq("search_key", resolvedKey)
           .single();
 
         if (!error && data) {
           const isStale = new Date(data.expires_at) < new Date();
+          // v5.12.5 — same always-refresh-on-read gates as the primary
+          // cache hit path: 1h dedup + sources<6 underpopulated bypass.
+          const ONE_HOUR_MS = 60 * 60 * 1000;
+          const SOURCE_FLOOR = 6;
+          const cacheAgeMs = data.cached_at
+            ? Date.now() - new Date(data.cached_at).getTime()
+            : Number.POSITIVE_INFINITY;
+          const sourceCount = ((data.data as any)?.sources as any[] | undefined)?.length ?? 0;
+          const isComingSoon = (data.data as any)?.coming_soon === true;
+          const shouldRefresh =
+            isStale ||
+            (!isComingSoon && sourceCount < SOURCE_FLOOR) ||
+            cacheAgeMs > ONE_HOUR_MS;
 
           runInBackground(async () => {
             await Promise.all([
@@ -337,7 +373,7 @@ export async function POST(req: NextRequest) {
             ]);
           }, "sequel-cache-hit-log");
 
-          if (isStale && ANTHROPIC_API_KEY) {
+          if (shouldRefresh && ANTHROPIC_API_KEY) {
             runInBackground(async () => {
               const mv = await runFullPipeline(resolvedTitle, resolvedTitle, resolvedYear);
               if (mv) await writeCacheEntries(resolvedKey, resolvedTitle, mv.title, mv, user?.id || null, ip, "swr-refresh");

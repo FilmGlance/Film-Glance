@@ -1,5 +1,84 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 — v5.12.5 always-refresh-on-read SWR (foundational cache freshness fix) + Michael cache clear
+
+User retested staging post-v5.12.4 and reported:
+1. `michael` search returned the 2026 Antoine Fuqua biopic — but the v5.12.3 ambiguity picker should have fired (Michael 1924 / 1996 / 2026 all share the exact title).
+2. The Michael 2026 source breakdown showed only TMDB / Simkl / Letterboxd — IMDb, Rotten Tomatoes, Metacritic, Trakt all missing despite all four having pages with ratings.
+3. Build log had a warning that didn't paste over.
+
+### Diagnosis (scratch/diagnose-michael.mjs)
+
+Both bugs share the same root cause:
+- `michael` cache entry was written April 28 (8 days ago) — right around when the 2026 film first appeared on TMDB.
+- At that moment IMDb / RT / Metacritic / Trakt didn't have ratings on the page yet, so the pipeline only got TMDB / Simkl / Letterboxd into the cache row.
+- 30-day TTL meant the underpopulated entry sat unrefreshed even as IMDb / RT filled in over the following days.
+- AND the cache hit at point 5 of the search route returned that entry instantly, bypassing the v5.12.3 ambiguity check at point 5.7.
+
+Foundational issue: SWR refresh fires only on TTL expiry. Newly-released movies cached when APIs were sparse get stuck for 30 days.
+
+### Fix (v5.12.5 — per user direction "fire on every search")
+
+Widened SWR trigger in both cache-hit branches (primary lookup + sequel-resolved lookup):
+
+```ts
+const cacheAgeMs = cached.cached_at
+  ? Date.now() - new Date(cached.cached_at).getTime()
+  : Number.POSITIVE_INFINITY;
+const sourceCount = (cached.data?.sources || []).length;
+const isComingSoon = cached.data?.coming_soon === true;
+const isUnderpopulated = !isComingSoon && sourceCount < 6;
+const isPastHourly = cacheAgeMs > 60 * 60 * 1000;
+const shouldRefresh = isStale || isUnderpopulated || isPastHourly;
+```
+
+Three gates ORed:
+- **isStale** — existing TTL behavior, kept as-is.
+- **isUnderpopulated** — sources < 6 (healthy entries have 9). Forces immediate refresh for the Michael-2026-class case where APIs were sparse at write time.
+- **isPastHourly** — cache_age > 1 hour. Always-fresh-on-read with 1h dedup so popular queries don't trigger refresh storms. Bounds Anthropic spend at ~24 refreshes/day per hot query.
+
+Cache SELECT widened to include `cached_at`. Background `runInBackground(...)` already wraps the refresh — zero user-latency impact.
+
+### Cost analysis
+
+At 10k searches/day, 1h dedup caps distinct hot queries at ~24 refreshes/query/day. Realistic estimate $1-3/day in Anthropic Haiku 4.5 spend (input ~3k tok @ $0.25/M + output ~2k tok @ $1.25/M ≈ $0.001/refresh). External APIs (TMDB / OMDb / Trakt / Simkl / Letterboxd / RT scrape) have generous quotas — no rate-limit risk.
+
+### Build log review
+
+Pulled the full log via `vercel inspect https://film-glance-42wwkxecr-rs-projects-c0025ef0.vercel.app --logs`. Single warning at line 28:
+
+> ⚠ Using edge runtime on a page currently disables static generation for that page
+
+Refers to `app/api/search/route.ts` which has `export const runtime = "edge"` (intentional, added in v5.11.0 for ~450ms cold-start improvement). Benign Next.js 14 informational notice. Route correctly shows as `ƒ /api/search` (Dynamic) in the build's route table — the warning is just Next.js noting that edge-runtime routes can't be statically prerendered, which we don't want anyway. Suppressing it would mean reverting to Node serverless and losing the cold-start win.
+
+### Stale cache cleared
+
+`michael` and `michael 2026` cache entries deleted via service-role key (scratch/clear-michael.mjs). Next user search:
+- Cache miss → runs through ambiguity check (point 5.7)
+- 3 strict-100% qualifying candidates: Michael (1924) / Michael (1996) / Michael (2026)
+- Picker fires with the dym-card grid — user disambiguates
+- Click-through re-issues search with year hint ("Michael 2026") → cache miss → full pipeline → IMDb / RT / Metacritic / Trakt now populate (8 days have passed since original write — APIs have ratings now)
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `app/api/search/route.ts` | Both cache-hit branches: widened SWR trigger to (isStale OR underpopulated OR cacheAge > 1h) with 1h dedup; SELECT now includes `cached_at` |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.5; old May 2 PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/diagnose-michael.mjs`, `scratch/clear-michael.mjs`.
+
+### Picker decision
+
+User confirmed: keep the 50-vote floor. All 3 Michaels (1924 / 1996 / 2026) show in the picker. The 1924 Carl Theodor Dreyer Danish silent has 51 votes — borderline but a real feature film, qualifies per the no-popularity-filter rule.
+
+### Next
+
+PR #53 picks up the v5.12.5 commit automatically. User retests `michael` for picker + Michael 2026 sources for completeness. Merge PR #53.
+
+---
+
 ## Session: May 2, 2026 (late PM) — v5.12.4 stripped-containment match (Ever After: A Cinderella Story)
 
 User retested staging post-v5.12.3 and reported: typing the full IMDb canonical title `"Ever After: A Cinderella Story"` returns 404 / "Did you mean…" instead of resolving to the 1998 Drew Barrymore film. Screenshots showed Cinderella: After Ever After (2019) and A Cinderella Story (2004) as the DYM suggestions — clearly wrong matches.
