@@ -223,6 +223,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 4.5. Exact-title ambiguity check (v5.12.7 — promoted before cache).
+    //      When 2+ released films share the EXACT canonical title (Carrie
+    //      1976/2002/2013, Pet Sematary 1989/2019, Michael 1924/1996/2026,
+    //      etc.) and the user didn't type a year hint, surface a picker.
+    //      MUST fire before the cache lookup at point 5: otherwise once any
+    //      user searches "michael" and the pipeline picks one (say 2026),
+    //      that result caches under search_key="michael" and ALL subsequent
+    //      "michael" searches hit cache → bypass the picker → broken UX.
+    //      v5.12.3 had this check at point 5.7 (after cache lookup); v5.12.7
+    //      moves it to point 4.5 to fix the cache-lock-in bug. Cost: ~80-
+    //      150ms TMDB call on every no-year-hint search; ambiguous queries
+    //      never write to cache (they short-circuit before the pipeline).
+    //      Skipped entirely when user typed a year ("michael 1996") since
+    //      that already disambiguates.
+    if (!userYearHint) {
+      const ambigCandidates = await findExactTitleCandidates(searchTitle).catch(() => null);
+      if (ambigCandidates && ambigCandidates.length >= 2) {
+        console.log(`[ambiguity] "${query}" → ${ambigCandidates.length} same-title films, returning picker`);
+        return NextResponse.json({
+          ambiguous: true,
+          query,
+          candidates: ambigCandidates,
+          _source: "ambiguity-picker",
+        });
+      }
+    }
+
     // 5. Cache lookup — Stale-While-Revalidate
     //    ANY cached entry returns instantly (no expiry filter).
     //    If expired, fire background refresh.
@@ -400,29 +427,8 @@ export async function POST(req: NextRequest) {
       } catch { /* continue to API */ }
     }
 
-    // 5.7. Exact-title ambiguity check (v5.12.3). If 2+ released films
-    //      share the EXACT same canonical title (Carrie 1976/2002/2013, Pet
-    //      Sematary 1989/2019, The Mummy 1932/1999/2017, etc.) and the user
-    //      didn't disambiguate with a year hint, return a picker payload so
-    //      the frontend can render the "There are a few with that name"
-    //      page. Each candidate is ≥AMBIGUITY_VOTE_FLOOR votes (filters out
-    //      placeholder shorts that share the title by coincidence — this is
-    //      NOT a popularity ranking, just a minimum-viability gate). Skip
-    //      this check entirely when the user typed a year ("carrie 1976")
-    //      because the year already disambiguates.
-    if (!userYearHint) {
-      const ambigTitle = sequelResolution ? resolvedTitle : searchTitle;
-      const candidates = await findExactTitleCandidates(ambigTitle).catch(() => null);
-      if (candidates && candidates.length >= 2) {
-        console.log(`[ambiguity] "${query}" → ${candidates.length} same-title films, returning picker`);
-        return NextResponse.json({
-          ambiguous: true,
-          query,
-          candidates,
-          _source: "ambiguity-picker",
-        });
-      }
-    }
+    // (v5.12.7: ambiguity check was here at 5.7; moved to 4.5 — before
+    // cache lookup — to prevent cache lock-in on bare ambiguous titles.)
 
     // 5.75. Release date gate — check if movie is unreleased (v5.7)
     //       If TMDB knows the movie but it hasn't been released yet,
