@@ -959,9 +959,11 @@ export async function findExactTitleCandidates(
 
     if (deduped.length < 2) return null;
 
-    // Sort by year ascending so picker shows oldest → newest, then cap at
-    // 6 entries to keep the grid scannable.
-    deduped.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
+    // Sort by year DESCENDING so picker shows newest → oldest (most recent
+    // film first), then cap at 6 entries to keep the grid scannable. The
+    // earlier ascending sort (for dedupe) stays — that one ensures we keep
+    // the earlier of two near-duplicate release-dates as the canonical rep.
+    deduped.sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""));
     const top = deduped.slice(0, 6);
 
     // v5.12.6: enrich with runtime + director so picker cards match the
