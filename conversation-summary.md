@@ -1,5 +1,348 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 (PM) — v5.12.6 + v5.12.7 + v5.12.8 + v5.12.9 (ambiguity picker hardening: visual parity, cache lock-in fix, own-page treatment, descending order)
+
+Four follow-up patches landed in quick succession after user retesting v5.12.5 surfaced UX + design issues with the picker. All ride on PR #53 alongside v5.12.1–.5.
+
+### v5.12.6 — picker matches DYM format
+
+User feedback after v5.12.3-.5 deployed: "design the page in the same format as the Did You Mean page regarding formatting, layout, and amount of information presented."
+
+Aligned the picker visually + info-density to the Did-You-Mean section:
+- `dym-rail` top + bottom decorative lines.
+- Centered "SEARCHED · {query}" monospace footnote (JetBrains Mono small caps).
+- Italic Playfair gold "There are a few with that name…" headline (`clamp(30px, 6vw, 44px)`).
+- Cards reuse the existing `dym-card` class so hover/focus/animation are identical.
+- New: runtime + director chips on each card. `findExactTitleCandidates` now does a parallel `/movie/{id}?append_to_response=credits` per candidate (~150ms for 6 in parallel) to populate them. AmbiguityCandidate interface gains `runtime` + `director`.
+
+### v5.12.7 — promote ambiguity check before cache lookup (cache lock-in fix)
+
+User searched `michael` after v5.12.6 and got Michael 2026 directly — no picker. Diagnosis (`scratch/check-michael-state.mjs`): cache had `michael` → Michael 2026 written 19 min before the user's search. Cache hit at point 5 of `/api/search` returned instantly, bypassing the v5.12.3 ambiguity check at point 5.7.
+
+**This was a fundamental design flaw**: once ANY user searches an ambiguous bare title, whichever movie the pipeline silent-picked caches under that search_key, and ALL subsequent users skip the picker forever (until cache expiry).
+
+Fix: moved ambiguity check from point 5.7 to point 4.5 — BEFORE the cache lookup. Bare-title queries (no year hint) now ALWAYS check ambiguity first. Ambiguous queries return picker payload directly without consulting OR writing to cache. Year-hinted queries (`michael 1996`) skip ambiguity entirely → cache lookup → pipeline.
+
+Cost: ~80-150ms TMDB call on every no-year-hint search. TMDB CDN-caches search hits so realistic latency closer to the lower end.
+
+### v5.12.8 — picker claims its own page (hides hero + marketing chrome)
+
+User: *"What is this design??? I said MAKE IT LIKE THE DID YOU MEAN PAGE? It should be on it's own page, stylized with great clean ui. You have parts of the home page on this new page. HORRIFIC."*
+
+The picker rendered SANDWICHED between the hero ("Every Film. One True Rating Score." 104px h1) and the homepage marketing sections (Review Sites Included + How It Works). Cause: those gates only checked `!result && !loading`. When `ambiguousMatches` was set, `result` stayed null and `loading` was false, so all the homepage chrome rendered alongside the picker.
+
+DYM works because `result` IS set to `{notFound: true, query: q}` which truthy-passes all the `!result` gates. Picker uses a separate `ambiguousMatches` state the gates didn't know about.
+
+Four gates updated to also exclude `ambiguousMatches`:
+- Atmosphere bg-spotlight + grid layer (line 3189)
+- Main wrapper width/padding/sticky-search (line 4057)
+- Hero h1 "Every Film. One True Rating Score." (line 4060)
+- Marketing sections — Review Sites Included + How It Works ticker (line 5364)
+- GoldScrollbar (line 5487 — matches DYM's "small list view, hide the indicator" behavior)
+
+Picker now visually owns the viewport identical to DYM.
+
+### v5.12.9 — descending order (newest → oldest)
+
+User: "let's make it so that ORDER is in descending order. So we start from the most recent movie to the oldest."
+
+Flipped the final sort in `findExactTitleCandidates` from ascending to descending (`b.release_date.localeCompare(a.release_date)`). The earlier ascending sort (for the 1-year-dedupe pass — keeps the earlier of two near-duplicate release-dates as canonical rep) stays.
+
+For `michael`: order is now Michael 2026 → 1996 → 1924 (was 1924 → 1996 → 2026). Same applies across all picker cases.
+
+### What's on PR #53 now
+
+Nine commits, v5.12.1 → v5.12.9:
+1. v5.12.1 — Ever After Dutch poster + mobile nav restore
+2. v5.12.2 — search title-match (Ever After → EverAfter via parallel concat search)
+3. v5.12.3 — same-title ambiguity picker
+4. v5.12.4 — stripped-containment match (Ever After: A Cinderella Story)
+5. v5.12.5 — always-refresh-on-read SWR (foundational cache freshness)
+6. v5.12.6 — picker visual format matches DYM (rail + searched footnote + runtime/director chips)
+7. v5.12.7 — promote ambiguity check before cache lookup (cache lock-in fix)
+8. v5.12.8 — picker hides hero + marketing chrome (own-page visual treatment)
+9. v5.12.9 — picker descending order (newest → oldest)
+
+### Three follow-up scopes deferred to separate sessions/PRs
+
+| Scope | Why deferred | Estimated effort |
+|---|---|---|
+| **Rating discrepancy audit** (500-movie test) | Needs focused agent session with own context budget | 2-3 hr |
+| **Next 14 → Next 16 security migration (v6.0.0)** | All 8 Dependabot CVEs gated on Next major version; 14.2.35 is the last 14.2.x patch ever. App Router + edge runtime (`/api/search`) + RSC have breaking changes — full route regression testing required | 1-2 dedicated days |
+| **VPS forum import** | Running healthy as of May 4 21:45 UTC; let it cook | Monitoring only |
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | v5.12.6 enrichment for runtime/director; v5.12.9 sort flipped to descending |
+| `app/api/search/route.ts` | v5.12.7 ambiguity check moved to point 4.5; old check at point 5.7 removed |
+| `components/film-glance.jsx` | v5.12.6 picker layout matches DYM; v5.12.8 four gates updated to exclude `ambiguousMatches` |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.6–.9; old May 4 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/check-michael-state.mjs`, `scratch/clear-michael.mjs`, `scratch/diagnose-michael.mjs`.
+
+### Production status
+
+Production at filmglance.com is still on v5.12.0 (the merge of PR #52). All nine patches in PR #53 will ship together when merged.
+
+---
+
+## Session: May 4, 2026 — v5.12.5 always-refresh-on-read SWR (foundational cache freshness fix) + Michael cache clear
+
+User retested staging post-v5.12.4 and reported:
+1. `michael` search returned the 2026 Antoine Fuqua biopic — but the v5.12.3 ambiguity picker should have fired (Michael 1924 / 1996 / 2026 all share the exact title).
+2. The Michael 2026 source breakdown showed only TMDB / Simkl / Letterboxd — IMDb, Rotten Tomatoes, Metacritic, Trakt all missing despite all four having pages with ratings.
+3. Build log had a warning that didn't paste over.
+
+### Diagnosis (scratch/diagnose-michael.mjs)
+
+Both bugs share the same root cause:
+- `michael` cache entry was written April 28 (8 days ago) — right around when the 2026 film first appeared on TMDB.
+- At that moment IMDb / RT / Metacritic / Trakt didn't have ratings on the page yet, so the pipeline only got TMDB / Simkl / Letterboxd into the cache row.
+- 30-day TTL meant the underpopulated entry sat unrefreshed even as IMDb / RT filled in over the following days.
+- AND the cache hit at point 5 of the search route returned that entry instantly, bypassing the v5.12.3 ambiguity check at point 5.7.
+
+Foundational issue: SWR refresh fires only on TTL expiry. Newly-released movies cached when APIs were sparse get stuck for 30 days.
+
+### Fix (v5.12.5 — per user direction "fire on every search")
+
+Widened SWR trigger in both cache-hit branches (primary lookup + sequel-resolved lookup):
+
+```ts
+const cacheAgeMs = cached.cached_at
+  ? Date.now() - new Date(cached.cached_at).getTime()
+  : Number.POSITIVE_INFINITY;
+const sourceCount = (cached.data?.sources || []).length;
+const isComingSoon = cached.data?.coming_soon === true;
+const isUnderpopulated = !isComingSoon && sourceCount < 6;
+const isPastHourly = cacheAgeMs > 60 * 60 * 1000;
+const shouldRefresh = isStale || isUnderpopulated || isPastHourly;
+```
+
+Three gates ORed:
+- **isStale** — existing TTL behavior, kept as-is.
+- **isUnderpopulated** — sources < 6 (healthy entries have 9). Forces immediate refresh for the Michael-2026-class case where APIs were sparse at write time.
+- **isPastHourly** — cache_age > 1 hour. Always-fresh-on-read with 1h dedup so popular queries don't trigger refresh storms. Bounds Anthropic spend at ~24 refreshes/day per hot query.
+
+Cache SELECT widened to include `cached_at`. Background `runInBackground(...)` already wraps the refresh — zero user-latency impact.
+
+### Cost analysis
+
+At 10k searches/day, 1h dedup caps distinct hot queries at ~24 refreshes/query/day. Realistic estimate $1-3/day in Anthropic Haiku 4.5 spend (input ~3k tok @ $0.25/M + output ~2k tok @ $1.25/M ≈ $0.001/refresh). External APIs (TMDB / OMDb / Trakt / Simkl / Letterboxd / RT scrape) have generous quotas — no rate-limit risk.
+
+### Build log review
+
+Pulled the full log via `vercel inspect https://film-glance-42wwkxecr-rs-projects-c0025ef0.vercel.app --logs`. Single warning at line 28:
+
+> ⚠ Using edge runtime on a page currently disables static generation for that page
+
+Refers to `app/api/search/route.ts` which has `export const runtime = "edge"` (intentional, added in v5.11.0 for ~450ms cold-start improvement). Benign Next.js 14 informational notice. Route correctly shows as `ƒ /api/search` (Dynamic) in the build's route table — the warning is just Next.js noting that edge-runtime routes can't be statically prerendered, which we don't want anyway. Suppressing it would mean reverting to Node serverless and losing the cold-start win.
+
+### Stale cache cleared
+
+`michael` and `michael 2026` cache entries deleted via service-role key (scratch/clear-michael.mjs). Next user search:
+- Cache miss → runs through ambiguity check (point 5.7)
+- 3 strict-100% qualifying candidates: Michael (1924) / Michael (1996) / Michael (2026)
+- Picker fires with the dym-card grid — user disambiguates
+- Click-through re-issues search with year hint ("Michael 2026") → cache miss → full pipeline → IMDb / RT / Metacritic / Trakt now populate (8 days have passed since original write — APIs have ratings now)
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `app/api/search/route.ts` | Both cache-hit branches: widened SWR trigger to (isStale OR underpopulated OR cacheAge > 1h) with 1h dedup; SELECT now includes `cached_at` |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.5; old May 2 PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/diagnose-michael.mjs`, `scratch/clear-michael.mjs`.
+
+### Picker decision
+
+User confirmed: keep the 50-vote floor. All 3 Michaels (1924 / 1996 / 2026) show in the picker. The 1924 Carl Theodor Dreyer Danish silent has 51 votes — borderline but a real feature film, qualifies per the no-popularity-filter rule.
+
+### Next
+
+PR #53 picks up the v5.12.5 commit automatically. User retests `michael` for picker + Michael 2026 sources for completeness. Merge PR #53.
+
+---
+
+## Session: May 2, 2026 (late PM) — v5.12.4 stripped-containment match (Ever After: A Cinderella Story)
+
+User retested staging post-v5.12.3 and reported: typing the full IMDb canonical title `"Ever After: A Cinderella Story"` returns 404 / "Did you mean…" instead of resolving to the 1998 Drew Barrymore film. Screenshots showed Cinderella: After Ever After (2019) and A Cinderella Story (2004) as the DYM suggestions — clearly wrong matches.
+
+### Diagnosis (via scratch/trace-ever-after-full.mjs)
+
+1. TMDB stores the 1998 Drew Barrymore film as just `"EverAfter"` (one word, no space).
+2. searchMovie's parallel original+concat search returns ONLY EverAfter 1998 (the concat search "EverAfter:ACinderellaStory" returns 0 because TMDB's tokenizer doesn't split it).
+3. searchMovie's Stage 1 (whitespace-insensitive exact match) fails: stripped query `everafteracinderellastory` ≠ stripped title `everafter`.
+4. searchMovie's Stage 2 (ordered word-subsequence) fails: qWords `[ever, after, cinderella, story]` can't be a subsequence of tWords `[everafter]` (only 1 word in TMDB's title).
+5. searchMovie's Stage 3 returns EverAfter as the fallback (correctly).
+6. Title gate then rejects: `normQ="ever after a cinderella story"` (29 chars) vs `normT="everafter"` (9 chars). lenRatio = 0.31, well below the 0.75 substring gate. Word-subsequence fails for same reason as Stage 2.
+7. → 404 / DYM.
+
+### Fix (v5.12.4)
+
+Added a **stripped-whitespace containment check** at both the search layer and the title gate:
+
+- `lib/tmdb.ts` searchMovie: new Stage 3 (between ordered-subsequence and the original results[0] fallback) — strip ALL whitespace from query and each candidate title; if the shorter side is ≥5 chars and either is a substring of the other, accept.
+- `app/api/search/route.ts` title gate (line 461): added `isStrippedContains` to the OR with `isCloseSubstring` and `isOrderedSubsequence`.
+
+For "Ever After: A Cinderella Story" vs "EverAfter": stripped query `everafteracinderellastory`, stripped title `everafter`, `everafter` ⊂ `everafteracinderellastory` → MATCH.
+
+The 5-char minimum prevents 2-3-letter coincidences (e.g., short-query "lol" matching some random title containing "lol").
+
+### Validation
+
+- `scratch/test-title-match.mjs` expanded to 46 cases including the user's exact failing input ("Ever After: A Cinderella Story" + lowercase variant). 44/46 pass. Both new cases resolve correctly to EverAfter (1998).
+- Trace script (`scratch/trace-ever-after-full.mjs`) confirms `isStrippedContains` evaluates true for the user's exact query.
+- The 2 remaining failures (Mad Max 2016, The Matrix 2004) are unrelated TMDB metadata oddities from concat-search noise — both technically valid exact matches per the no-popularity-filter rule.
+- Stale cache entries (`ever after`, `ever after: a cinderella story`, `everafter` etc.) cleared via service-role key so the next user search re-runs the pipeline.
+
+### What rides on PR #53
+
+PR #53 (staging→main) was opened just before this fix, so it'll automatically pick up the new commit when staging is updated. Bundled scope:
+- v5.12.1: Ever After Dutch poster + mobile nav restore
+- v5.12.2: search title-match (Ever After → EverAfter via parallel concat search + 3-stage match)
+- v5.12.3: same-title ambiguity picker (Carrie/Pet Sematary/etc. → "There are a few with that name.")
+- v5.12.4: stripped-containment fallback (this fix)
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `app/api/search/route.ts` | Title gate: added `isStrippedContains` check |
+| `lib/tmdb.ts` | searchMovie: new stripped-containment Stage 3 between ordered-subsequence and results[0] fallback |
+| `tech-specs.md` | New ✅ CURRENT STATE row; old PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/trace-ever-after-full.mjs`, `scratch/clear-ever-after-full.mjs`.
+
+---
+
+## Session: May 2, 2026 (PM) — v5.12.2 search title-match fix + v5.12.3 same-title ambiguity picker
+
+PR #52 (v5.12.0 /boxoffice + rounds 1-14b) merged at 01:25 UTC. v5.12.1 (Ever After Dutch poster + mobile nav) was committed to staging at 02:06 — 41 minutes too late to ride along, so it sits unmerged. User reported two more bugs after that, plus scoped a new disambiguation feature.
+
+### Bug 1 (v5.12.2) — "Ever After" returned "After Ever Happy"
+
+User had a tester search "Ever after" → result page showed "After Ever Happy" (2022 Wattpad/TikTok hit) with Castille Landon as director. Two-layer root cause:
+
+- TMDB `/search/movie` ranks by popularity. "After Ever Happy" massively outranked the actual 1998 Drew Barrymore film.
+- Search route's title gate had a `wordMatch` heuristic that accepted any 75% set-overlap regardless of order. "Ever After" → "After Ever Happy" had 100% set overlap (both query words present in title) but in the wrong order.
+
+Investigation discovered TMDB's actual title for the 1998 film is **"EverAfter"** (one word, no space). Spaced search "Ever After" doesn't surface it on any of 6 result pages — the canonical match is buried under unrelated obscure entries. Searching "EverAfter" (concatenated) returns it as the top result.
+
+Fix: rewrote `searchMovie` in `lib/tmdb.ts` with parallel original + concatenated TMDB search. Three-stage match preference, no vote_count filtering at any stage (per user direction — obscure films are valid intent):
+1. Whitespace + leading-article-insensitive exact match → first in merged order
+2. Ordered word-subsequence (rejects "ever after" → "after ever happy" because words are out of order)
+3. TMDB's first result fallback
+
+Title gate's set-based `wordMatch` replaced with ordered-subsequence requirement. Skips empty-release_date placeholders.
+
+Validated against live TMDB across 44 high-risk titles via `scratch/test-title-match.mjs`: 42/44 pass. The 2 remaining (Mad Max 2016, The Matrix 2004 surfaced over canonical originals via concat search noise) are technically valid exact matches per the no-popularity-filter rule, refinable with year hint.
+
+### Bug 2 (v5.12.3) — Same-title ambiguity picker
+
+User explicitly scoped this: "create a separate page of instances where there are several versions of a movie with the EXACT SAME name (100% match - letter by letter)."
+
+When 2+ released films share the exact canonical title (Carrie 1976/2002/2013, Pet Sematary 1989/2019, The Mummy 1932/1959/1999/2017, Halloween 1978/2007/2018, Cinderella 1950/1997/2015/2021, Total Recall 1990/2012, Cape Fear 1962/1991, etc.), heuristics inevitably mismatch user intent for some class of ambiguity. v5.12.3 surfaces a chooser instead of guessing.
+
+Trigger logic in `lib/tmdb.ts` `findExactTitleCandidates(title)`:
+- STRICT 100%-letter-by-letter title match (case-insensitive only, NO article/punct/whitespace stripping). Critical distinction from searchMovie's silent-pick normalization which is lenient (catches "EverAfter" / "Ever After"). The picker fires only for true title clones — "The Heat" does NOT collide with "Heat", "Up!" does NOT collide with "Up".
+- Released as of today (no future placeholders).
+- vote_count >= 50: minimum-viability gate. User pushed back hard on vote_count being a "factor" earlier in the session, but accepted this distinction: the floor is for picker ELIGIBILITY (filtering placeholder shorts / unrated obscurities that share the title by coincidence), NOT for ranking among candidates. Among qualifying candidates we don't rank by votes; the picker just lists oldest → newest.
+- 1-year dedupe (re-releases / restored cuts).
+- Cap at 6 candidates.
+
+Wired into search route at point 5.7 (after cache miss + sequel resolution, before release-date gate). Skipped entirely when user typed a year hint. Returns `{ambiguous: true, candidates}` with 200 status. Frontend `fetchMovieAPI` + `doSearch` gain an ambiguous branch that bypasses the pipeline. Picker UI in `film-glance.jsx` reuses the existing dym-card visual treatment for site consistency — italic Playfair gold heading + Syne body + per-card poster + year pill + 3-line clamped overview. Click-through re-issues search with `"${title} ${year}"` so the year-hint path in searchMovie picks the disambiguated film cleanly (no new pipeline code path).
+
+Validated via `scratch/test-ambiguity.mjs` across 30 cases: **30/30 pass**. 16 true collisions trigger picker; 14 unique-title queries silent-pick.
+
+### What's next
+
+Three patches stranded on staging — v5.12.1 (poster + nav), v5.12.2 (search title-match), v5.12.3 (ambiguity picker). Production at filmglance.com still has the Dutch poster bug AND the missing mobile nav until the next PR ships. Push staging, open PR `staging → main`, user reviews preview.
+
+### Files modified this session
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | v5.12.2: searchMovie 3-stage rewrite; v5.12.3: new `findExactTitleCandidates` + AmbiguityCandidate interface |
+| `app/api/search/route.ts` | v5.12.2: title gate ordered-subsequence; v5.12.3: ambiguity check at point 5.7 |
+| `components/film-glance.jsx` | v5.12.3: `ambiguousMatches` state, ambiguous branch in doSearch, picker render before result section |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.12.1+.2+.3; old May 2 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/test-title-match.mjs`, `scratch/test-ambiguity.mjs`, `scratch/debug-ambiguous.mjs`, `scratch/find-ever-after.mjs`, `scratch/clear-ever-after-cache.mjs`.
+
+---
+
+## Session: May 2, 2026 (continued) — v5.12.1 hotfix (TMDB poster localization + restore mobile nav)
+
+After PR #52 was opened, user reported two bugs needing fix-before-merge.
+
+### Bug 1: Ever After poster wrong (Dutch instead of English)
+
+User's tester searched "Ever after" — the result page rendered with a Dutch DVD compilation cover ("Lang & Gelukkig", the Dutch theatrical title for Ever After) instead of the English poster. Title, year, director, and tagline were correct; only the poster was foreign.
+
+**Root cause:** TMDB's `/search/movie` and `/movie/{id}` endpoints return a community-curated `poster_path` that doesn't honor user language preference unless explicitly told. The site's TMDB calls in `lib/tmdb.ts` and `app/api/suggest/route.ts` were calling without `language=en-US` / `region=US`, so for some titles the primary poster TMDB ranked highest happened to be a non-English upload (Ever After's most-voted poster on TMDB is the Dutch DVD cover).
+
+**Fix:**
+- Added `language=en-US&region=US` to every `/search/movie` call.
+- Added new `fetchBestEnglishPoster(movieId)` helper in `lib/tmdb.ts` that hits `/movie/{id}/images?include_image_language=en,null` and picks the highest-voted poster (rank: explicit `en` > language-agnostic `null` > other; tiebreaker `vote_average` desc). Falls back to the search-result `poster_path` when TMDB has no English poster.
+- Wired into `enrichWithTMDB` (parallel to existing fetches), `enrichBoxOfficeWithTMDB` (bundled into the existing `/movie/{id}` call via `append_to_response=images` so no extra round-trip), and the suggest endpoint's `tmdbDetails`/`tmdbSuggestions`.
+- Deleted the stale `ever after` cache entry in `movie_cache` via service-role key so the user's next search re-runs the pipeline with the new TMDB code.
+
+### Bug 2: Discussion Forum + Box Office nav links missing on mobile (repeat mobile-parity violation)
+
+User reported BOTH nav links hidden on a real iPhone visit. CLAUDE.md's "Mobile parity is non-negotiable" section was already in place (Apr 29, 2026, after the v5.10.34 mobile audit) — this was a repeat violation that crept in when the Box Office nav was added in round 1.
+
+**Root cause:** `components/film-glance.jsx:2891-2893` and `components/SiteHeader.jsx:161-163` had:
+```css
+@media (max-width: 560px) {
+  .nav-discuss-btn { display: none !important; }
+  .nav-boxoffice-btn { display: none !important; }  // film-glance.jsx only
+}
+```
+
+**Fix:** removed both `display: none` rules. The links now collapse to icon-only on mobile via the existing `.nav-forum-label { display: none }` rule at ≤520px — they remain tappable on every viewport down to 360px.
+
+### Memory hardcoding (per user demand)
+
+User said: *"I thought we hard coded that you HAVE to consider and implement ANY site change to mobile for all changes? Please HARD CODE this into claude memory file as well as our bible docs"*
+
+Done:
+- Saved `~/.claude/projects/.../memory/feedback_mobile_nav_never_hidden.md` with the rule + a pre-commit grep check (`\.nav-[a-z-]+\s*\{[^}]*display:\s*none`) so the rule survives across sessions.
+- Added a pointer to `MEMORY.md`.
+- Reinforced CLAUDE.md's mobile-parity section with an explicit nav-link bullet pointing back to the same grep check.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `lib/tmdb.ts` | `language=en-US&region=US` on `/search/movie`; new `fetchBestEnglishPoster` helper; `enrichWithTMDB` and `enrichBoxOfficeWithTMDB` now prefer English posters |
+| `app/api/suggest/route.ts` | Same language/region params + English-poster selection in `tmdbDetails` and `tmdbSuggestions` |
+| `components/film-glance.jsx` | Removed `.nav-discuss-btn` and `.nav-boxoffice-btn` `display: none` rules at ≤560px |
+| `components/SiteHeader.jsx` | Removed `.nav-discuss-btn` `display: none` rule at ≤560px |
+| `CLAUDE.md` | New nav-link bullet under the mobile-parity section + pre-commit grep check |
+| `~/.claude/projects/.../memory/feedback_mobile_nav_never_hidden.md` | NEW — feedback memory hardcoding the rule |
+| `~/.claude/projects/.../memory/MEMORY.md` | New pointer to the feedback memory |
+| `tech-specs.md` | New ✅ CURRENT STATE row for v5.12.1; old May 2 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Side artifact: `scratch/invalidate-ever-after.mjs` (gitignored) used to delete the stale cache entry.
+
+### Lesson logged
+
+The Box Office nav link was added in round 1 (Apr 30) and the `.nav-boxoffice-btn { display: none }` rule rode along — a fresh nav addition that didn't get a mobile-parity check. The mobile-parity rule was followed for new components (cards, filters, modals) but not retroactively applied to the headers when a nav link was added. Going forward: any change to a header nav must trigger a 360px viewport check, codified in CLAUDE.md.
+
+### Next steps
+
+User re-tests staging on a real iPhone — Discussion Forum + Box Office both visible (icon-only) at the top, Ever After search shows the English poster. On approval, merge PR #52 to main as the v5.12.0 official ship.
+
+---
+
 ## Session: May 2, 2026 — v5.12.0 /boxoffice round 14 (historical week-catalog truncation, definitive fix)
 
 User re-tested the round-13 staging deploy and reported the same bug from round 12 was still present — picking 1987-Jan / 1994-Mar / 2001-Feb showed an empty Week dropdown even though the monthly Top-10 rendered correctly for the same cells. Asked me to "spin up 10 agents and run 200 tests" to find a definitive fix.

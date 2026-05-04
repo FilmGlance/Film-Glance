@@ -35,28 +35,55 @@ function formatRuntimeMins(mins: number | null | undefined): string | null {
   return `${m}m`;
 }
 
-async function tmdbDetails(id: number): Promise<{ runtime: string | null; director: string | null }> {
+// English poster selection: TMDB's `poster_path` on /movie/{id} can be a
+// foreign-language cover. Use `append_to_response=images&include_image_
+// language=en,null` to grab English + language-agnostic posters and pick
+// the highest-voted one. Same logic lives in lib/tmdb.ts (canonical there).
+function pickBestPoster(
+  posters: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }> | undefined,
+  fallback: string | null,
+): string | null {
+  if (!posters || posters.length === 0) return fallback;
+  const sorted = [...posters].sort((a, b) => {
+    const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+    const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+    if (aRank !== bRank) return bRank - aRank;
+    return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+  });
+  return sorted[0]?.file_path ?? fallback;
+}
+
+async function tmdbDetails(
+  id: number,
+): Promise<{ runtime: string | null; director: string | null; poster_path: string | null }> {
   try {
     const res = await fetch(
-      `${TMDB_BASE}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=credits`,
+      `${TMDB_BASE}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=credits,images&include_image_language=en,null&language=en-US`,
       { signal: AbortSignal.timeout(4000) }
     );
-    if (!res.ok) return { runtime: null, director: null };
+    if (!res.ok) return { runtime: null, director: null, poster_path: null };
     const d = await res.json();
     const runtime = formatRuntimeMins(d.runtime);
     const directors = (d.credits?.crew || [])
       .filter((c: any) => c.job === "Director")
       .map((c: any) => c.name);
     const director = directors.length > 0 ? directors.join(", ") : null;
-    return { runtime, director };
+    const poster_path = pickBestPoster(d.images?.posters, d.poster_path ?? null);
+    return { runtime, director, poster_path };
   } catch {
-    return { runtime: null, director: null };
+    return { runtime: null, director: null, poster_path: null };
   }
 }
 
 async function tmdbSuggestions(q: string): Promise<Suggestion[]> {
   if (!TMDB_KEY) return [];
-  const params = new URLSearchParams({ api_key: TMDB_KEY, query: q, include_adult: "false" });
+  const params = new URLSearchParams({
+    api_key: TMDB_KEY,
+    query: q,
+    include_adult: "false",
+    language: "en-US",
+    region: "US",
+  });
   try {
     const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
       signal: AbortSignal.timeout(5000),
@@ -70,7 +97,7 @@ async function tmdbSuggestions(q: string): Promise<Suggestion[]> {
         return {
           title: m.title,
           year: m.release_date ? parseInt(m.release_date.substring(0, 4)) : null,
-          poster_path: m.poster_path,
+          poster_path: details.poster_path ?? m.poster_path,
           overview: m.overview || null,
           runtime: details.runtime,
           director: details.director,
@@ -126,6 +153,8 @@ async function enrichMissingFields(items: Suggestion[]): Promise<Suggestion[]> {
           api_key: TMDB_KEY,
           query: s.title,
           include_adult: "false",
+          language: "en-US",
+          region: "US",
         });
         if (s.year) params.set("primary_release_year", String(s.year));
         const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {

@@ -158,8 +158,10 @@ export default function SiteHeader({ active = null }) {
         @media (max-width: 520px) {
           .nav-forum-label { display: none !important; }
         }
+        /* v5.12.1: nav buttons stay visible on mobile (icon-only via the
+           ≤520px .nav-forum-label rule above). Mobile parity is mandatory —
+           nav links must never be hidden on smaller viewports. */
         @media (max-width: 560px) {
-          .nav-discuss-btn { display: none !important; }
           .nav-account-label { display: none !important; }
           .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
           .nav-brand { font-size: 17px !important; }

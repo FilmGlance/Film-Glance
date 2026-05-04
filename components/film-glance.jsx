@@ -900,6 +900,9 @@ async function fetchMovieAPI(title, authToken) {
     if (!r.ok) return null;
 
     const mv = await r.json();
+    // v5.12.3 — pass through the ambiguity picker payload before the
+    // title/sources sanity check (no `title` field on this shape).
+    if (mv && mv.ambiguous && Array.isArray(mv.candidates)) return mv;
     if (!mv.title || (!mv.coming_soon && (!mv.sources || mv.sources.length === 0))) return null;
 
     // Construct image URLs from TMDB paths
@@ -1216,6 +1219,13 @@ export default function FilmGlance() {
   const [errMsg, setErrMsg] = useState(null);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  // v5.12.3 — exact-title ambiguity picker. When the search route detects 2+
+  // released films sharing the same canonical title, it returns
+  // {ambiguous: true, candidates: [...]} and we render a chooser instead of
+  // the result page. Click-through re-runs the search with the year suffix,
+  // and the existing year-hint path in lib/tmdb.ts searchMovie picks the
+  // disambiguated film cleanly.
+  const [ambiguousMatches, setAmbiguousMatches] = useState(null);
   const inputRef = useRef(null);
   const scrollTrackRef = useRef(null);
   const [scrollPct, setScrollPct] = useState(0);
@@ -1527,7 +1537,7 @@ export default function FilmGlance() {
       } catch { /* fall through to normal flow on parse error */ }
     }
 
-    setLoading(true); setResult(null); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false);
+    setLoading(true); setResult(null); setVideoModal(null); setShowSug(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false); setAmbiguousMatches(null);
 
     // Backend API lookup (handles: server cache → Anthropic → TMDB image enrichment)
     setLoadMsg("Scanning Movie Studio Vault...");
@@ -1553,6 +1563,14 @@ export default function FilmGlance() {
         const wait = Math.max(1, mv.retryAfter || 60);
         setErrMsg(`Searching too fast — try again in ${wait} second${wait === 1 ? "" : "s"}.`);
         setResult({ notFound: true, query: q });
+        setLoading(false);
+        return;
+      }
+
+      // v5.12.3 — ambiguity picker: 2+ released films share the same exact
+      // canonical title. Render the chooser instead of running the pipeline.
+      if (mv && mv.ambiguous && Array.isArray(mv.candidates) && mv.candidates.length >= 2) {
+        setAmbiguousMatches({ query: q, candidates: mv.candidates });
         setLoading(false);
         return;
       }
@@ -1637,7 +1655,7 @@ export default function FilmGlance() {
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
     : SUGGESTIONS.slice(0, 8);
 
-  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false); };
+  const resetHome = () => { setResult(null); setShowPrice(false); setShowFavs(false); setQuery(""); setLoading(false); setErrMsg(null); setSuggestions([]); setDailyLimitReached(false); setAmbiguousMatches(null); };
 
   const toggleFav = async (movieResult) => {
     if (!user) { setShowAuth(true); return; }
@@ -2888,9 +2906,10 @@ export default function FilmGlance() {
            Account / Sign In button icon-only (label hidden), and
            tighten button padding so the "Film Glance" brand-mark stops
            wrapping onto two lines. Also tighten header padding. */
+        /* v5.12.1: nav buttons stay visible on mobile (icon-only via the
+           ≤520px .nav-forum-label rule above). Mobile parity is mandatory —
+           nav links must never be hidden on smaller viewports. */
         @media (max-width: 560px) {
-          .nav-discuss-btn { display: none !important; }
-          .nav-boxoffice-btn { display: none !important; }
           .nav-account-label { display: none !important; }
           .nav-btn { padding: 7px 9px !important; gap: 5px !important; }
           .nav-brand { font-size: 17px !important; }
@@ -3167,7 +3186,7 @@ export default function FilmGlance() {
       </header>
 
       {/* ───── Atmosphere layers — only on the idle landing ───── */}
-      {!result && !loading && !showFavs && (
+      {!result && !loading && !showFavs && !ambiguousMatches && (
         <>
           <div className="bg-spotlight" aria-hidden="true" />
           <div className="fg-particles-wrap" aria-hidden="true">
@@ -4035,10 +4054,10 @@ export default function FilmGlance() {
           </div>
         );
       })() : (
-        <main style={{ maxWidth: (result || loading) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
+        <main style={{ maxWidth: (result || loading || ambiguousMatches) ? 720 : 1200, margin: "0 auto", padding: "0 16px", position: "relative", zIndex: 10, transition: "max-width 0.3s ease" }}>
           {/* Search area */}
-          <div style={{ textAlign: "center", paddingTop: result || loading ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: result || loading ? 10 : 32, ...(result || loading ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
-            {!result && !loading && (
+          <div style={{ textAlign: "center", paddingTop: (result || loading || ambiguousMatches) ? 12 : 90, transition: "padding-top 0.5s cubic-bezier(0.16,1,0.3,1)", marginBottom: (result || loading || ambiguousMatches) ? 10 : 32, ...((result || loading || ambiguousMatches) ? { position: "sticky", top: 61, zIndex: 40, background: "rgba(5,5,5,0.7)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", paddingBottom: 12, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, ...(result && !loading ? { borderBottom: "1px solid rgba(255,215,0,0.04)" } : {}) } : {}) }}>
+            {!result && !loading && !ambiguousMatches && (
               <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(52px, 8.6vw, 104px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: -1.8, marginBottom: 44 }}>
                 <LetterLine text="Every Film." offset={0.15} />
                 <span
@@ -4093,6 +4112,198 @@ export default function FilmGlance() {
           {/* Loading video now rendered as a global overlay at the bottom of
               the component tree — so it appears regardless of whether the
               user is in favs view, signed in/out, or any other state. */}
+
+          {/* v5.12.3 — Same-title ambiguity picker. Surfaces when 2+ released
+              films share the EXACT same canonical title (Carrie 1976/2002/2013,
+              Pet Sematary 1989/2019, The Mummy 1932/1999/2017, Halloween
+              1978/2018, etc.). Reuses the dym-card visual treatment for site
+              consistency. Click → re-search with "title YEAR" so the year-hint
+              path in lib/tmdb.ts searchMovie picks the disambiguated film. */}
+          {ambiguousMatches && (
+            <div style={{ padding: "32px 0 36px", animation: "fadeIn 0.5s ease-out" }}>
+              <div className="dym-rail dym-rail-top" aria-hidden="true" />
+
+              <div style={{ textAlign: "center", padding: "36px 18px 24px" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "0 16px",
+                    color: "rgba(255, 255, 255, 0.78)",
+                    fontSize: 11.5,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 700,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    wordBreak: "break-word",
+                    animation: "softFade 0.5s ease-out 0.1s both",
+                  }}
+                >
+                  <span style={{ color: "rgba(255, 215, 0, 0.85)" }}>searched&nbsp;&middot;&nbsp;</span>
+                  <span style={{ color: "#fff", textTransform: "none", letterSpacing: 0.2, fontSize: 12.5, fontWeight: 700 }}>&ldquo;{ambiguousMatches.query}&rdquo;</span>
+                </p>
+
+                <h2
+                  className="dym-headline"
+                  style={{
+                    marginTop: 14,
+                    fontFamily: "'Playfair Display', serif",
+                    fontStyle: "italic",
+                    fontSize: "clamp(30px, 6vw, 44px)",
+                    fontWeight: 600,
+                    letterSpacing: -0.8,
+                    lineHeight: 1.05,
+                    margin: "14px 0 0",
+                    animation: "softFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both",
+                  }}
+                >
+                  There are a few with that name…
+                </h2>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 4px", marginBottom: 28 }}>
+                {ambiguousMatches.candidates.map((c, i) => {
+                  const ariaLabel = `${c.title} (${c.year || "year unknown"})${c.director ? `, directed by ${c.director}` : ""}`;
+                  return (
+                    <button
+                      key={`${c.tmdb_id}-${i}`}
+                      onClick={() => {
+                        const disambiguated = c.year ? `${c.title} ${c.year}` : c.title;
+                        setAmbiguousMatches(null);
+                        setQuery(disambiguated);
+                        doSearch(disambiguated);
+                      }}
+                      onPointerMove={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+                        e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+                      }}
+                      aria-label={ariaLabel}
+                      className="dym-card"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 22,
+                        padding: "20px 22px 20px 22px",
+                        background: "rgba(10, 8, 4, 0.62)",
+                        border: "1px solid rgba(255, 215, 0, 0.10)",
+                        borderRadius: 14,
+                        cursor: "pointer",
+                        width: "100%",
+                        textAlign: "left",
+                        position: "relative",
+                        overflow: "hidden",
+                        opacity: 0,
+                        animation: `softFade 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${0.42 + i * 0.08}s both`,
+                        transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease, filter 0.2s ease",
+                      }}
+                    >
+                      <div className="dym-poster-wrap" style={{
+                        width: 130, height: 195,
+                        borderRadius: 8,
+                        background: "rgba(255, 255, 255, 0.03)",
+                        flexShrink: 0,
+                        overflow: "hidden",
+                        position: "relative",
+                        boxShadow: "0 10px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+                      }}>
+                        {c.poster_path ? (
+                          <img
+                            className="dym-poster"
+                            src={IMG + "w342" + c.poster_path}
+                            alt=""
+                            loading="lazy"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          />
+                        ) : (
+                          <div className="dym-poster" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Film size={28} style={{ color: "rgba(255, 255, 255, 0.18)" }} aria-hidden="true" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="dym-title" style={{
+                          fontFamily: "'Syne', sans-serif",
+                          fontSize: 20, fontWeight: 700,
+                          color: "#fff",
+                          letterSpacing: -0.3,
+                          lineHeight: 1.22,
+                          marginBottom: 10,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {c.title}
+                        </div>
+                        <div style={{
+                          display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+                          marginBottom: (c.overview || c.director) ? 12 : 0,
+                        }}>
+                          {c.year && (
+                            <span style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: 1.2,
+                              color: "#FFD700",
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              background: "rgba(255, 215, 0, 0.06)",
+                              border: "1px solid rgba(255, 215, 0, 0.18)",
+                            }}>{c.year}</span>
+                          )}
+                          {c.runtime && (
+                            <span style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: 1.2,
+                              color: "rgba(255, 255, 255, 0.66)",
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              background: "rgba(255, 255, 255, 0.04)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                            }}>{c.runtime}</span>
+                          )}
+                          {c.director && (
+                            <span style={{
+                              fontFamily: "'Syne', sans-serif",
+                              fontSize: 12.5,
+                              color: "rgba(255, 255, 255, 0.62)",
+                              fontStyle: "italic",
+                            }}>Directed by {c.director}</span>
+                          )}
+                        </div>
+                        {c.overview && (
+                          <div style={{
+                            fontFamily: "'Syne', sans-serif",
+                            fontSize: 13.5,
+                            color: "rgba(255, 255, 255, 0.62)",
+                            lineHeight: 1.45,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}>
+                            {c.overview}
+                          </div>
+                        )}
+                      </div>
+
+                      <ChevronRight
+                        size={20}
+                        className="dym-chevron"
+                        style={{
+                          color: "rgba(255, 215, 0, 0.32)",
+                          flexShrink: 0,
+                          transition: "transform 0.4s cubic-bezier(0.16,1,0.3,1), color 0.3s ease",
+                        }}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="dym-rail dym-rail-bottom" aria-hidden="true" />
+            </div>
+          )}
 
           {/* Result */}
           {/* Coming Soon — Unreleased Movie (v5.7) */}
@@ -5148,7 +5359,9 @@ export default function FilmGlance() {
           })()}
 
           {/* ───── New landing below-fold (ticker + how-it-works + film-strip) — idle only ───── */}
-          {!result && !loading && (
+          {/* v5.12.8: also hide when the ambiguity picker is showing — same
+              UX as the DYM page (no marketing chrome below an active result). */}
+          {!result && !loading && !ambiguousMatches && (
             <>
               <Ornament marginTop={0} marginBottom={0} />
 
@@ -5271,7 +5484,7 @@ export default function FilmGlance() {
           notFound state. The window-level scroll listener at the top of
           the component drives scrollPct off window.scrollY so the same
           indicator works for any scrolling view without per-view wiring. */}
-      {((result && !result.notFound) || (!result && !loading)) && (
+      {((result && !result.notFound) || (!result && !loading && !ambiguousMatches)) && (
         <>
           <div ref={scrollTrackRef} onClick={(e) => {
             const track = scrollTrackRef.current;

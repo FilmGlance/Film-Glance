@@ -61,6 +61,11 @@ export interface TMDBEnrichment {
 }
 
 // ─── Search Movie ──────────────────────────────────────────────────────────
+//
+// `language=en-US` makes TMDB return English-localized title/overview AND
+// affects which poster TMDB ranks as primary. Without it, /search/movie can
+// surface a localized poster as the default (e.g. Ever After 1998 returned
+// the Dutch "Lang & Gelukkig" cover) — fix verified against the live API.
 
 async function searchMovie(
   title: string,
@@ -68,42 +73,185 @@ async function searchMovie(
 ): Promise<TMDBMovie | null> {
   if (!TMDB_KEY) return null;
   try {
-    const params = new URLSearchParams({
-      api_key: TMDB_KEY,
-      query: title,
-      include_adult: "false",
-    });
-    // Use primary_release_year for strict matching (avoids sequels)
-    if (year && year > 1900) params.set("primary_release_year", String(year));
-
-    const res = await fetch(`${TMDB_BASE}/search/movie?${params}`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    let results = data.results as TMDBMovie[];
-    if (!results || results.length === 0) {
-      // Retry without year constraint if strict search found nothing
-      if (year) {
-        const params2 = new URLSearchParams({ api_key: TMDB_KEY, query: title, include_adult: "false" });
-        const res2 = await fetch(`${TMDB_BASE}/search/movie?${params2}`, { signal: AbortSignal.timeout(5000) });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          results = data2.results as TMDBMovie[];
-        }
-      }
-      if (!results || results.length === 0) return null;
+    async function tmdbFetch(q: string, withYear: boolean): Promise<TMDBMovie[]> {
+      const p = new URLSearchParams({
+        api_key: TMDB_KEY!,
+        query: q,
+        include_adult: "false",
+        language: "en-US",
+        region: "US",
+      });
+      if (withYear && year && year > 1900) p.set("primary_release_year", String(year));
+      const r = await fetch(`${TMDB_BASE}/search/movie?${p}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return (d.results as TMDBMovie[]) || [];
     }
 
-    // Prefer exact year match
+    // v5.12.2: parallel search — original query + concatenated form. TMDB
+    // stores some canonical titles without spaces ("EverAfter" 1998 Drew
+    // Barrymore vs the user's "Ever After"), and the spaced search returns
+    // 100+ unrelated obscure results before surfacing the no-space match.
+    // Concat results lead the merged list so the canonical no-space title
+    // wins the "first exact match in natural order" tiebreaker — for
+    // queries without whitespace this is a no-op (concat = original).
+    const wantConcat = /\s/.test(title);
+    const concatenated = title.replace(/\s+/g, "");
+    let [rOrig, rConcat] = await Promise.all([
+      tmdbFetch(title, true),
+      wantConcat ? tmdbFetch(concatenated, true) : Promise.resolve([]),
+    ]);
+
+    if (rOrig.length === 0 && rConcat.length === 0 && year) {
+      [rOrig, rConcat] = await Promise.all([
+        tmdbFetch(title, false),
+        wantConcat ? tmdbFetch(concatenated, false) : Promise.resolve([]),
+      ]);
+    }
+
+    const seen = new Set<number>();
+    const results: TMDBMovie[] = [];
+    // Concat first so its top result leads the merge; original next.
+    // Skip entries with no release_date — those are TMDB placeholders /
+    // unfinished metadata records that would otherwise win the "first
+    // exact match" tiebreaker (e.g. "It Follows ()" with no date).
+    for (const r of [...rConcat, ...rOrig]) {
+      if (!r.release_date || r.release_date.length === 0) continue;
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        results.push(r);
+      }
+    }
+    if (results.length === 0) return null;
+
+    // v5.12.2: title-match preference with NO vote_count filtering (per user
+    // direction — an obscure exact-title match can be the user's real
+    // intent). Tiebreaker among multiple exact matches is "first in merged
+    // order", which respects TMDB's own popularity-driven ranking; the
+    // concat-form search results lead the merge so canonical no-space TMDB
+    // titles ("EverAfter" 1998) come ahead of the spaced-search noise.
+    //
+    // Two normalizations:
+    //   normExact — case-insensitive, strips leading article ("The"/"A"/"An")
+    //     AND all whitespace + punctuation. Lets "Ever After" match "EverAfter"
+    //     and "Avengers" match "The Avengers".
+    //   normWords — case-insensitive, keeps spaces. For ordered-subsequence
+    //     matching where word order matters (rejects "After Ever Happy" for
+    //     query "Ever After").
+    //
+    // STAGE 1: whitespace+article-insensitive exact match. If any exist,
+    //   prefer year hint, else FIRST in merged order.
+    // STAGE 2: ordered-word-subsequence. Same year/first preference.
+    // STAGE 3 (fallback): TMDB's first result.
+    const normExact = (s: string) =>
+      (s || "")
+        .toLowerCase()
+        .replace(/^(the|a|an)\s+/, "")
+        .replace(/[\s:.,!?\-_'"&]+/g, "");
+    const normWords = (s: string) =>
+      (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+
+    const queryExact = normExact(title);
+    const exactMatches = results.filter((r) => normExact(r.title) === queryExact);
+    if (exactMatches.length > 0) {
+      if (year) {
+        const yr = exactMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return exactMatches[0];
+    }
+
+    const qWords = normWords(title).split(" ").filter((w) => w.length > 1);
+    const orderedMatches = results.filter((r) => {
+      const tWords = normWords(r.title || "").split(" ").filter((w) => w.length > 1);
+      let qi = 0;
+      for (const tw of tWords) {
+        if (qi < qWords.length && tw === qWords[qi]) qi++;
+      }
+      return qWords.length > 0 && qi === qWords.length;
+    });
+    if (orderedMatches.length > 0) {
+      if (year) {
+        const yr = orderedMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return orderedMatches[0];
+    }
+
+    // v5.12.4: stripped-containment match — handles the case where TMDB
+    // stores a canonical title concatenated with no spaces ("EverAfter")
+    // while the user types the human-readable longer form ("Ever After:
+    // A Cinderella Story"). Both Stage 1 (whitespace-insensitive exact)
+    // and Stage 2 (ordered word subsequence) miss this because: Stage 1
+    // requires equality after stripping, and the longer query has extra
+    // words; Stage 2 needs the TMDB title's words to span the query in
+    // order, but TMDB's title has fewer words. Stripped-containment
+    // catches it: "everafter" ⊂ "everafteracinderellastory". Min length
+    // 5 guard avoids 2-3-letter coincidences.
+    const containedMatches = results.filter((r) => {
+      const tStripped = normExact(r.title);
+      const minLen = Math.min(tStripped.length, queryExact.length);
+      if (minLen < 5) return false;
+      return tStripped.includes(queryExact) || queryExact.includes(tStripped);
+    });
+    if (containedMatches.length > 0) {
+      if (year) {
+        const yr = containedMatches.find(
+          (r) => r.release_date && r.release_date.startsWith(String(year)),
+        );
+        if (yr) return yr;
+      }
+      return containedMatches[0];
+    }
+
     if (year) {
-      const exactYear = results.find(
-        (r) => r.release_date && r.release_date.startsWith(String(year))
+      const yr = results.find(
+        (r) => r.release_date && r.release_date.startsWith(String(year)),
       );
-      if (exactYear) return exactYear;
+      if (yr) return yr;
     }
     return results[0];
+  } catch {
+    return null;
+  }
+}
+
+// ─── Best English Poster ───────────────────────────────────────────────────
+//
+// TMDB's /movie/{id} endpoint exposes a community-curated `poster_path` that
+// ignores user language preference — for some titles this is a foreign-
+// language cover. Fix: fetch /movie/{id}/images with `include_image_language=
+// en,null` (English-tagged posters + language-agnostic posters) and pick the
+// highest-voted one. Returns null if no English poster found, so callers can
+// fall back to whatever poster_path the search returned.
+async function fetchBestEnglishPoster(movieId: number): Promise<string | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}/images?api_key=${TMDB_KEY}&include_image_language=en,null`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      posters?: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }>;
+    };
+    const posters = data.posters || [];
+    if (posters.length === 0) return null;
+    // Rank: explicit `en` first, then language-agnostic (`null`), then by
+    // vote_average desc as tiebreaker.
+    const sorted = [...posters].sort((a, b) => {
+      const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+      const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+      if (aRank !== bRank) return bRank - aRank;
+      return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+    });
+    return sorted[0]?.file_path ?? null;
   } catch {
     return null;
   }
@@ -577,18 +725,23 @@ export async function enrichWithTMDB(
     const movie = await searchMovie(title, year);
     if (!movie) return result;
 
-    result.poster_path = movie.poster_path;
-
-    // Fetch everything in parallel for speed
-    const [credits, streaming, trailerKey, recommendations, videoReviews] =
+    // Fetch everything in parallel for speed.
+    // fetchBestEnglishPoster overrides movie.poster_path when TMDB has an
+    // English poster — guards against the localization bug where /search
+    // returns a foreign-language cover (Ever After 1998 → Dutch "Lang &
+    // Gelukkig"). Falls back to the search result's poster_path when no
+    // English poster exists.
+    const [credits, streaming, trailerKey, recommendations, videoReviews, englishPoster] =
       await Promise.all([
         fetchCredits(movie.id, 20),
         fetchWatchProviders(movie.id, title),
         fetchTrailer(movie.id),
         fetchRecommendations(movie.id, 3),
         options?.skipYouTube ? Promise.resolve([]) : fetchVideoReviews(title, year, 3),
+        fetchBestEnglishPoster(movie.id),
       ]);
 
+    result.poster_path = englishPoster ?? movie.poster_path;
     result.streaming = streaming;
     result.trailer_key = trailerKey;
     result.recommendations = recommendations;
@@ -687,6 +840,170 @@ export async function enrichWithTMDB(
     return result;
   } catch {
     return result;
+  }
+}
+
+// ─── Exact-Title Ambiguity (v5.12.3) ─────────────────────────────────────
+//
+// Some queries hit multiple distinct films with the SAME canonical title
+// across different decades — Carrie (1976/2002/2013), Pet Sematary
+// (1989/2019), The Mummy (1932/1999/2017), Halloween (1978/2018), etc.
+// silentlypicking one (even with year-earliest or first-in-merged-order)
+// is guessing. v5.12.3 surfaces a picker page when 2+ "real" exact-title
+// matches exist so the user disambiguates explicitly.
+//
+// "Real" eligibility: vote_count >= AMBIGUITY_VOTE_FLOOR. This is NOT a
+// popularity ranking (the user objected to ranking by votes — an obscure
+// film is a valid pick). It's a minimum-metadata-completeness floor that
+// filters out TMDB placeholders / unreleased / 5-vote shorts that share
+// the title by coincidence. Below 50 votes, a film is effectively unrated
+// and almost never the user's intent. Tunable in one place.
+
+const AMBIGUITY_VOTE_FLOOR = 50;
+
+export interface AmbiguityCandidate {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  release_date: string | null;
+  poster_path: string | null;
+  overview: string;
+  runtime: string | null;   // formatted "2h 8m" / "98m"
+  director: string | null;
+}
+
+/**
+ * Detects 100%-letter-by-letter same-title collisions. Returns 2+
+ * candidates if the search is genuinely ambiguous, otherwise null.
+ * Uses the same parallel original+concat search as searchMovie so the
+ * picker surfaces canonical no-space TMDB titles ("EverAfter") next to
+ * spaced ones — but in practice EverAfter is alone and so won't trigger
+ * the picker (only 1 qualifying match).
+ */
+export async function findExactTitleCandidates(
+  title: string,
+): Promise<AmbiguityCandidate[] | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    async function tmdbFetch(q: string): Promise<TMDBMovie[]> {
+      const p = new URLSearchParams({
+        api_key: TMDB_KEY!,
+        query: q,
+        include_adult: "false",
+        language: "en-US",
+        region: "US",
+      });
+      const r = await fetch(`${TMDB_BASE}/search/movie?${p}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return (d.results as TMDBMovie[]) || [];
+    }
+
+    const wantConcat = /\s/.test(title);
+    const concatenated = title.replace(/\s+/g, "");
+    const [rOrig, rConcat] = await Promise.all([
+      tmdbFetch(title),
+      wantConcat ? tmdbFetch(concatenated) : Promise.resolve([]),
+    ]);
+
+    const seen = new Set<number>();
+    const merged: TMDBMovie[] = [];
+    for (const r of [...rConcat, ...rOrig]) {
+      if (!r.release_date) continue;
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        merged.push(r);
+      }
+    }
+
+    // Strict normalization for ambiguity — case-insensitive only. No
+    // article-strip, no punct-strip, no whitespace-strip. The user's rule
+    // is "100% letter-by-letter match" so "The Heat" does NOT collide with
+    // "Heat", "Up!" does NOT collide with "Up". The silent-pick path in
+    // searchMovie() uses LENIENT normalization (handles "EverAfter" /
+    // "Ever After"), but the picker only fires for true title clones.
+    const normStrict = (s: string) =>
+      (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+    const queryNorm = normStrict(title);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Eligibility: strict 100%-letter-by-letter title match + vote_count
+    // >= floor + already released + has a release date.
+    const candidates = merged.filter((r) => {
+      if (normStrict(r.title) !== queryNorm) return false;
+      if (!r.release_date) return false;
+      const released = new Date(r.release_date) <= today;
+      if (!released) return false;
+      const votes = (r as any).vote_count ?? 0;
+      return votes >= AMBIGUITY_VOTE_FLOOR;
+    });
+
+    // Dedupe near-duplicates: TMDB occasionally lists the same film twice
+    // with different release_dates (re-release / restored cut). If two
+    // candidates have release_dates within 1 year of each other, treat as
+    // one and keep the earlier-dated entry — they're the same movie.
+    candidates.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
+    const deduped: TMDBMovie[] = [];
+    for (const c of candidates) {
+      const cYear = parseInt((c.release_date || "").slice(0, 4)) || 0;
+      const dup = deduped.some((d) => {
+        const dYear = parseInt((d.release_date || "").slice(0, 4)) || 0;
+        return Math.abs(dYear - cYear) <= 1;
+      });
+      if (!dup) deduped.push(c);
+    }
+
+    if (deduped.length < 2) return null;
+
+    // Sort by year DESCENDING so picker shows newest → oldest (most recent
+    // film first), then cap at 6 entries to keep the grid scannable. The
+    // earlier ascending sort (for dedupe) stays — that one ensures we keep
+    // the earlier of two near-duplicate release-dates as the canonical rep.
+    deduped.sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""));
+    const top = deduped.slice(0, 6);
+
+    // v5.12.6: enrich with runtime + director so picker cards match the
+    // info density of the Did-You-Mean cards. One /movie/{id} call per
+    // candidate, all parallel — ~150ms for 6 candidates.
+    const enriched = await Promise.all(
+      top.map(async (m) => {
+        const out: AmbiguityCandidate = {
+          tmdb_id: m.id,
+          title: m.title,
+          year: m.release_date ? parseInt(m.release_date.slice(0, 4)) || null : null,
+          release_date: m.release_date || null,
+          poster_path: m.poster_path || null,
+          overview: (m as any).overview || "",
+          runtime: null,
+          director: null,
+        };
+        try {
+          const res = await fetch(
+            `${TMDB_BASE}/movie/${m.id}?api_key=${TMDB_KEY}&append_to_response=credits&language=en-US`,
+            { signal: AbortSignal.timeout(4000) },
+          );
+          if (!res.ok) return out;
+          const d: any = await res.json();
+          if (typeof d.runtime === "number" && d.runtime > 0) {
+            const h = Math.floor(d.runtime / 60);
+            const mm = d.runtime % 60;
+            out.runtime = h > 0 && mm > 0 ? `${h}h ${mm}m` : h > 0 ? `${h}h` : `${mm}m`;
+          }
+          const directors = (d.credits?.crew || [])
+            .filter((c: any) => c.job === "Director")
+            .map((c: any) => c.name);
+          if (directors.length > 0) out.director = directors.join(", ");
+        } catch { /* fall through with nulls */ }
+        return out;
+      }),
+    );
+    return enriched;
+  } catch {
+    return null;
   }
 }
 
@@ -806,10 +1123,14 @@ export async function enrichBoxOfficeWithTMDB(
   try {
     const movie = await searchMovie(title, year);
     if (!movie) return blank;
-    // Single /movie/{id} call appends external_ids + credits so we get
-    // poster + backdrop + IMDb id + director (from crew) in one round-trip.
+    // Single /movie/{id} call appends external_ids + credits + images so we
+    // get poster + backdrop + IMDb id + director + English poster candidates
+    // in one round-trip. include_image_language=en,null filters images to
+    // English + language-agnostic — same logic as fetchBestEnglishPoster but
+    // bundled into the existing call to avoid an extra round-trip per cron
+    // run (10 movies × N period_types).
     const res = await fetch(
-      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids,credits`,
+      `${TMDB_BASE}/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids,credits,images&include_image_language=en,null&language=en-US`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!res.ok) {
@@ -826,11 +1147,27 @@ export async function enrichBoxOfficeWithTMDB(
       poster_path?: string | null;
       external_ids?: { imdb_id?: string | null };
       credits?: { crew?: { name: string; job: string }[] };
+      images?: {
+        posters?: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }>;
+      };
     };
     const director =
       (data.credits?.crew || []).find((c) => c.job === "Director")?.name ?? null;
+    // Best English poster from the appended images, ranked en > null > other,
+    // then by vote_average. Fall back to data.poster_path then search result.
+    const posters = data.images?.posters || [];
+    let bestPoster: string | null = null;
+    if (posters.length > 0) {
+      const sorted = [...posters].sort((a, b) => {
+        const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+        const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+        if (aRank !== bRank) return bRank - aRank;
+        return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+      });
+      bestPoster = sorted[0]?.file_path ?? null;
+    }
     return {
-      poster_path: data.poster_path ?? movie.poster_path ?? null,
+      poster_path: bestPoster ?? data.poster_path ?? movie.poster_path ?? null,
       backdrop_path: data.backdrop_path ?? null,
       tmdb_id: movie.id,
       imdb_id: data.external_ids?.imdb_id ?? null,

@@ -46,7 +46,7 @@ import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
-import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails } from "@/lib/tmdb";
+import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails, findExactTitleCandidates } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 import { sanitizeQuery } from "@/lib/sanitize";
 import {
@@ -223,6 +223,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 4.5. Exact-title ambiguity check (v5.12.7 — promoted before cache).
+    //      When 2+ released films share the EXACT canonical title (Carrie
+    //      1976/2002/2013, Pet Sematary 1989/2019, Michael 1924/1996/2026,
+    //      etc.) and the user didn't type a year hint, surface a picker.
+    //      MUST fire before the cache lookup at point 5: otherwise once any
+    //      user searches "michael" and the pipeline picks one (say 2026),
+    //      that result caches under search_key="michael" and ALL subsequent
+    //      "michael" searches hit cache → bypass the picker → broken UX.
+    //      v5.12.3 had this check at point 5.7 (after cache lookup); v5.12.7
+    //      moves it to point 4.5 to fix the cache-lock-in bug. Cost: ~80-
+    //      150ms TMDB call on every no-year-hint search; ambiguous queries
+    //      never write to cache (they short-circuit before the pipeline).
+    //      Skipped entirely when user typed a year ("michael 1996") since
+    //      that already disambiguates.
+    if (!userYearHint) {
+      const ambigCandidates = await findExactTitleCandidates(searchTitle).catch(() => null);
+      if (ambigCandidates && ambigCandidates.length >= 2) {
+        console.log(`[ambiguity] "${query}" → ${ambigCandidates.length} same-title films, returning picker`);
+        return NextResponse.json({
+          ambiguous: true,
+          query,
+          candidates: ambigCandidates,
+          _source: "ambiguity-picker",
+        });
+      }
+    }
+
     // 5. Cache lookup — Stale-While-Revalidate
     //    ANY cached entry returns instantly (no expiry filter).
     //    If expired, fire background refresh.
@@ -231,7 +258,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error } = await supabaseAdmin
         .from("movie_cache")
-        .select("data, hit_count, expires_at")
+        .select("data, hit_count, expires_at, cached_at")
         .eq("search_key", query)
         .single();
       if (!error && data) cached = data;
@@ -243,6 +270,29 @@ export async function POST(req: NextRequest) {
     if (cached) {
       const isStale = new Date(cached.expires_at) < new Date();
 
+      // v5.12.5 — always-refresh-on-read with two gates:
+      //   • cache_age > 1 hour: prevents identical queries from triggering N
+      //     parallel refreshes; bounds Anthropic spend.
+      //   • sources < 6 (underpopulated): forces immediate retry even within
+      //     the dedup window. Catches the "newly-released movie cached
+      //     with sparse APIs at write time" case (Michael 2026 had only
+      //     TMDB / Simkl / Letterboxd; IMDb / RT / Metacritic / Trakt
+      //     showed up days later but the cache was stuck).
+      // Healthy non–Coming-Soon entries have 9 sources; 6 means at least
+      // two-thirds populated. Some genuinely-rare films may never reach 6,
+      // which is fine — the 1-hour dedup keeps cost bounded even in that
+      // pathological case.
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const SOURCE_FLOOR = 6;
+      const cacheAgeMs = cached.cached_at
+        ? Date.now() - new Date(cached.cached_at).getTime()
+        : Number.POSITIVE_INFINITY;
+      const sourceCount = ((cached.data as any)?.sources as any[] | undefined)?.length ?? 0;
+      const isComingSoon = (cached.data as any)?.coming_soon === true;
+      const isUnderpopulated = !isComingSoon && sourceCount < SOURCE_FLOOR;
+      const isPastHourly = cacheAgeMs > ONE_HOUR_MS;
+      const shouldRefresh = isStale || isUnderpopulated || isPastHourly;
+
       // Fire-and-forget: update hit count + log
       runInBackground(async () => {
         await Promise.all([
@@ -251,9 +301,9 @@ export async function POST(req: NextRequest) {
         ]);
       }, "cache-hit-log");
 
-      // If stale, fire background refresh (non-blocking)
-      if (isStale && ANTHROPIC_API_KEY) {
-        const isComingSoon = (cached.data as any).coming_soon === true;
+      // Always-refresh-on-read SWR. Fires when stale, underpopulated, or
+      // > 1h since last refresh. Background; zero user-latency impact.
+      if (shouldRefresh && ANTHROPIC_API_KEY) {
         runInBackground(async () => {
           if (isComingSoon) {
             // Re-check release date — movie might have released since last cache
@@ -323,12 +373,25 @@ export async function POST(req: NextRequest) {
         const resolvedKey = sanitizeQuery(resolvedTitle);
         const { data, error } = await supabaseAdmin
           .from("movie_cache")
-          .select("data, hit_count, expires_at")
+          .select("data, hit_count, expires_at, cached_at")
           .eq("search_key", resolvedKey)
           .single();
 
         if (!error && data) {
           const isStale = new Date(data.expires_at) < new Date();
+          // v5.12.5 — same always-refresh-on-read gates as the primary
+          // cache hit path: 1h dedup + sources<6 underpopulated bypass.
+          const ONE_HOUR_MS = 60 * 60 * 1000;
+          const SOURCE_FLOOR = 6;
+          const cacheAgeMs = data.cached_at
+            ? Date.now() - new Date(data.cached_at).getTime()
+            : Number.POSITIVE_INFINITY;
+          const sourceCount = ((data.data as any)?.sources as any[] | undefined)?.length ?? 0;
+          const isComingSoon = (data.data as any)?.coming_soon === true;
+          const shouldRefresh =
+            isStale ||
+            (!isComingSoon && sourceCount < SOURCE_FLOOR) ||
+            cacheAgeMs > ONE_HOUR_MS;
 
           runInBackground(async () => {
             await Promise.all([
@@ -337,7 +400,7 @@ export async function POST(req: NextRequest) {
             ]);
           }, "sequel-cache-hit-log");
 
-          if (isStale && ANTHROPIC_API_KEY) {
+          if (shouldRefresh && ANTHROPIC_API_KEY) {
             runInBackground(async () => {
               const mv = await runFullPipeline(resolvedTitle, resolvedTitle, resolvedYear);
               if (mv) await writeCacheEntries(resolvedKey, resolvedTitle, mv.title, mv, user?.id || null, ip, "swr-refresh");
@@ -363,6 +426,9 @@ export async function POST(req: NextRequest) {
         }
       } catch { /* continue to API */ }
     }
+
+    // (v5.12.7: ambiguity check was here at 5.7; moved to 4.5 — before
+    // cache lookup — to prevent cache lock-in on bare ambiguous titles.)
 
     // 5.75. Release date gate — check if movie is unreleased (v5.7)
     //       If TMDB knows the movie but it hasn't been released yet,
@@ -459,16 +525,50 @@ export async function POST(req: NextRequest) {
           ? parseInt(releaseInfo.releaseDate.substring(0, 4))
           : pipelineYear;
       } else {
-        // Check similarity: substring with close length, or high word overlap
+        // Check similarity. Three complementary heuristics:
+        //
+        //   (a) Substring containment with close length — handles "the matrix"
+        //       vs "Matrix" or short typos where the user dropped/added a few
+        //       characters but the bulk of the string matches.
+        //
+        //   (b) ORDERED word-subsequence — handles "lord rings fellowship"
+        //       vs "The Lord of the Rings: The Fellowship of the Ring" where
+        //       every query word appears in the title in the same order.
+        //
+        //   (c) Stripped-whitespace containment (v5.12.4) — handles the case
+        //       where TMDB stores a canonical title concatenated with no
+        //       spaces ("EverAfter") while the user types the longer human-
+        //       readable form ("Ever After: A Cinderella Story"). Strip ALL
+        //       spaces and check if either side is a substring of the other.
+        //       Min-length 5 guard prevents 2-3-char coincidences. This
+        //       sidesteps the lenRatio gate for the "user typed full
+        //       canonical title; TMDB has shorthand" case.
+        //
+        // v5.12.2 swap from set-based wordMatch → ordered-subsequence: the
+        // old heuristic accepted any 75%+ word overlap regardless of order,
+        // which mismatched "ever after" (1998) → "After Ever Happy" (2022).
+        // Both query words appear in the TMDB title (overlap=2/2=100%) but
+        // not in the right order, so it should NOT match. Ordered subsequence
+        // catches this: "after, ever, happy" never satisfies "ever, after"
+        // because once we pass "ever" we'd need "after" to come AFTER it.
         const lenRatio = Math.min(normQ.length, normT.length) / Math.max(normQ.length, normT.length);
         const isCloseSubstring = (normT.includes(normQ) || normQ.includes(normT)) && lenRatio >= 0.75;
-        const wordsQ = new Set(normQ.split(" ").filter(w => w.length > 1));
-        const wordsT = new Set(normT.split(" ").filter(w => w.length > 1));
-        const overlap = [...wordsQ].filter(w => wordsT.has(w)).length;
-        const minWords = Math.min(wordsQ.size, wordsT.size);
-        const wordMatch = minWords > 0 && overlap / minWords >= 0.75;
 
-        if (isCloseSubstring || wordMatch) {
+        const qWords = normQ.split(" ").filter(w => w.length > 1);
+        const tWords = normT.split(" ").filter(w => w.length > 1);
+        let qIdx = 0;
+        for (const tw of tWords) {
+          if (qIdx < qWords.length && tw === qWords[qIdx]) qIdx++;
+        }
+        const isOrderedSubsequence = qWords.length > 0 && qIdx === qWords.length;
+
+        const sQ = normQ.replace(/\s+/g, "");
+        const sT = normT.replace(/\s+/g, "");
+        const minStrippedLen = Math.min(sQ.length, sT.length);
+        const isStrippedContains =
+          minStrippedLen >= 5 && (sQ.includes(sT) || sT.includes(sQ));
+
+        if (isCloseSubstring || isOrderedSubsequence || isStrippedContains) {
           // Close enough — redirect pipeline to use the correct TMDB title
           console.log(`[title-gate] Redirecting "${query}" → "${releaseInfo.officialTitle}" (close match)`);
           pipelineTitle = releaseInfo.officialTitle;
