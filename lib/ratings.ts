@@ -301,7 +301,16 @@ async function fetchOMDbById(imdbId: string): Promise<OMDbResponse | null> {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getTraktHeaders(): Record<string, string> {
-  return { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": TRAKT_CLIENT_ID || "" };
+  // v5.13.0 — Trakt's Cloudflare WAF returns 403 to requests without a
+  // User-Agent (silently broke our integration; rating audit found
+  // 0/50 fresh fetches succeeding while every cached entry HAD Trakt
+  // data). Identifying ourselves restores access.
+  return {
+    "Content-Type": "application/json",
+    "trakt-api-version": "2",
+    "trakt-api-key": TRAKT_CLIENT_ID || "",
+    "User-Agent": "FilmGlance/5.13.0 (https://filmglance.com)",
+  };
 }
 
 async function fetchTraktRating(slug: string): Promise<number> {

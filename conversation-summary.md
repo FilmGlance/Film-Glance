@@ -1,5 +1,66 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 (late PM) — v5.13.0 Trakt recovery (rating-discrepancy audit found Trakt 100% broken)
+
+PR #53 merged at the start of this session. User asked to "continue down our list" — the deferred rating-discrepancy audit was first.
+
+### Audit harness
+
+Built `scratch/audit-ratings.ts` — a 50-movie sampler that re-runs `fetchVerifiedRatings()` against cached movies and compares fresh values to cached values per source, with drift normalized to 0-1 to handle differing `max` representations across historical cache writes.
+
+### Critical finding: Trakt 100% broken
+
+First run showed:
+- trakt: cache=50, fresh=**0**, drift=100% (cacheOnly=50)
+- All other sources: drift <1%, healthy
+
+Direct probe (`scratch/probe-trakt.mjs`) revealed Trakt was returning **403 Forbidden with a Cloudflare HTML challenge page** on every request. Header experimentation (`scratch/probe-trakt2.mjs`) confirmed: Trakt's Cloudflare WAF rejects requests without a User-Agent.
+
+### Fix: User-Agent header
+
+Added `User-Agent: FilmGlance/5.13.0 (https://filmglance.com)` to `getTraktHeaders()` in `lib/ratings.ts`. Re-ran audit: 50/50 fresh fetches succeed.
+
+### Bigger picture: silent cache degradation
+
+Combined with v5.12.5's always-refresh-on-read SWR, the broken Trakt fetcher had been silently DEGRADING the cache. Every cache hit triggered a refresh. Pipeline ran without Trakt data (403 silently swallowed). Cache re-written MINUS the Trakt source. So ~30% of refreshes since v5.12.5 deployed had likely lost Trakt.
+
+### Side-finding: scale inconsistency
+
+Distribution check across 200 cached movies (`scratch/check-trakt-scale.mjs`): **139 stored Trakt as `max=100` (e.g. "Goodfellas 95/100"), 61 as `max=10` ("Star Wars 8.6/10")**. Both render correctly per their own `max` field, but the user-facing inconsistency was visible.
+
+### Migration
+
+`scratch/migrate-trakt-scale.mjs` swept all 5,694 cache rows:
+- **551 Trakt entries rescaled 100→10**
+- **7 corruption cases fixed** (score>10 with max=10, e.g. "Child's Pose" cached as 73/10 — invalid; healed to 7.3/10)
+- 558 rows updated total
+
+All Trakt entries now uniformly `max=10`. Future writes from the fixed pipeline will keep this consistent.
+
+### Other audit findings (informational, no fix needed)
+
+- Recently-released films show 6-9% drift across IMDb/Letterboxd/TMDB/Metacritic — legitimate ratings still settling. v5.12.5 SWR will keep these fresh going forward.
+- RT Audience 1 outlier: "Dear Michele" 1971 cached=87/100 fresh=60/100. Likely wrong-title match for the obscure Italian film. Rare; not a systemic bug.
+- Metacritic ~10% cacheOnly rate: some films Metacritic genuinely doesn't have. Normal.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `lib/ratings.ts` | `getTraktHeaders()` now includes `User-Agent` |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.13.0; old May 4 PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/audit-ratings.ts`, `scratch/probe-trakt.mjs`, `scratch/probe-trakt2.mjs`, `scratch/check-trakt-scale.mjs`, `scratch/migrate-trakt-scale.mjs`.
+
+### What's next
+
+- v5.13.0 ships via fresh PR (staging → main).
+- Next 14 → Next 16 security migration (v6.0.0) still deferred — needs dedicated session.
+- VPS forum import: monitoring only, running healthy.
+
+---
+
 ## Session: May 4, 2026 (PM) — v5.12.6 + v5.12.7 + v5.12.8 + v5.12.9 (ambiguity picker hardening: visual parity, cache lock-in fix, own-page treatment, descending order)
 
 Four follow-up patches landed in quick succession after user retesting v5.12.5 surfaced UX + design issues with the picker. All ride on PR #53 alongside v5.12.1–.5.
