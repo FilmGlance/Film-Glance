@@ -1007,6 +1007,32 @@ export async function findExactTitleCandidates(
   }
 }
 
+// ─── Box Office (v5.13.2) ────────────────────────────────────────────────
+//
+// TMDB returns budget + revenue (worldwide gross) on /movie/{id}. Free,
+// already in our quota. Used to backfill mv.boxOffice when Claude's
+// training cutoff predates the movie's release.
+
+export async function fetchTMDBBoxOffice(
+  movieId: number,
+): Promise<{ budget: number | null; revenue: number | null } | null> {
+  if (!TMDB_KEY) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${movieId}?api_key=${TMDB_KEY}&language=en-US`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    return {
+      budget: typeof d.budget === "number" && d.budget > 0 ? d.budget : null,
+      revenue: typeof d.revenue === "number" && d.revenue > 0 ? d.revenue : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Release Date Gate (v5.7) ────────────────────────────────────────────
 
 /**
