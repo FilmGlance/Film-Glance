@@ -10,12 +10,12 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { enrichWithTMDB } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings } from "@/lib/ratings";
+import { requireCronSecret } from "@/lib/auth-admin";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const CRON_SECRET = process.env.CRON_SECRET;
 const BATCH_SIZE = 25; // Max movies per cron run (keeps within Vercel function timeout)
 
 const CLAUDE_SYSTEM = [
@@ -37,11 +37,8 @@ function delay(ms: number) {
 }
 
 export async function GET(req: NextRequest) {
-  // Verify cron secret (Vercel sends this header for cron jobs)
-  const authHeader = req.headers.get("authorization");
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = requireCronSecret(req);
+  if (denied) return denied;
 
   if (!ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "API not configured" }, { status: 503 });

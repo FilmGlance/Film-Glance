@@ -16,6 +16,7 @@ import { calcScore } from "@/lib/score";
 import { enrichWithTMDB } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings } from "@/lib/ratings";
 import { getBatch, deduplicateMovies } from "@/lib/seed-movies";
+import { requireCronSecret } from "@/lib/auth-admin";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -179,20 +180,8 @@ async function seedMovie(title: string): Promise<{ title: string; status: string
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const token = authHeader.split(" ")[1];
-  try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Auth unavailable" }, { status: 503 });
-  }
+  const denied = requireCronSecret(req);
+  if (denied) return denied;
 
   if (!ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "API not configured" }, { status: 503 });

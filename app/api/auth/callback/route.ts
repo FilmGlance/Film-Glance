@@ -6,10 +6,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Reject any `next` value that isn't a same-origin relative path. Without this,
+// `?next=//evil.com` (and `?next=/\evil.com` on quirky browsers) would phish
+// users by bouncing them off the legitimate auth flow into an attacker page.
+function getSafeNext(raw: string | null): string {
+  if (!raw) return "/";
+  if (!raw.startsWith("/")) return "/";
+  if (raw.startsWith("//")) return "/";
+  if (raw.startsWith("/\\")) return "/";
+  return raw;
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") || "/";
+  const safeNext = getSafeNext(url.searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(
@@ -31,6 +42,5 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Redirect to app
-  return NextResponse.redirect(new URL(next, req.url));
+  return NextResponse.redirect(new URL(safeNext, req.url));
 }

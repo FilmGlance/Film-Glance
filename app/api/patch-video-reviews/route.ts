@@ -17,31 +17,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { fetchVideoReviews } from "@/lib/tmdb";
+import { requireCronSecret } from "@/lib/auth-admin";
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const token = authHeader.split(" ")[1];
-  try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Auth unavailable" }, { status: 503 });
-  }
+  const denied = requireCronSecret(req);
+  if (denied) return denied;
 
-  // Parse params
+  // Parse params. limit hard-capped at 500 (was 2000) — reduces single-call cost
+  // for accidentally-triggered runs and keeps total runtime within budget.
   const url = new URL(req.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 2000);
-  const offset = parseInt(url.searchParams.get("offset") || "0");
+  const rawLimit = parseInt(url.searchParams.get("limit") || "100");
+  const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 100, 500));
+  const rawOffset = parseInt(url.searchParams.get("offset") || "0");
+  const offset = Math.max(0, Number.isFinite(rawOffset) ? rawOffset : 0);
 
   // Fetch cached movies — we'll filter for missing video_reviews in JS
   // (JSONB filtering for empty arrays is unreliable across Supabase versions)

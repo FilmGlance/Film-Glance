@@ -41,11 +41,11 @@ import {
   logCronFailure,
   markCronFailuresResolved,
 } from "@/lib/alert";
+import { requireCronSecret } from "@/lib/auth-admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const CRON_SECRET = process.env.CRON_SECRET;
 const JOB = "bom-historical-backfill";
 const REGION: Region = "domestic";
 const SOURCE: Source = "bom-direct";
@@ -89,12 +89,8 @@ async function ingest(
 }
 
 export async function GET(req: NextRequest) {
-  if (CRON_SECRET) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const denied = requireCronSecret(req);
+  if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
   const yearRaw = searchParams.get("year");

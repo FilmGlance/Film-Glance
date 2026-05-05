@@ -1,5 +1,62 @@
 # Film Glance — Conversation Summary
 
+## Session: May 5, 2026 (later) — v6.1.0 Security audit Phase A (route gates + RLS hardening)
+
+User commissioned a third-party security audit of the codebase (`securityaudit.docx`, ChatGPT review of zipped repo, May 5, 2026). 17 findings across critical / high / medium severity. Verified each against actual code; most accurate, a few overstated. Plan written to `C:\Users\User\.claude\plans\project-will-be-the-ticklish-corbato.md`. This session ships **Phase A (v6.1.0)** — the four exploitable critical paths plus the worst billing-bypass in RLS.
+
+### What Phase A closes
+
+| Audit # | Severity | Item | Fix |
+|---|---|---|---|
+| 1 | Critical | `/api/seed`, `/seed/discover`, `/patch-video-reviews` accept any authenticated user JWT | Replaced with `requireCronSecret` (CRON_SECRET-only — no `role` column in schema; sole maintainer) |
+| 2 | Critical | Cron endpoints fail open if `CRON_SECRET` env is missing | Helper returns 503 when env unset, 401 on wrong token |
+| 4 | Critical | `/api/auth/callback?next=//evil.com` is a working open redirect | `getSafeNext()` rejects non-`/`, `//`, and `/\` prefixes |
+| 9a | High | `profiles` UPDATE policy lets users PATCH their own `plan_id` / `stripe_customer_id` / `searches_this_month` | `REVOKE UPDATE`; `GRANT UPDATE (display_name, avatar_url)` only |
+| 9b | High | SECURITY DEFINER functions lack `SET search_path` (path-hijack risk) | `ALTER FUNCTION ... SET search_path = public, pg_temp` on all three |
+| 9c | High | `increment_search(uuid)` is callable via PostgREST against any user | `REVOKE EXECUTE FROM PUBLIC, authenticated, anon` (also reset_monthly_searches) |
+
+### Implementation notes
+
+- **New helper `lib/auth-admin.ts`** — exports `requireCronSecret(req): NextResponse | null`. Fail-closed semantics: 503 when CRON_SECRET env is unset (so monitoring catches misconfig — the audit's specific recommendation), 401 when bearer token is wrong. Constant-time compare via pure-JS XOR loop, portable across Node + Edge runtimes.
+- **Pre-flight checks done before SQL migrations were written:**
+  - Stripe webhook (`app/api/webhooks/stripe/route.ts`) — confirmed all writes go through `supabaseAdmin` (service role bypasses both RLS and column-level GRANT). Migration 005 won't break billing.
+  - `increment_search` — only called from `app/api/search/route.ts:213` via `supabaseAdmin.rpc()`. REVOKE doesn't break server-side use.
+  - Plus context from earlier sessions: pricing is currently disabled (`PRICING_ENABLED=false`), making A4/A5 defense-in-depth rather than active billing-bypass mitigation. Fix is still correct.
+- **Bonus hardening on `/api/patch-video-reviews`:** `limit` query param hard-capped at 500 (was 2000) and `Number.isFinite()`-guarded against NaN — keeps single-call cost bounded for accidental triggers.
+- **The audit got partly wrong / overstated:**
+  - Critical 3 (service-role sprawl): `lib/supabase-server.ts` already exports both clients; user routes filter by `user.id` correctly. Real improvement opportunity but no exploitable hole today. Deferred to Phase C.
+  - High 5 (XSS): external links already use `rel="noopener noreferrer"` ✓. YouTube ID validation IS missing; `filmglance-brand.js:134-141` username concat into innerHTML IS real. Deferred to Phase B.
+  - Medium 11 (`next lint` removed): still works in Next 16.2.4. Future-proof to `eslint .` in Phase C2 (CI workflows).
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `lib/auth-admin.ts` | NEW — `requireCronSecret` helper, constant-time compare, pure-JS portable |
+| `app/api/seed/route.ts` | Replaced Bearer-getUser block with `requireCronSecret` |
+| `app/api/seed/discover/route.ts` | Same |
+| `app/api/seed/refresh/route.ts` | Removed `if (CRON_SECRET) { check }` fail-open; uses helper |
+| `app/api/patch-video-reviews/route.ts` | Same; plus limit cap 2000→500 + NaN guard |
+| `app/api/cron/box-office/refresh/route.ts` | Same |
+| `app/api/admin/backfill-bom/route.ts` | Same |
+| `app/api/auth/callback/route.ts` | Added `getSafeNext()`; rejects external/protocol-relative redirects |
+| `sql/migrations/005_lock_profile_columns.sql` | NEW — column-level UPDATE grant (FILES ONLY — manual run in Supabase) |
+| `sql/migrations/006_lock_definer_functions.sql` | NEW — search_path pin + REVOKE EXECUTE (FILES ONLY) |
+
+### What's left (deferred to subsequent PRs per the plan)
+
+- **Phase B (~v6.2.0):** CSP report-only via `next.config.js`, global HSTS, `lib/sanitize.ts` (YouTube ID + URL), `filmglance-brand.js` innerHTML→DOM (VPS deploy), `/api/health` sanitization, Zod for `/api/enrich` + `/api/suggest`, recover missing `003_anonymous_searches.sql`.
+- **Phase C (~v6.3.0+):** Upstash Redis distributed rate limit, GitHub Actions security CI (`eslint .` + tsc + npm audit + CodeQL + service-role grep guard), user-scoped Supabase client refactor for `/api/favorites`, `/api/folders`, `/api/enrich-favorites`.
+- **Phase D (defer / accept risk):** monolithic `film-glance.jsx` (tech debt, not security), Stripe placeholder hardening (pricing disabled), localStorage→cookie SSR (CSP compensates), op-doc redaction (private repo).
+
+### What needs user action before / at merge
+
+1. Review PR diff.
+2. After PR merges (or on staging preview): run `sql/migrations/005_lock_profile_columns.sql` and `006_lock_definer_functions.sql` in Supabase SQL Editor against production. Both idempotent.
+3. Verify `CRON_SECRET` env var is present in Vercel project settings (it must be — cron endpoints already required it; they just failed open if you were to ever lose it). After merge, missing CRON_SECRET = 503 (not silent open access).
+
+---
+
 ## Session: May 5, 2026 (late) — v6.0.0 Next 14 → Next 16 + React 18 → 19 security migration
 
 User merged PR #56 (v5.13.3 + v5.13.4) and asked to start the security migration we'd been deferring. Resolves all 8 GitHub Dependabot alerts (3 high + 5 moderate) — final `npm audit found 0 vulnerabilities`.
