@@ -22,22 +22,53 @@ export interface BOMBoxOfficeAugment {
 export async function fetchBOMBoxOffice(
   tmdbId: number | null,
   searchKey: string | null,
+  releaseYear?: number | null,
 ): Promise<BOMBoxOfficeAugment | null> {
   if (!tmdbId && !searchKey) return null;
 
-  // Build the lookup filter — prefer tmdb_id, fall back to search_key.
-  let baseQuery = supabaseAdmin
-    .from("box_office_metrics")
-    .select("period_type, period_start, gross, theaters, pta_cents")
-    .eq("region", "domestic");
+  // Match priority (try each, fall through on empty):
+  //   1. tmdb_id (canonical, no collisions) — best, but historical BOM
+  //      rows have tmdb_id=null because the cron never backfilled it
+  //   2. search_key + release_year (handles same-title collisions like
+  //      Michael 1996 vs Michael 2026 — both share search_key="michael")
+  //   3. search_key alone (last resort)
+  // v5.13.4 fix: previously stopped at the first non-empty filter; now
+  // tries tmdb_id then falls through to search_key when zero rows match.
+  const sel = "period_type, period_start, gross, theaters, pta_cents";
+  let rows: any[] | null = null;
+
   if (tmdbId) {
-    baseQuery = baseQuery.eq("tmdb_id", tmdbId);
-  } else if (searchKey) {
-    baseQuery = baseQuery.eq("search_key", searchKey);
+    const { data, error } = await supabaseAdmin
+      .from("box_office_metrics")
+      .select(sel)
+      .eq("region", "domestic")
+      .eq("tmdb_id", tmdbId);
+    if (error) return null;
+    if (data && data.length > 0) rows = data;
   }
 
-  const { data: rows, error } = await baseQuery;
-  if (error || !rows || rows.length === 0) return null;
+  if (!rows && searchKey && releaseYear && releaseYear > 1900) {
+    const { data, error } = await supabaseAdmin
+      .from("box_office_metrics")
+      .select(sel)
+      .eq("region", "domestic")
+      .eq("search_key", searchKey)
+      .eq("release_year", releaseYear);
+    if (error) return null;
+    if (data && data.length > 0) rows = data;
+  }
+
+  if (!rows && searchKey) {
+    const { data, error } = await supabaseAdmin
+      .from("box_office_metrics")
+      .select(sel)
+      .eq("region", "domestic")
+      .eq("search_key", searchKey);
+    if (error) return null;
+    if (data && data.length > 0) rows = data;
+  }
+
+  if (!rows || rows.length === 0) return null;
 
   // First weekly entry by period_start = opening week debut.
   const weekly = rows

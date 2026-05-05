@@ -359,7 +359,13 @@ export async function POST(req: NextRequest) {
           }
           console.log(`[bg-refresh] Starting for "${query}"`);
           const start = Date.now();
-          const mv = await runFullPipeline(query, query, undefined);
+          // v5.13.3 — pass cached year as yearHint so the runFullPipeline
+          // releaseInfo backfill resolves the correct movie (Michael 1996
+          // vs 2026 etc.) instead of TMDB's popularity-default pick.
+          const cachedYear = typeof (cached.data as any)?.year === "number"
+            ? (cached.data as any).year
+            : undefined;
+          const mv = await runFullPipeline(query, query, cachedYear);
           if (mv) {
             await writeCacheEntries(query, null, mv.title, mv, user?.id || null, ip, "swr-refresh");
             console.log(`[bg-refresh] ✓ "${query}" refreshed in ${Date.now() - start}ms`);
