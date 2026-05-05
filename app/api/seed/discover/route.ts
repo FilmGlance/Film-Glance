@@ -16,6 +16,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { enrichWithTMDB } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings } from "@/lib/ratings";
+import { requireCronSecret } from "@/lib/auth-admin";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
@@ -219,20 +220,8 @@ async function seedMovie(
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const token = authHeader.split(" ")[1];
-  try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Auth unavailable" }, { status: 503 });
-  }
+  const denied = requireCronSecret(req);
+  if (denied) return denied;
 
   if (!ANTHROPIC_API_KEY || !TMDB_KEY) {
     return NextResponse.json({ error: "API keys not configured" }, { status: 503 });
