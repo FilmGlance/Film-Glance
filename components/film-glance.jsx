@@ -4,7 +4,7 @@ import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
   Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
-  MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Youtube, Sparkles,
+  MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Video, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
   Music, BookOpen, Gauge,
   Camera, Wand2, Lightbulb, Activity, Ghost, Swords, Palette, Scroll, Mic,
@@ -42,7 +42,7 @@ const FEATURES = [
   { Icon: Star,       title: "True Average Rating",  body: "Every major rating averaged into one honest score." },
   { Icon: BarChart3,  title: "Source Breakdown",     body: "See every individual score, broken out by platform." },
   { Icon: Flame,      title: "Movie Hot Take",       body: "A one-line verdict distilled from every review out there." },
-  { Icon: Youtube,    title: "Video Reviews",        body: "The most-watched YouTube reviews, ready to play." },
+  { Icon: Video,    title: "Video Reviews",        body: "The most-watched YouTube reviews, ready to play." },
   { Icon: Users,      title: "Full Cast",            body: "Every lead actor, with their photo and credits." },
   { Icon: Award,      title: "Awards & Accolades",   body: "Oscars, festival wins, and critics' prizes tracked automatically." },
   { Icon: DollarSign, title: "Production Budget",    body: "Budget and box office side by side — see if it was worth it." },
@@ -4471,7 +4471,7 @@ export default function FilmGlance() {
               { id: "fg-score", label: "True Rating Score", icon: Gauge, show: result.score && typeof result.score.ten !== "undefined" },
               { id: "fg-sources", label: "Source Breakdown", icon: BarChart3, show: result.sources && result.sources.length > 0 },
               { id: "fg-hottake", label: "Thumbs Up & Down", icon: ThumbsUp, show: result.hot_take && (result.hot_take.good?.length > 0 || result.hot_take.bad?.length > 0) },
-              { id: "fg-videos", label: "Video Reviews", icon: Youtube, show: result.video_reviews && result.video_reviews.length > 0 },
+              { id: "fg-videos", label: "Video Reviews", icon: Video, show: result.video_reviews && result.video_reviews.length > 0 },
               { id: "fg-cast", label: "Cast", icon: Users, show: result.cast && result.cast.length > 0 },
               { id: "fg-awards", label: "Awards", icon: Trophy, show: result.awards && result.awards.length > 0 },
               { id: "fg-boxoffice", label: "Production & Run", icon: DollarSign, show: !!result.boxOffice },
@@ -4867,7 +4867,7 @@ export default function FilmGlance() {
 
               {/* Video Reviews — bigger thumbnails, refined play affordance */}
               {result.video_reviews && result.video_reviews.length > 0 && (
-                <Accordion id="fg-videos" icon={<Youtube size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
+                <Accordion id="fg-videos" icon={<Video size={14} />} label="Video Reviews" open={reviewsOpen} toggle={() => setReviewsOpen(!reviewsOpen)}>
                   <div className="fg-accord-content" style={{ padding: "10px 26px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                     {result.video_reviews.map((vr, i) => (
                       <button key={vr.video_id}
