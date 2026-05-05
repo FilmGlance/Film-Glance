@@ -1,5 +1,64 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 (very late PM, +v5.13.2) — Box-office augmentation from TMDB + BOM
+
+User asked: do our RapidAPIs have box office data? Don't they have all the latest movie data?
+
+Audit: **our RapidAPI integrations are ratings-only** (RT Critics/Audience, Metacritic User, Letterboxd scores). No box office data on those endpoints. But:
+
+- **TMDB `/movie/{id}`** has `budget` + `revenue` (worldwide gross) for every released film. Free, our key works, called every search anyway.
+- **Box Office Mojo** scraped weekly populates `box_office_metrics` with opening-weekend gross + theaters + PTA + weekly progression for any movie in the Top 10.
+
+So we had the data sources; we just weren't using TMDB's box-office fields and weren't joining BOM data into individual search results. v5.13.2 wires both.
+
+### Two-tier augmentation
+
+Both run in `runFullPipeline` (`lib/search-pipeline.ts`) right after the v5.13.1 anti-hallucination strip and before final return. Both gated on `!isPreReleaseOrTooEarly` so they never fire for unreleased / just-released films.
+
+**Tier 1 — TMDB (universal).** New `fetchTMDBBoxOffice(movieId)` in `lib/tmdb.ts` returns `{budget, revenue}`. Fills in `boxOffice.budget` + `boxOffice.worldwide` for ANY released film with TMDB data.
+
+**Tier 2 — BOM (top-10 films).** New `lib/bom-augment.ts` exports `fetchBOMBoxOffice(tmdbId, searchKey)`. Queries `box_office_metrics`, returns `{openingWeekendCents, theatersOpening, ptaOpeningCents, domesticTotalCents, daysInTheater}`. Match key: prefer `tmdb_id` (canonical), fall back to `search_key`. Opening week = first weekly entry by `period_start`. Domestic total = sum of yearly entries (else monthlies, else weeklies). Days in theater = distinct weekly periods × 7.
+
+**Derived values** when both layers present:
+- `international = revenue − domestic`
+- `roi = ((revenue − budget) / budget) × 100`
+
+Both tiers fill in only fields Claude didn't already populate — Claude's real data wins when present.
+
+### Latency cost
+
+Two TMDB-or-Supabase calls in `Promise.all` — ~150ms. Acceptable.
+
+### Coverage
+
+| Movie type | Before | After |
+|---|---|---|
+| Pre-release (Project Hail Mary, Michael 2026 just-released) | Fabricated or empty | v5.13.1 strips → empty (no fake data) |
+| Released >7 days, in BOM Top 10 | Empty for cutoff-recent | TMDB budget+worldwide + BOM opening+theaters+PTA+domestic |
+| Released >7 days, NOT in BOM Top 10 | Empty for cutoff-recent | TMDB budget+worldwide only |
+| Older popular (Barbie, Oppenheimer) | Real Claude data | Same — Claude's data wins |
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `lib/tmdb.ts` | New `fetchTMDBBoxOffice(movieId)` |
+| `lib/bom-augment.ts` | NEW — BOM lookup + dollar formatters |
+| `lib/search-pipeline.ts` | Imports + two-tier augmentation block before return |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.13.2; old very-late-PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+### What rides on PR #54
+
+Now bundled: v5.13.0 + v5.13.1 + v5.13.2.
+
+### Still deferred
+
+- **Next 14 → Next 16 security migration (v6.0.0)** — dedicated PR with full route regression
+- **VPS forum import** — monitoring only, running healthy
+
+---
+
 ## Session: May 4, 2026 (very late PM) — v5.13.1 Box-office anti-hallucination + post-premiere refresh trigger
 
 User reported recently-premiered movies missing the "Production & Theatrical Run" section. Investigation (`scratch/check-box-office-fields.mjs`) found two distinct bugs:
