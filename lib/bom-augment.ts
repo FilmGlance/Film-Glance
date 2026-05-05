@@ -22,10 +22,15 @@ export interface BOMBoxOfficeAugment {
 export async function fetchBOMBoxOffice(
   tmdbId: number | null,
   searchKey: string | null,
+  releaseYear?: number | null,
 ): Promise<BOMBoxOfficeAugment | null> {
   if (!tmdbId && !searchKey) return null;
 
-  // Build the lookup filter — prefer tmdb_id, fall back to search_key.
+  // Build the lookup filter. Match priority:
+  // 1. tmdb_id (canonical, no collisions) — best
+  // 2. search_key + release_year (handles same-title collisions like
+  //    Michael 1996 vs Michael 2026 — both share search_key="michael")
+  // 3. search_key alone (last resort, may merge multiple movies' rows)
   let baseQuery = supabaseAdmin
     .from("box_office_metrics")
     .select("period_type, period_start, gross, theaters, pta_cents")
@@ -34,6 +39,9 @@ export async function fetchBOMBoxOffice(
     baseQuery = baseQuery.eq("tmdb_id", tmdbId);
   } else if (searchKey) {
     baseQuery = baseQuery.eq("search_key", searchKey);
+    if (releaseYear && releaseYear > 1900) {
+      baseQuery = baseQuery.eq("release_year", releaseYear);
+    }
   }
 
   const { data: rows, error } = await baseQuery;

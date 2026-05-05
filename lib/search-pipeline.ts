@@ -13,6 +13,7 @@ import {
   enrichWithTMDB,
   fetchComingSoonDetails,
   fetchTMDBBoxOffice,
+  getMovieReleaseInfo,
 } from "@/lib/tmdb";
 import {
   fetchVerifiedRatings,
@@ -118,7 +119,7 @@ export async function runFullPipeline(
   queryForClaude: string,
   queryForRatings: string,
   yearHint?: number,
-  releaseInfo?: {
+  releaseInfoArg?: {
     tmdbId: number;
     officialTitle: string;
     releaseDate: string | null;
@@ -127,6 +128,26 @@ export async function runFullPipeline(
   } | null
 ): Promise<any> {
   const start = Date.now();
+
+  // v5.13.3 — backfill releaseInfo if caller didn't provide it. The SWR
+  // refresh path (app/api/search/route.ts cache-hit branches) historically
+  // calls `runFullPipeline(query, query, undefined)` with no 4th arg —
+  // that meant box-office augmentation (which needs `releaseInfo.tmdbId`)
+  // would silently skip. Fetching here ensures augmentation fires for
+  // every code path: fresh searches, SWR refreshes, BOM cron upserts.
+  let releaseInfo = releaseInfoArg;
+  if (!releaseInfo) {
+    const fetched = await getMovieReleaseInfo(queryForClaude, yearHint).catch(() => null);
+    if (fetched) {
+      releaseInfo = {
+        tmdbId: fetched.tmdbId,
+        officialTitle: fetched.officialTitle,
+        releaseDate: fetched.releaseDate,
+        overview: fetched.overview,
+        posterPath: fetched.posterPath,
+      };
+    }
+  }
 
   const claudePromise = fetch(ANTHROPIC_URL, {
     method: "POST",
@@ -291,9 +312,16 @@ export async function runFullPipeline(
   // Claude's real data wins when present.
   if (!isPreReleaseOrTooEarly && releaseInfo?.tmdbId) {
     try {
+      const releaseYearFromTMDB = releaseInfo.releaseDate
+        ? parseInt(releaseInfo.releaseDate.slice(0, 4)) || null
+        : null;
       const [tmdbBO, bomBO] = await Promise.all([
         fetchTMDBBoxOffice(releaseInfo.tmdbId).catch(() => null),
-        fetchBOMBoxOffice(releaseInfo.tmdbId, queryForRatings.toLowerCase().trim()).catch(() => null),
+        fetchBOMBoxOffice(
+          releaseInfo.tmdbId,
+          queryForRatings.toLowerCase().trim(),
+          releaseYearFromTMDB,
+        ).catch(() => null),
       ]);
       if (tmdbBO || bomBO) {
         mv.boxOffice = mv.boxOffice || {};

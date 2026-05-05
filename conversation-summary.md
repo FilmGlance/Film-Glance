@@ -1,5 +1,52 @@
 # Film Glance — Conversation Summary
 
+## Session: May 5, 2026 — v5.13.3 Box-office augmentation triple-bug fix
+
+User merged PR #55 (v5.13.1 + v5.13.2) and retested. Michael 2026 still showed empty Production & Theatrical Run section. User asked: how can we be unable to even get estimates for Project Hail Mary's known $200M budget?
+
+### Probe (scratch/probe-michael-phm.mjs)
+
+Three converging bugs prevented v5.13.2 augmentation from firing in production:
+
+**Bug 1 — SWR refresh drops releaseInfo.** Both cache-hit branches in `app/api/search/route.ts` called `runFullPipeline(query, query, undefined)` with no 4th arg. v5.13.2 augmentation requires `releaseInfo.tmdbId` to fetch TMDB box office + BOM data. So every background refresh stripped augmentation. Cache entries that started healthy lost it on refresh; entries that lacked augmentation never got it.
+
+**Bug 2 — BOM same-title collision.** `box_office_metrics` rows for `search_key="michael"` include BOTH Michael 1996 (Travolta) AND Michael 2026 (Fuqua biopic) — they share the sanitized title key. `fetchBOMBoxOffice` returned ALL Michael rows merged, so Michael 2026 would inherit 1997 weekly numbers as its "opening week."
+
+**Bug 3 — Timing window.** PR #55 merged at 01:08:35 UTC; user's first searches at 01:09:47 hit either the in-progress Vercel deploy OR the SWR-without-releaseInfo path. Cache entries persisted with `release_date: null` and `boxOffice: missing`.
+
+### Fix (v5.13.3)
+
+1. **`runFullPipeline` self-backfills releaseInfo** via `getMovieReleaseInfo()` if caller didn't provide it. Every code path now gets augmentation.
+2. **SWR refresh paths in route.ts pass `cached.data.year` as yearHint** so the backfill correctly resolves Michael 1996 vs 2026 (vs TMDB's popularity-default pick).
+3. **`fetchBOMBoxOffice` accepts a `releaseYear` param.** New match priority: tmdb_id → search_key+release_year → search_key alone (fallback for older rows missing release_year).
+4. **Stale caches cleared** for michael, michael 2026, project hail mary.
+
+### What's actually available from external sources
+
+Per the probe:
+- Project Hail Mary: tmdb_id=687163, budget=$200M, revenue=$638M, status=Released, 2026-03-15 (51 days ago — clears the 7-day anti-hallucination gate)
+- BOM has $307M domestic for PHM across weekly/monthly entries
+- Michael 2026: BOM has 2026-04-01 seasonal/yearly entries with $123M gross, 3955 theaters
+
+Once augmentation fires correctly, both films get rich data.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `lib/search-pipeline.ts` | runFullPipeline backfills releaseInfo; passes releaseYear to BOM lookup |
+| `lib/bom-augment.ts` | fetchBOMBoxOffice now filters by release_year when tmdb_id unavailable |
+| `app/api/search/route.ts` | SWR refresh passes cached year as yearHint |
+| `tech-specs.md` | New ✅ CURRENT STATE row for v5.13.3 |
+| `conversation-summary.md` | This session entry |
+
+### Still deferred
+
+- Next 14 → Next 16 security migration (v6.0.0)
+- VPS forum import (running healthy)
+
+---
+
 ## Session: May 4, 2026 (very late PM, +v5.13.2) — Box-office augmentation from TMDB + BOM
 
 User asked: do our RapidAPIs have box office data? Don't they have all the latest movie data?
