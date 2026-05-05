@@ -225,6 +225,13 @@ export async function runFullPipeline(
         poster: posterPath ? `https://image.tmdb.org/t/p/w500${posterPath}` : null,
       };
       console.log(`[fallback] Claude couldn't process "${queryForClaude}" — built TMDB+verified response for "${fallbackMv.title}" (${fallbackMv.year}) with ${fallbackSources.length} verified sources`);
+
+      // v5.13.4 — augment box office in the fallback path TOO. Without this,
+      // every post-cutoff film (Michael 2026, Project Hail Mary, etc. — the
+      // films that need augmentation MOST) would skip it entirely because
+      // they hit this early return.
+      await applyBoxOfficeAugmentation(fallbackMv, releaseInfo, queryForRatings);
+
       return fallbackMv;
     }
     return null;
@@ -271,24 +278,40 @@ export async function runFullPipeline(
     mv.sources = applyVerifiedRatings(mv.sources, verified);
   }
 
-  // v5.13.1 — anti-hallucination guard for box office. Claude will fabricate
-  // budget / opening / domestic / worldwide / theaters / rankings for
-  // unreleased films when explicitly told to populate them (the prompt
-  // mandates ranks for "any wide theatrical release"). Reject these strings
-  // for any movie whose theatrical release was less than 7 days ago — that's
-  // before stable opening-weekend numbers are published anywhere. After 7
-  // days the data exists in the wild and Claude's training cutoff may or may
-  // not include it; we surface whatever's there. release_date pulled from
-  // TMDB releaseInfo (canonical) — fall back to mv.year heuristic if missing.
+  // v5.13.4 — apply box-office augmentation in the success path. The same
+  // helper also runs in the fallback path above (line ~228) so post-cutoff
+  // films Claude can't recognize still get TMDB + BOM data.
+  await applyBoxOfficeAugmentation(mv, releaseInfo, queryForRatings);
+
+  return mv;
+}
+
+// ── Box-office augmentation helper (v5.13.4) ─────────────────────────────
+//
+// Mutates `mv` in place: strips Claude-fabricated boxOffice for pre-release
+// films (anti-hallucination), persists release_date at top-level, then
+// augments with TMDB budget+revenue (universal) and BOM opening-weekend +
+// theaters + PTA + domestic (top-10 films). Helper exists so both the
+// Claude-success path AND the fallback path (Claude said not_a_movie or
+// year-mismatch — i.e. post-cutoff films) get the same treatment. Without
+// this, augmentation never fired for the films that need it most.
+async function applyBoxOfficeAugmentation(
+  mv: any,
+  releaseInfo: { tmdbId: number; releaseDate: string | null } | null | undefined,
+  queryForRatings: string,
+): Promise<void> {
+  if (!releaseInfo?.tmdbId) return;
+
+  // Anti-hallucination: strip mv.boxOffice if release_date < 7 days ago
+  // or in the future. (Future TMDB year fallback handled separately.)
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   let isPreReleaseOrTooEarly = false;
-  if (releaseInfo?.releaseDate) {
+  if (releaseInfo.releaseDate) {
     const releaseMs = new Date(releaseInfo.releaseDate).getTime();
     if (!isNaN(releaseMs) && Date.now() - releaseMs < SEVEN_DAYS_MS) {
       isPreReleaseOrTooEarly = true;
     }
   } else if (typeof mv.year === "number" && mv.year > new Date().getFullYear()) {
-    // No TMDB release_date but Claude says future year → also reject.
     isPreReleaseOrTooEarly = true;
   }
   if (isPreReleaseOrTooEarly && mv.boxOffice) {
@@ -298,86 +321,74 @@ export async function runFullPipeline(
     delete mv.boxOffice;
   }
 
-  // Persist release_date at top level so cache-hit logic can detect
-  // recently-released movies for the v5.13.1 SWR refresh trigger.
-  if (releaseInfo?.releaseDate && !mv.release_date) {
+  // Persist release_date at top level for cache-hit refresh trigger.
+  if (releaseInfo.releaseDate && !mv.release_date) {
     mv.release_date = releaseInfo.releaseDate;
   }
 
-  // v5.13.2 — augment box office from TMDB + BOM. Fills in fields Claude
-  // couldn't (training cutoff predates the movie's release) so the
-  // Production & Theatrical Run section renders for recent films.
-  // Only fires for films released ≥7 days ago (anti-hallucination
-  // window). Both layers fill in only fields not already populated —
-  // Claude's real data wins when present.
-  if (!isPreReleaseOrTooEarly && releaseInfo?.tmdbId) {
-    try {
-      const releaseYearFromTMDB = releaseInfo.releaseDate
-        ? parseInt(releaseInfo.releaseDate.slice(0, 4)) || null
-        : null;
-      const [tmdbBO, bomBO] = await Promise.all([
-        fetchTMDBBoxOffice(releaseInfo.tmdbId).catch(() => null),
-        fetchBOMBoxOffice(
-          releaseInfo.tmdbId,
-          queryForRatings.toLowerCase().trim(),
-          releaseYearFromTMDB,
-        ).catch(() => null),
-      ]);
-      if (tmdbBO || bomBO) {
-        mv.boxOffice = mv.boxOffice || {};
-        // TMDB layer — universal: budget + worldwide for any released film
-        if (tmdbBO?.budget && !mv.boxOffice.budget) {
-          mv.boxOffice.budget = formatDollarsAsDollarString(tmdbBO.budget);
-        }
-        if (tmdbBO?.revenue && !mv.boxOffice.worldwide) {
-          mv.boxOffice.worldwide = formatDollarsAsDollarString(tmdbBO.revenue);
-        }
-        // BOM layer — opening weekend + theaters + PTA for top-10 films
-        if (bomBO?.openingWeekendCents && !mv.boxOffice.openingWeekend) {
-          mv.boxOffice.openingWeekend = formatCentsAsDollarString(bomBO.openingWeekendCents);
-        }
-        if (bomBO?.theatersOpening && !mv.boxOffice.theaterCount) {
-          mv.boxOffice.theaterCount = bomBO.theatersOpening.toLocaleString("en-US");
-        }
-        if (bomBO?.ptaOpeningCents && !mv.boxOffice.pta) {
-          mv.boxOffice.pta = formatCentsAsDollarString(bomBO.ptaOpeningCents);
-        }
-        if (bomBO?.domesticTotalCents && !mv.boxOffice.domestic) {
-          mv.boxOffice.domestic = formatCentsAsDollarString(bomBO.domesticTotalCents);
-        }
-        if (bomBO?.daysInTheater && !mv.boxOffice.daysInTheater) {
-          mv.boxOffice.daysInTheater = `${bomBO.daysInTheater} days`;
-        }
-        // International = worldwide - domestic when both present
-        if (
-          tmdbBO?.revenue &&
-          bomBO?.domesticTotalCents &&
-          !mv.boxOffice.international
-        ) {
-          const intlDollars = tmdbBO.revenue - Math.round(bomBO.domesticTotalCents / 100);
-          if (intlDollars > 0) {
-            mv.boxOffice.international = formatDollarsAsDollarString(intlDollars);
-          }
-        }
-        // ROI = (revenue - budget) / budget when both present
-        if (tmdbBO?.budget && tmdbBO?.revenue && !mv.boxOffice.roi) {
-          const roiPct = ((tmdbBO.revenue - tmdbBO.budget) / tmdbBO.budget) * 100;
-          mv.boxOffice.roi = `${Math.round(roiPct)}%`;
-        }
-        if (Object.keys(mv.boxOffice).length === 0) {
-          delete mv.boxOffice;
-        } else {
-          console.log(
-            `[box-office-augment] "${mv.title}" filled ${Object.keys(mv.boxOffice).length} fields (TMDB:${tmdbBO ? "Y" : "N"} BOM:${bomBO ? "Y" : "N"})`,
-          );
-        }
-      }
-    } catch (e) {
-      console.error("[box-office-augment] error:", e);
-    }
-  }
+  // Augmentation skips for unreleased/just-released films (no real numbers
+  // exist anywhere yet).
+  if (isPreReleaseOrTooEarly) return;
 
-  return mv;
+  try {
+    const releaseYearFromTMDB = releaseInfo.releaseDate
+      ? parseInt(releaseInfo.releaseDate.slice(0, 4)) || null
+      : null;
+    const [tmdbBO, bomBO] = await Promise.all([
+      fetchTMDBBoxOffice(releaseInfo.tmdbId).catch(() => null),
+      fetchBOMBoxOffice(
+        releaseInfo.tmdbId,
+        queryForRatings.toLowerCase().trim(),
+        releaseYearFromTMDB,
+      ).catch(() => null),
+    ]);
+    if (!tmdbBO && !bomBO) return;
+    mv.boxOffice = mv.boxOffice || {};
+    if (tmdbBO?.budget && !mv.boxOffice.budget) {
+      mv.boxOffice.budget = formatDollarsAsDollarString(tmdbBO.budget);
+    }
+    if (tmdbBO?.revenue && !mv.boxOffice.worldwide) {
+      mv.boxOffice.worldwide = formatDollarsAsDollarString(tmdbBO.revenue);
+    }
+    if (bomBO?.openingWeekendCents && !mv.boxOffice.openingWeekend) {
+      mv.boxOffice.openingWeekend = formatCentsAsDollarString(bomBO.openingWeekendCents);
+    }
+    if (bomBO?.theatersOpening && !mv.boxOffice.theaterCount) {
+      mv.boxOffice.theaterCount = bomBO.theatersOpening.toLocaleString("en-US");
+    }
+    if (bomBO?.ptaOpeningCents && !mv.boxOffice.pta) {
+      mv.boxOffice.pta = formatCentsAsDollarString(bomBO.ptaOpeningCents);
+    }
+    if (bomBO?.domesticTotalCents && !mv.boxOffice.domestic) {
+      mv.boxOffice.domestic = formatCentsAsDollarString(bomBO.domesticTotalCents);
+    }
+    if (bomBO?.daysInTheater && !mv.boxOffice.daysInTheater) {
+      mv.boxOffice.daysInTheater = `${bomBO.daysInTheater} days`;
+    }
+    if (
+      tmdbBO?.revenue &&
+      bomBO?.domesticTotalCents &&
+      !mv.boxOffice.international
+    ) {
+      const intlDollars = tmdbBO.revenue - Math.round(bomBO.domesticTotalCents / 100);
+      if (intlDollars > 0) {
+        mv.boxOffice.international = formatDollarsAsDollarString(intlDollars);
+      }
+    }
+    if (tmdbBO?.budget && tmdbBO?.revenue && !mv.boxOffice.roi) {
+      const roiPct = ((tmdbBO.revenue - tmdbBO.budget) / tmdbBO.budget) * 100;
+      mv.boxOffice.roi = `${Math.round(roiPct)}%`;
+    }
+    if (Object.keys(mv.boxOffice).length === 0) {
+      delete mv.boxOffice;
+    } else {
+      console.log(
+        `[box-office-augment] "${mv.title}" filled ${Object.keys(mv.boxOffice).length} fields (TMDB:${tmdbBO ? "Y" : "N"} BOM:${bomBO ? "Y" : "N"})`,
+      );
+    }
+  } catch (e) {
+    console.error("[box-office-augment] error:", e);
+  }
 }
 
 // ── Cache write (writes movie_cache + logs to search_log) ────────────────────
