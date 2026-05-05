@@ -1,5 +1,64 @@
 # Film Glance — Conversation Summary
 
+## Session: May 5, 2026 (continued) — v5.13.4 Box-office augmentation root-cause fix (fallback path + BOM fallthrough)
+
+User retested v5.13.3 — Michael 2026 + Project Hail Mary STILL showed empty Production & Theatrical Run section. Direct empirical trace via `scratch/trace-pipeline.ts` (invokes `runFullPipeline` directly, inspects returned `mv`) found two more bugs that were the actual blockers.
+
+### Bug 4 — Augmentation never ran on Claude-fallback path
+
+Both films hit `[fallback] Claude couldn't process` branch (line ~199 in `lib/search-pipeline.ts`) because Claude's training cutoff (Jan 2026) predates their release. The fallback returns `fallbackMv` at line ~228 — BEFORE the v5.13.2 augmentation block at the bottom of the function. So augmentation NEVER fired for any post-cutoff film. The `[box-office-augment]` log line never appeared in prod logs because code never reached it.
+
+### Bug 5 — BOM fallthrough was unreachable
+
+v5.13.3 `fetchBOMBoxOffice` matched tmdb_id first; if found, used it. But ALL historical BOM rows have `tmdb_id=null` (cron never backfilled). The `search_key+release_year` fallback was inside an `else` branch only entered when tmdbId at function-call was falsy — so when v5.13.3's pipeline call passed both tmdbId AND searchKey, the empty tmdb_id query returned and stopped iteration before search_key was tried.
+
+### Fix
+
+1. Extracted box-office logic into `applyBoxOfficeAugmentation()` helper. Called from BOTH the Claude-success path AND the fallback path with the same anti-hallucination strip + release_date persistence + TMDB+BOM augmentation.
+2. `fetchBOMBoxOffice` rewritten with sequential fallthrough: try tmdb_id → if empty, try search_key+release_year → if empty, try search_key alone. Each filter is a separate query.
+
+### Verified end-to-end
+
+`scratch/trace-pipeline.ts` runs `runFullPipeline` for both films (mirroring route.ts inputs: query="michael" or "project hail mary", year=2026). Both hit the fallback path and populate all 9 fields:
+
+| Field | Michael 2026 | Project Hail Mary |
+|---|---|---|
+| budget | $250,000,000 | $200,000,000 |
+| worldwide | $423,926,000 | $638,443,000 |
+| openingWeekend | $123,225,941 | $109,764,644 |
+| theaterCount | 3,955 | 4,007 |
+| pta | $31,157 | $27,393 |
+| domestic | $115,986,297 | $307,627,513 |
+| daysInTheater | 7 days | 42 days |
+| international | $307,939,703 | $330,815,487 |
+| roi | 70% | 219% |
+
+Zero Claude calls. All from TMDB `/movie/{id}` + `box_office_metrics` table.
+
+User confirmed working in staging preview ("works now").
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `lib/search-pipeline.ts` | Extracted `applyBoxOfficeAugmentation()` helper; called from both Claude-success and fallback paths |
+| `lib/bom-augment.ts` | Sequential fallthrough: tmdb_id → search_key+release_year → search_key alone |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.13.4; old May 5 row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/trace-pipeline.ts`, `scratch/check-bom-cols.mjs`.
+
+### What's on PR #56
+
+PR #56 was originally opened for v5.13.3, expanded to include v5.13.4. Full scope: SWR releaseInfo backfill + BOM same-title disambiguation + Claude-fallback augmentation + BOM fallthrough.
+
+### Still deferred
+
+- Next 14 → Next 16 security migration (v6.0.0)
+- VPS forum import (running healthy)
+
+---
+
 ## Session: May 5, 2026 — v5.13.3 Box-office augmentation triple-bug fix
 
 User merged PR #55 (v5.13.1 + v5.13.2) and retested. Michael 2026 still showed empty Production & Theatrical Run section. User asked: how can we be unable to even get estimates for Project Hail Mary's known $200M budget?
