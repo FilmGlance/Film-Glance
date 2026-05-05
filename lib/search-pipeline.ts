@@ -244,6 +244,39 @@ export async function runFullPipeline(
     mv.sources = applyVerifiedRatings(mv.sources, verified);
   }
 
+  // v5.13.1 — anti-hallucination guard for box office. Claude will fabricate
+  // budget / opening / domestic / worldwide / theaters / rankings for
+  // unreleased films when explicitly told to populate them (the prompt
+  // mandates ranks for "any wide theatrical release"). Reject these strings
+  // for any movie whose theatrical release was less than 7 days ago — that's
+  // before stable opening-weekend numbers are published anywhere. After 7
+  // days the data exists in the wild and Claude's training cutoff may or may
+  // not include it; we surface whatever's there. release_date pulled from
+  // TMDB releaseInfo (canonical) — fall back to mv.year heuristic if missing.
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  let isPreReleaseOrTooEarly = false;
+  if (releaseInfo?.releaseDate) {
+    const releaseMs = new Date(releaseInfo.releaseDate).getTime();
+    if (!isNaN(releaseMs) && Date.now() - releaseMs < SEVEN_DAYS_MS) {
+      isPreReleaseOrTooEarly = true;
+    }
+  } else if (typeof mv.year === "number" && mv.year > new Date().getFullYear()) {
+    // No TMDB release_date but Claude says future year → also reject.
+    isPreReleaseOrTooEarly = true;
+  }
+  if (isPreReleaseOrTooEarly && mv.boxOffice) {
+    console.log(
+      `[box-office] stripped fabricated boxOffice for "${mv.title}" (${mv.year}) — release < 7 days ago or unreleased`,
+    );
+    delete mv.boxOffice;
+  }
+
+  // Persist release_date at top level so cache-hit logic can detect
+  // recently-released movies for the v5.13.1 SWR refresh trigger.
+  if (releaseInfo?.releaseDate && !mv.release_date) {
+    mv.release_date = releaseInfo.releaseDate;
+  }
+
   return mv;
 }
 

@@ -283,6 +283,9 @@ export async function POST(req: NextRequest) {
       // which is fine — the 1-hour dedup keeps cost bounded even in that
       // pathological case.
       const ONE_HOUR_MS = 60 * 60 * 1000;
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
+      const NINETY_DAYS_MS = 90 * ONE_DAY_MS;
       const SOURCE_FLOOR = 6;
       const cacheAgeMs = cached.cached_at
         ? Date.now() - new Date(cached.cached_at).getTime()
@@ -291,7 +294,31 @@ export async function POST(req: NextRequest) {
       const isComingSoon = (cached.data as any)?.coming_soon === true;
       const isUnderpopulated = !isComingSoon && sourceCount < SOURCE_FLOOR;
       const isPastHourly = cacheAgeMs > ONE_HOUR_MS;
-      const shouldRefresh = isStale || isUnderpopulated || isPastHourly;
+
+      // v5.13.1 — recently-released-movies-need-box-office-refresh trigger.
+      // For films released between 7 and 90 days ago, opening-weekend +
+      // theaters + initial run numbers become available in the wild within
+      // 1-2 weeks of release. Claude's training cutoff may or may not
+      // include them — but a fresh pipeline call is the only way to find
+      // out. Force refresh whenever boxOffice is missing/empty for these
+      // movies so the data fills in as it becomes public. Skip if cache_at
+      // is already within an hour (1h dedup still applies).
+      const releaseDateStr = (cached.data as any)?.release_date as string | undefined;
+      let isPostReleaseBoxOfficeGap = false;
+      if (releaseDateStr) {
+        const releaseMs = new Date(releaseDateStr).getTime();
+        if (!isNaN(releaseMs)) {
+          const sinceRelease = Date.now() - releaseMs;
+          const inWindow = sinceRelease >= SEVEN_DAYS_MS && sinceRelease <= NINETY_DAYS_MS;
+          const noBoxOffice = !(cached.data as any)?.boxOffice ||
+            Object.keys((cached.data as any).boxOffice || {}).length === 0;
+          if (inWindow && noBoxOffice && cacheAgeMs > ONE_HOUR_MS) {
+            isPostReleaseBoxOfficeGap = true;
+          }
+        }
+      }
+
+      const shouldRefresh = isStale || isUnderpopulated || isPastHourly || isPostReleaseBoxOfficeGap;
 
       // Fire-and-forget: update hit count + log
       runInBackground(async () => {

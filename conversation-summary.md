@@ -1,5 +1,50 @@
 # Film Glance — Conversation Summary
 
+## Session: May 4, 2026 (very late PM) — v5.13.1 Box-office anti-hallucination + post-premiere refresh trigger
+
+User reported recently-premiered movies missing the "Production & Theatrical Run" section. Investigation (`scratch/check-box-office-fields.mjs`) found two distinct bugs:
+
+1. **Michael 2026** → `boxOffice` completely undefined. Claude correctly refused to fabricate (good), but section just doesn't render.
+2. **Project Hail Mary** (cached as 2024 — possibly mis-identified) → `boxOffice` object fully populated with **fabricated values**: "$200,000,000 budget", "$555,807,000 worldwide", "#45 all-time opening" — Claude hallucinating numbers for an unreleased film because the prompt mandates ranks for "any wide theatrical release."
+3. **Barbie 2023 / Oppenheimer 2023** → healthy real numbers. Confirms the bug is release-date-window specific.
+
+### Two-part fix
+
+**Part 1 — anti-hallucination guard** in `lib/search-pipeline.ts` before final return: if TMDB `releaseInfo.releaseDate` is less than 7 days ago (or in the future), strip `mv.boxOffice` entirely. Fallback: if no TMDB release_date but Claude reports `mv.year > currentYear`, also strip. Threshold of 7 days = when stable opening-weekend numbers are typically published. Also persists `release_date` at top level of `mv` so the cache layer can detect the post-release window.
+
+**Part 2 — SWR refresh trigger** in `app/api/search/route.ts` cache-hit logic. Added a fourth gate to the v5.12.5 refresh trigger: if cached movie's `release_date` is between 7 and 90 days ago AND `boxOffice` is missing/empty AND cache_age > 1h → force refresh. As Claude's data becomes available post-premiere (or BOM data flows in), subsequent searches auto-fill the section.
+
+### Stale caches cleared
+
+`scratch/clear-hallucinated.mjs` deleted 5 polluted entries: michael, michael 2026, project hail mary, super mario, the super mario galaxy movie. Next user search re-runs the pipeline with the new guards.
+
+### Known limitation
+
+Claude's training cutoff (January 2026) bounds how recent box-office data can be for movies released mid-2026. The post-premiere refresh trigger is necessary but not sufficient — for very recent releases Claude may still return empty boxOffice, and the section will stay hidden. **Deferred enhancement (v5.13.2 or later)**: augment results with BOM data from `box_office_metrics` table when present. Gives REAL opening-weekend gross + theaters + PTA from the existing BOM scraper for any movie that's appeared in the weekly Top 10.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `lib/search-pipeline.ts` | Anti-hallucination strip + persist release_date at top level |
+| `app/api/search/route.ts` | 4th SWR gate: post-premiere boxOffice gap |
+| `tech-specs.md` | New ✅ CURRENT STATE row covering v5.13.1; old May 4 late-PM row marked SUPERSEDED |
+| `conversation-summary.md` | This session entry |
+
+Test artifacts (gitignored): `scratch/check-box-office-fields.mjs`, `scratch/clear-hallucinated.mjs`.
+
+### What rides on PR #54
+
+PR #54 is already open and tracks staging head. The v5.13.1 commit will append automatically. So PR #54's scope is now v5.13.0 + v5.13.1 bundled.
+
+### Still deferred
+
+- **v5.13.2 BOM augmentation** — pull real numbers from `box_office_metrics` to backfill what Claude doesn't know
+- **Next 14 → Next 16 security migration (v6.0.0)** — dedicated PR with full route regression
+- **VPS forum import** — monitoring only, healthy
+
+---
+
 ## Session: May 4, 2026 (late PM) — v5.13.0 Trakt recovery (rating-discrepancy audit found Trakt 100% broken)
 
 PR #53 merged at the start of this session. User asked to "continue down our list" — the deferred rating-discrepancy audit was first.
