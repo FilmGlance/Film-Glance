@@ -1,5 +1,68 @@
 # Film Glance — Conversation Summary
 
+## Session: May 5, 2026 (late) — v6.0.0 Next 14 → Next 16 + React 18 → 19 security migration
+
+User merged PR #56 (v5.13.3 + v5.13.4) and asked to start the security migration we'd been deferring. Resolves all 8 GitHub Dependabot alerts (3 high + 5 moderate) — final `npm audit found 0 vulnerabilities`.
+
+### Scope (single-step migration: 14 → 16 directly)
+
+| Package | From | To | Note |
+|---|---|---|---|
+| next | 14.2.35 | 16.2.4 | Major; 14 EOL for security |
+| react / react-dom | 18.3 | 19.2.5 | Major |
+| @types/react | 18.3 | 19.2.14 | Major |
+| @types/react-dom | 18.3 | 19.2.3 | Major (separate versioning from @types/react) |
+| eslint | 8 | 9 | eslint-config-next 16 requires it |
+| eslint-config-next | 14.2 | 16.2.4 | Major |
+| lucide-react | 0.263 | 1.14 | Major; brand icons (Youtube etc.) removed |
+| @vercel/analytics | 1.x | 2.0.1 | Major |
+| @vercel/speed-insights | 1.x | 2.0.0 | Major |
+
+Plus `npm overrides` forcing `postcss@^8.5.14` (XSS — transitive via next) and `uuid@^14.0.0` (buffer bounds — transitive via svix → resend).
+
+### Code changes from breaking changes
+
+- **`app/not-found.tsx` (new)** — Next 16 default `/_not-found` failed prerender with `Invariant: Expected workStore to be initialized`. Providing an explicit App-Router-style component overrides the auto-generated default and fixes the prerender. Italic Playfair gold "404" headline + "back to home" CTA, matching site aesthetic.
+- **`app/global-error.tsx` (new)** — Same fix pattern for the auto-generated `/_global-error` route. `"use client"` component with html/body wrappers since global error boundary replaces the entire layout when the root layout itself errors.
+- **`components/film-glance.jsx` + `components/preview-landing.jsx`** — Lucide v1 removed brand icons (trademark concerns). `Youtube` no longer exported. Replaced with `Video` (semantic match for the "Video Reviews" section icon).
+
+### Why the breaking-change surface was small
+
+Film Glance doesn't use the things Next 15 + 16 broke most heavily:
+- No `cookies()` / `headers()` / `params:` / `searchParams:` async-API consumers (the biggest Next 15 breaking change)
+- No server actions (`"use server"`)
+- No custom `generateMetadata`
+
+So the migration came down to the dep bumps + two new internal-page overrides + one icon rename.
+
+### Validation
+
+- `npx tsc --noEmit` → passes clean
+- Local Windows `npm run build` → hits a workStore invariant on `/_not-found` prerender. Investigation showed module-path-casing duplication (`Film-Glance-Terminal` vs `film-glance-terminal` resolved as two separate paths in node_modules). Windows-only artifact.
+- **Vercel Linux build → succeeds** (5.7s compile, all 19 static pages generated in 321ms). Confirmed via `vercel inspect <preview-url> --logs`.
+
+Single informational warning surfaced in the build: `⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.` — Next 16 renamed the file convention. Functionally identical; deferred to v6.0.1 follow-up.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `package.json` + `package-lock.json` | Major-version dep bumps + npm overrides for postcss / uuid |
+| `app/not-found.tsx` | NEW — App-Router 404 component |
+| `app/global-error.tsx` | NEW — App-Router global error boundary |
+| `components/film-glance.jsx` | Replaced `Youtube` icon with `Video` (Lucide v1 brand removal) |
+| `components/preview-landing.jsx` | Same |
+| `tsconfig.json` | Auto-updated by Next 16 to set `jsx: "react-jsx"` |
+| `tech-specs.md` | New ✅ CURRENT STATE row for v6.0.0 |
+| `conversation-summary.md` | This session entry |
+
+### What's left
+
+- **v6.0.1 (small follow-up)** — rename `middleware.ts` → `proxy.ts` per Next 16 convention. ~5-min cosmetic fix.
+- **VPS forum import** — running healthy, monitoring only.
+
+---
+
 ## Session: May 5, 2026 (continued) — v5.13.4 Box-office augmentation root-cause fix (fallback path + BOM fallthrough)
 
 User retested v5.13.3 — Michael 2026 + Project Hail Mary STILL showed empty Production & Theatrical Run section. Direct empirical trace via `scratch/trace-pipeline.ts` (invokes `runFullPipeline` directly, inspects returned `mv`) found two more bugs that were the actual blockers.
