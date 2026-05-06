@@ -1,5 +1,78 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (Phase C, part 2 of 2 — audit COMPLETE) — v6.3.1 user-scoped Supabase client refactor
+
+User merged PR #62 + said "continue." Last actionable Phase C item per the agreed plan: migrate `/api/favorites`, `/api/folders`, `/api/enrich-favorites` off `supabaseAdmin` (service-role) onto a user-scoped client so RLS becomes the primary auth boundary.
+
+**Scope reduction discovered during recon**: `/api/folders/route.ts` doesn't exist — folder CRUD is all client-side via `lib/use-favorites.ts` and `components/film-glance.jsx` calling the browser Supabase client directly. The browser client is already user-scoped (auth flow attaches the JWT), so RLS already handles those operations. The agreed plan listed `/api/folders` based on assumption; actual scope is the two routes above.
+
+### Pre-flight diagnostic that surfaced one additional bug
+
+Production policy dump showed `favorites` had SELECT, INSERT, DELETE policies but **no UPDATE policy**. Why nobody noticed: the only UPDATE caller is `/api/enrich-favorites`, which used `supabaseAdmin` and bypassed RLS entirely. Switching that route to a user-scoped client would have broken silently (PostgREST 0-row writes, no error). **Migration 008** fixes the gap by adding the `auth.uid() = user_id` UPDATE policy. Applied to production via the Management API; idempotent (`DROP POLICY IF EXISTS` + `CREATE`).
+
+### What shipped
+
+- **`lib/supabase-user.ts`** — new module exporting `createUserClient(token)` and `getBearerToken(req)`. Client uses anon key + the user's JWT in the Authorization header; `auth.uid()` resolves to the user, RLS policies fire automatically. `persistSession: false` because each request gets a fresh client (no cross-request token leakage in shared serverless instances).
+
+- **`/api/favorites/route.ts`** refactored:
+  - `supabaseAdmin` import removed
+  - `authedClient(req)` helper validates JWT via `supa.auth.getUser()` and returns `{supa, user}` or null
+  - All `.eq("user_id", user.id)` filters dropped — RLS handles them automatically
+  - Folder ownership check on POST: was an explicit `.eq("user_id", user.id)` query; now just `.eq("id", folder_id)` because RLS auto-filters
+  - DELETE: was `.eq("id", id).eq("user_id", user.id)`; now just `.eq("id", id)`
+  - INSERT/UPSERT still sets `user_id: ctx.user.id` explicitly because the WITH CHECK policy enforces `auth.uid() = user_id` — the value still has to be there
+
+- **`/api/enrich-favorites/route.ts`** refactored:
+  - `supabaseAdmin` import removed
+  - Ownership-validation SELECT no longer needs `.eq("user_id", user.id)` — RLS auto-filters returned rows to the caller's
+  - UPDATE no longer needs `.eq("user_id", user.id)` — depends on migration 008's new UPDATE policy
+  - The `(title, year)` ownership check that prevents the route from being a "free Claude oracle" still works: rows not owned by the caller don't appear in the SELECT result, so the validItems set excludes them
+
+- **`sql/migrations/008_favorites_update_policy.sql`** (already applied to prod): adds the missing UPDATE policy. RLS USING + WITH CHECK both `auth.uid() = user_id`.
+
+- **CI service-role import guard tightened**: removed `favorites|folders|enrich-favorites` from the route allowlist in `.github/workflows/ci.yml`. The guard now catches regressions — re-introducing `supabaseAdmin` to any of those routes will fail CI.
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 215 warnings (no regression)
+- Service-role guard passes locally with tightened allowlist
+- Migration 008 verified live (favorites now has 4 CRUD policies)
+
+### Audit complete — final state
+
+All 17 audit findings are now resolved or accepted-risk. Final scorecard:
+
+| Phase | Items | Status |
+|---|---|---|
+| A (v6.1.0) | Critical 1, 2, 4 + High 9 a/b/c | ✅ Shipped May 5 |
+| B (v6.2.0 + v6.2.1) | High 5, 6, 7, 10, Medium 14, missing migration 003 | ✅ Shipped May 6 (CSP still in report-only mode; flip to enforcing in v6.2.2 after ~7-day violation review) |
+| C (v6.3.0 + v6.3.1) | High 8, Phase C C1/C2, Critical 3 | ✅ Shipped May 6 |
+| D (deferred) | Medium 13, 15, 16, 17, Medium 11 (subsumed by Phase C) | Accepted risk per the original plan |
+
+### What's left across the codebase (not audit-related)
+
+- **CSP enforcement flip**: monitor `/api/csp-report` Vercel logs ~7 days, tighten allowlist based on real violations, then change header from `Content-Security-Policy-Report-Only` to `Content-Security-Policy` in v6.2.2.
+- **Upstash provisioning**: when ready for distributed rate limiting, add Upstash Redis via Vercel Marketplace. Code is already wired with safe in-memory fallback; just provisioning + auto-injected env vars activates it.
+- **`middleware.ts` → `proxy.ts`** rename: known Next 16 cosmetic deprecation since v6.0.0; defer to a separate small commit.
+- **Forum post-import checklist** (`docs/forum-management.md §5`): runs after the import completes (~May 7 evening UTC). 5 items, ~30 min.
+- **Hostinger backup destination**: pick Object Storage subscription vs hPanel snapshots, then wire the offsite step into `/root/backups/run-backup.sh`.
+- **Lint warnings (215)**: future cleanup PRs can ratchet specific rules from `warn` back to `error` as the underlying issues are fixed.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `lib/supabase-user.ts` | NEW |
+| `app/api/favorites/route.ts` | Service-role → user client; RLS handles filtering |
+| `app/api/enrich-favorites/route.ts` | Service-role → user client; RLS handles filtering + UPDATE |
+| `sql/migrations/008_favorites_update_policy.sql` | NEW (already applied to prod) |
+| `.github/workflows/ci.yml` | Removed favorites/folders/enrich-favorites from service-role allowlist |
+| `tech-specs.md` | Change Log + Version History |
+| `conversation-summary.md` | This entry |
+
+---
+
 ## Session: May 6, 2026 (Phase C, part 1 of 2) — v6.3.0 distributed rate limit + GitHub Actions CI + ESLint flat-config
 
 User merged PR #61 + said "continue." Phase C is the heaviest-risk audit work; splitting it into two PRs to keep the diffs reviewable. **v6.3.0 (this slice)**: Upstash distributed rate limit (with safe in-memory fallback) + GitHub Actions security CI + replaces broken `next lint` with proper ESLint flat-config. **v6.3.1 (next slice, after this merges)**: user-scoped Supabase client refactor for `/api/favorites`, `/api/folders`, `/api/enrich-favorites` — separate PR because RLS policy gaps surface as user-visible bugs and roll-out should be one route at a time.
