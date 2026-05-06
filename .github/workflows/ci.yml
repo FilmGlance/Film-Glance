@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Audit (high+ only)
+        run: npm audit --audit-level=high
+        continue-on-error: false
+
+      - name: Service-role import guard
+        # Block accidental supabaseAdmin imports outside the lib + admin/cron
+        # surface. Audit Phase C, Critical 3 (defense-in-depth — even with the
+        # user-scoped client refactor in v6.3.x, this guard prevents
+        # regressions where someone pulls supabaseAdmin into a user-facing
+        # route and bypasses RLS.)
+        run: |
+          set -e
+          MATCHES=$(grep -RIn "supabaseAdmin" app lib --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null \
+            | grep -vE "lib/supabase-server\.ts" \
+            | grep -vE "app/api/(webhooks|cron|admin|seed|patch-video-reviews|search|enrich|enrich-favorites|favorites|folders|suggest|auth)" \
+            || true)
+          if [ -n "$MATCHES" ]; then
+            echo "Unexpected supabaseAdmin imports outside the approved surface:"
+            echo "$MATCHES"
+            echo ""
+            echo "If this is intentional, update the allowlist in .github/workflows/ci.yml."
+            exit 1
+          fi
+          echo "OK: no unexpected supabaseAdmin imports."

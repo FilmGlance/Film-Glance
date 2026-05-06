@@ -1,57 +1,13 @@
 // middleware.ts
 // Runs on every request before it hits route handlers.
 // Provides three layers of protection:
-//   1. IP-based rate limiting on all API routes
+//   1. Rate limiting on all API routes (distributed via Upstash when
+//      provisioned; in-memory fallback otherwise — see lib/rate-limit.ts)
 //   2. Auth enforcement on protected routes
 //   3. Security headers on all responses
 
 import { NextRequest, NextResponse } from "next/server";
-
-// ─── Rate Limiting (in-memory, per-instance) ────────────────────────────────
-// Vercel serverless functions share memory within the same warm instance.
-// This provides effective protection against single-source abuse.
-
-interface TokenBucket {
-  tokens: number;
-  lastRefill: number;
-}
-
-const buckets = new Map<string, TokenBucket>();
-const CLEANUP_INTERVAL = 5 * 60 * 1000;
-const STALE_THRESHOLD = 10 * 60 * 1000;
-let lastCleanup = Date.now();
-
-function cleanup() {
-  const now = Date.now();
-  if (now - lastCleanup < CLEANUP_INTERVAL) return;
-  lastCleanup = now;
-  for (const [key, bucket] of buckets) {
-    if (now - bucket.lastRefill > STALE_THRESHOLD) buckets.delete(key);
-  }
-}
-
-function checkRate(key: string, maxTokens: number, refillPerSec: number): { allowed: boolean; retryAfter: number } {
-  cleanup();
-  const now = Date.now();
-  let bucket = buckets.get(key);
-
-  if (!bucket) {
-    bucket = { tokens: maxTokens, lastRefill: now };
-    buckets.set(key, bucket);
-  }
-
-  const elapsed = (now - bucket.lastRefill) / 1000;
-  bucket.tokens = Math.min(maxTokens, bucket.tokens + elapsed * refillPerSec);
-  bucket.lastRefill = now;
-
-  if (bucket.tokens >= 1) {
-    bucket.tokens -= 1;
-    return { allowed: true, retryAfter: 0 };
-  }
-
-  const waitSeconds = (1 - bucket.tokens) / refillPerSec;
-  return { allowed: false, retryAfter: Math.ceil(waitSeconds) };
-}
+import { rateLimit, retryAfterSeconds } from "@/lib/rate-limit";
 
 function getIP(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -92,7 +48,7 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Skip non-API routes (pages served normally by Next.js)
@@ -109,17 +65,23 @@ export function middleware(req: NextRequest) {
     ? ROUTE_LIMITS[matchedRoute]
     : DEFAULT_LIMIT;
 
-  // Key combines IP + route for granular limiting
+  // Key combines IP + route for granular limiting. Now goes through the
+  // shared rateLimit() helper — Upstash-distributed when provisioned, falls
+  // back to per-instance in-memory otherwise.
   const rateLimitKey = `${ip}:${matchedRoute || "general"}`;
-  const { allowed, retryAfter } = checkRate(rateLimitKey, maxTokens, refillRate);
+  const result = await rateLimit(rateLimitKey, {
+    maxTokens,
+    refillRate,
+    windowMs: 60_000,
+  });
 
-  if (!allowed) {
+  if (!result.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
       {
         status: 429,
         headers: {
-          "Retry-After": String(retryAfter),
+          "Retry-After": String(retryAfterSeconds(result)),
           ...SECURITY_HEADERS,
         },
       }

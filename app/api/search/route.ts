@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     // 2. Rate limit — user ID if authenticated, IP if anonymous
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
     {
-      const rl = rateLimit(`search:${user?.id || `anon:${ip}`}`, SEARCH_LIMIT);
+      const rl = await rateLimit(`search:${user?.id || `anon:${ip}`}`, SEARCH_LIMIT);
       if (!rl.allowed) {
         return NextResponse.json(
           { error: "Too many requests. Please slow down." },

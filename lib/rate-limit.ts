@@ -1,16 +1,17 @@
 // lib/rate-limit.ts
-// In-memory token bucket rate limiter for serverless functions.
+// Distributed rate limiter (Upstash Redis token-bucket) with in-memory
+// fallback for local dev / un-provisioned deployments.
 //
-// How it works:
-// - Each unique key (e.g., "search:userId" or "ip:1.2.3.4") gets a bucket
-// - Buckets refill tokens at a steady rate up to a max capacity
-// - Each request consumes one token; if empty, the request is rejected
-// - Stale buckets are cleaned up periodically to prevent memory leaks
+// v6.3.0 (audit Phase C — High 8): when UPSTASH_REDIS_REST_URL +
+// UPSTASH_REDIS_REST_TOKEN are present, requests share a single global
+// Redis-backed bucket per key — limits are now consistent across Vercel
+// instances. Without those env vars, falls back to per-instance in-memory
+// (the v6.2.x behavior — no regression).
 //
-// Limitation: Vercel serverless functions may run across multiple instances,
-// so rate limits are per-instance, not global. This still provides meaningful
-// protection against single-connection abuse. For global rate limiting,
-// upgrade to Vercel KV or Redis-backed storage.
+// Edge-runtime compatible: @upstash/redis is a fetch-based HTTP client.
+
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 interface TokenBucket {
   tokens: number;
@@ -114,14 +115,70 @@ export const GENERAL_LIMIT: RateLimitConfig = {
   windowMs: 60_000,
 };
 
+// ─── Upstash distributed limiter (when provisioned) ────────────────────────
+
+const _upstashRedis = (() => {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  try {
+    return new Redis({ url, token });
+  } catch {
+    return null;
+  }
+})();
+
+// One Ratelimit instance per (capacity, refillRate) shape — cached across
+// requests to avoid re-instantiation on every call.
+const _upstashLimiters = new Map<string, Ratelimit>();
+
+function upstashFor(config: RateLimitConfig): Ratelimit | null {
+  if (!_upstashRedis) return null;
+  const key = `${config.maxTokens}:${config.refillRate}`;
+  let rl = _upstashLimiters.get(key);
+  if (!rl) {
+    // Token bucket: capacity = maxTokens, refill 1 per (1/refillRate) seconds.
+    // We model this as `tokenBucket(capacity, "60 s", capacity)` because the
+    // existing windowMs is always 60s in this codebase. If callers ever vary
+    // the window, this needs a per-config Duration string.
+    rl = new Ratelimit({
+      redis: _upstashRedis,
+      limiter: Ratelimit.tokenBucket(config.maxTokens, "60 s", config.maxTokens),
+      analytics: false,
+      prefix: "fg-rl",
+    });
+    _upstashLimiters.set(key, rl);
+  }
+  return rl;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-// Named export matching the search-route.ts import: rateLimit(key, config)
-export function rateLimit(key: string, config: RateLimitConfig): RateLimitResult {
+// Distributed when UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set.
+// Falls back to per-instance in-memory token bucket otherwise.
+//
+// Async because the Upstash path makes an HTTP call. Edge-safe.
+export async function rateLimit(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+  const upstash = upstashFor(config);
+  if (upstash) {
+    try {
+      const r = await upstash.limit(key);
+      return { allowed: r.success, remaining: r.remaining, resetAt: r.reset };
+    } catch (err) {
+      // Upstash transient failure — fall through to in-memory so the request
+      // isn't blanket-blocked by a backend outage.
+      console.warn("[rate-limit] Upstash error, falling back:", err);
+    }
+  }
   return rateLimitCheck(key, config);
 }
 
 // Helper to extract client IP from request
 export function getClientIP(req: { headers: { get(name: string): string | null } }): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+// Lightweight `retryAfter` derivation for 429 responses.
+export function retryAfterSeconds(result: RateLimitResult): number {
+  return Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
 }
