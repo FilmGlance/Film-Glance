@@ -1,5 +1,43 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 — v6.1.1 fuzzy-suggestion hygiene + daily Box Office cron
+
+User reported searching "avatar 2" surfaced bogus picker entries (`avatarrr`, `avatarrrrrrrrrrrrr`) on the Did-You-Mean page. Probe: 10 degenerate rows in `movie_cache` with `year=0` AND `<5` source ratings, all `hit_count=0`, all from the v5.9 title-gate testing window (Mar 13, 2026) plus a few Claude-fallback partials. The `fuzzy_movie_suggestions` Postgres RPC matched them via pg_trgm with no quality filter, scoring sim=0.5 against typo'd queries.
+
+### Fixes shipped (`sql/migrations/007_cache_hygiene_and_fuzzy_filter.sql`, run against production via Management API)
+
+- **Hard cleanup**: deleted the 10 junk rows. Conservative AND-filter (year≤0 AND <5 sources) — both signals must hold, so we don't accidentally evict legit "Coming Soon" / TMDB-fallback entries.
+- **RPC quality gate**: `fuzzy_movie_suggestions` now requires `year BETWEEN 1888 AND 2100` AND `jsonb_array_length(data->'sources') >= 5`. Defense in depth — any future degenerate rows can't surface either.
+
+Verification: post-migration `fuzzy_movie_suggestions('avatar 2')` returns only Avatar (sim 0.78), Avatar: Fire and Ash (0.35), Ava (0.3). Cache total dropped 5712→5702.
+
+### Box Office cron switched to daily
+
+`vercel.json`: `0 11 * * 2` → `0 11 * * *`. Latest completed week now captured within ~24h of BOM publishing (was up to ~7 days). Current month/season/year totals re-scraped daily — captures BOM's nightly revisions much faster.
+
+### Known limit (deliberately not fixing in this PR)
+
+Past WEEKS are still only captured ONCE each — the cron writes a fresh "latest completed week" row with `dataStatus='actual'` and never re-touches it. If BOM later revises a past week's estimate→actual, our DB still has the original. Adding a 4-week rolling re-scrape would catch revisions but adds ~4× the BOM scrape load per run. Worth tracking as a follow-up if revisions turn out to matter; for now the daily cron addresses the bigger freshness gap (current period totals).
+
+### What about the secondary "avatar 2 → Way of Water" miss?
+
+Investigated, deferred. Root cause: the v5.9 title-validation gate compares the user query "avatar 2" against TMDB's official title "Avatar: The Way of Water" → mismatch → rejects → falls to DYM. The v5.6 sequel-resolution prompt instruction is supposed to handle this, but the title gate is over-strict for numbered-sequel queries. Different code path, separate fix.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/007_cache_hygiene_and_fuzzy_filter.sql` | NEW — junk DELETE + RPC quality filter (already applied to prod) |
+| `vercel.json` | Box Office cron `Tue 11:00 UTC` → daily 11:00 UTC |
+| `tech-specs.md` | Change Log v6.1.1 row + Version History |
+| `conversation-summary.md` | This session entry |
+
+### VPS forum import status (asked separately)
+
+Healthy. PID 2644 alive 8 days. Currently mid-import on Captain Phillips (50/88 threads). Dedup logic active (10 dupes removed from 98 raw → 88 final on that board). Load avg 1.20.
+
+---
+
 ## Session: May 5, 2026 (later) — v6.1.0 Security audit Phase A (route gates + RLS hardening)
 
 User commissioned a third-party security audit of the codebase (`securityaudit.docx`, ChatGPT review of zipped repo, May 5, 2026). 17 findings across critical / high / medium severity. Verified each against actual code; most accurate, a few overstated. Plan written to `C:\Users\User\.claude\plans\project-will-be-the-ticklish-corbato.md`. This session ships **Phase A (v6.1.0)** — the four exploitable critical paths plus the worst billing-bypass in RLS.
