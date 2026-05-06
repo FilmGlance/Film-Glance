@@ -1,5 +1,76 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (later) — v6.1.2 forum end-to-end review + Tier-1 wins shipped
+
+User commissioned a deep review of the NodeBB forum setup ahead of import completion (~May 7 evening UTC). Asked specifically about why the ACP felt broken, requested wins / recommendations / management guide. Did read-only enumeration via SSH + Postgres queries, then shipped four production-safe changes (Tier 1 partial — only items that don't require NodeBB restart while the import is still running). Full review document is in this session's response.
+
+### Forum architecture (verified state, May 6, 2026)
+
+- NodeBB v3.12.7 + Harmony theme, port 4567 listening on `0.0.0.0` (security concern flagged), Postgres backend (6.2 GB).
+- Branding via Nginx `sub_filter` injecting three assets at `/var/www/html/`: `filmglance-theme.css`, `filmglance-auth.css`, `filmglance-brand.js`. Brand JS lives in repo root and is the source of truth; theme CSS files are live-only.
+- Vercel rewrite `/discuss/:path*` → `https://discuss.filmglance.com/discuss/:path*`. NodeBB `url` is `https://filmglance.com/discuss` (canonical for cookies/CSRF).
+- 254,300 topics + 2,156,978 posts in DB pre-completion. 21 categories. 1 admin (fgadmin/uid 1), 0 mods, 3 users total.
+
+### Why the ACP felt broken — three causes diagnosed
+
+1. **Nginx `client_max_body_size` undefined** → defaulted to 1 MB → silent HTTP 413 on every upload (category icons, avatars, banners). Bible doc Apr 7 had captured the symptom; cause was Nginx not NodeBB.
+2. **Two-origin asymmetry** — accessing ACP via `discuss.filmglance.com` while NodeBB cookies/CSRF are scoped to `filmglance.com` → "Save" buttons silently fail. Same root cause for "20 categories created manually (API/WebSocket calls failed)" from Apr 7.
+3. **`Accept-Encoding ""` set globally** for sub_filter to work → ACP responses uncompressed, slightly sluggish. Tolerable side effect.
+
+### Tier-1 wins shipped this session (production-safe; no service restart)
+
+| # | Change | State |
+|---|---|---|
+| 1 | Nginx `client_max_body_size 25M;` added + `nginx -s reload` (graceful) | ✅ Live |
+| 3 | Synced `filmglance-brand.js` from repo (16,119 B / md5 be3f004c) → VPS (was 15,722 B / md5 658b782b, last touched Apr 10). Backup at `/var/www/html/filmglance-brand.js.bak-20260506-174935`. | ✅ Live |
+| 5 | Backup script `/root/backups/run-backup.sh` (chmod 750, root-owned) + root cron `0 3 * * * …` for nightly pg_dump → `/root/backups/postgres/{daily,weekly}/`. Daily retention 7, weekly retention 4. First run 03:00 UTC tonight (post-import). Logs at `/var/log/nodebb-backup.log`. | ✅ Live |
+| 8 | Local PowerShell deploy script `scripts/deploy-forum-assets.ps1` — one-shot scp + sudo cp to /var/www/html/ with timestamped backup on VPS. Idempotent. | ✅ In repo |
+
+### Also shipped: docs/forum-management.md
+
+Comprehensive runbook covering canonical access pattern, day-to-day ops, post-import action list (5 items), backup recovery, SSH break-glass, hygiene reminders. Replaces ad-hoc forum knowledge that was scattered across April session entries.
+
+### Items NOT shipped this session (queued for post-import or user-only)
+
+| # | Item | Why not now | Owner |
+|---|---|---|---|
+| 2 | Bind NodeBB to 127.0.0.1 | Requires NodeBB restart — would kill running import | Queued in `docs/forum-management.md §5.1` |
+| 4 | 301 redirect from `discuss.filmglance.com` → `filmglance.com/discuss` | Architectural conflict: Nginx-side 301 creates infinite loop with the Vercel rewrite. The right place is a Cloudflare Transform Rule once item 10 (proxy) is on. Documented in §5.4. | Queued |
+| 6 | Promote moderator | User explicitly deferred this session | — |
+| 7 | SMTP setup | Has to be done in ACP (shouldn't pass Zoho creds via SSH config). Exact field values documented in §5.2. | User |
+| 9 | Quarterly token rotation reminder | Advisory; added to §8 Hygiene reminders | — |
+| 10 | Cloudflare proxy enable | Cloudflare dashboard click; documented in §5.3 | User |
+| 11 | Category icons | Will work after #1 (Nginx limit) which IS now live; user uploads via ACP | User |
+| 12 | Plugin install (write-api / iframely) | Requires `./nodebb build && start` cycle; queued in §5.5 | Post-import |
+| 13 | Custom NodeBB theme | ~1 day rebuild; separate dedicated session | Future |
+
+### User decisions captured
+
+- Cleanest-path approach for the cross-origin issue (option 2 in the report)
+- SMTP via existing Zoho mail
+- Cloudflare proxy on for `discuss`
+- Backup destination: Hostinger (specifics TBD — Object Storage subscription vs hPanel snapshots; deferred)
+- Moderators deferred
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `scripts/deploy-forum-assets.ps1` | NEW — PowerShell scp + sudo cp deploy script for brand.js |
+| `docs/forum-management.md` | NEW — 8-section forum runbook |
+| `tech-specs.md` | Change Log v6.1.2 + Version History |
+| `conversation-summary.md` | This entry |
+| VPS `/etc/nginx/sites-available/filmglance-forum` | `client_max_body_size 25M;` added (already live) |
+| VPS `/var/www/html/filmglance-brand.js` | Synced from repo (already live) |
+| VPS `/root/backups/run-backup.sh` | NEW (already live) |
+| VPS root crontab | Added `0 3 * * * /root/backups/run-backup.sh` (already live) |
+
+### NEXT (after import completes)
+
+In one coordinated VPS session: §5.1 (bind to localhost), §5.5 (plugins), then user's-turn items §5.2 (SMTP), §5.3 (Cloudflare proxy), §5.6 (icons). Estimated total ~30 min.
+
+---
+
 ## Session: May 6, 2026 — v6.1.1 fuzzy-suggestion hygiene + daily Box Office cron
 
 User reported searching "avatar 2" surfaced bogus picker entries (`avatarrr`, `avatarrrrrrrrrrrrr`) on the Did-You-Mean page. Probe: 10 degenerate rows in `movie_cache` with `year=0` AND `<5` source ratings, all `hit_count=0`, all from the v5.9 title-gate testing window (Mar 13, 2026) plus a few Claude-fallback partials. The `fuzzy_movie_suggestions` Postgres RPC matched them via pg_trgm with no quality filter, scoring sim=0.5 against typo'd queries.
