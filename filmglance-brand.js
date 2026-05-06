@@ -125,23 +125,57 @@ document.addEventListener('DOMContentLoaded', function() {
     hideNodeBBBranding();
   }
 
+  /* DOM-API rebuild (v6.2.0, audit High 5).
+     Username comes from NodeBB at runtime — concatenating it into innerHTML
+     was an XSS surface even though NodeBB sanitizes usernames upstream
+     (defense in depth: never trust upstream sanitization at the render
+     boundary). textContent for the visible name + encodeURIComponent on the
+     href segment removes the surface. */
   function updateAuthButton() {
     var container = document.querySelector('.fg-banner-auth');
     if (!container) return;
 
+    /* Clear existing children */
+    while (container.firstChild) container.removeChild(container.firstChild);
+
     if (isLoggedIn()) {
       var username = getUsername();
-      container.innerHTML =
-        '<a href="' + FORUM_BASE + '/user/' + username + '" class="fg-btn-user">'
-        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-        + '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>'
-        + '<circle cx="12" cy="7" r="4"/></svg>'
-        + (username || 'Account')
-        + '</a>';
+      var displayName = username || 'Account';
+
+      var link = document.createElement('a');
+      link.className = 'fg-btn-user';
+      link.href = FORUM_BASE + '/user/' + encodeURIComponent(username);
+
+      var svgNS = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+
+      var path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d', 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2');
+      svg.appendChild(path);
+
+      var circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', '12');
+      circle.setAttribute('cy', '7');
+      circle.setAttribute('r', '4');
+      svg.appendChild(circle);
+
+      link.appendChild(svg);
+      link.appendChild(document.createTextNode(displayName));
+      container.appendChild(link);
     } else {
-      container.innerHTML =
-        '<a href="' + FORUM_BASE + '/login" class="fg-btn-signin">Sign In</a>';
+      var loginLink = document.createElement('a');
+      loginLink.className = 'fg-btn-signin';
+      loginLink.href = FORUM_BASE + '/login';
+      loginLink.textContent = 'Sign In';
+      container.appendChild(loginLink);
     }
   }
 

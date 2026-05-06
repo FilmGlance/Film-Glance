@@ -1,5 +1,43 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (later still) — v6.2.0 audit Phase B starts (High 5 — XSS surfaces closed)
+
+User said "proceed" after v6.1.2 (forum review). Most natural next thing per the agreed plan: start audit Phase B (the medium-priority security work that wasn't critical enough for v6.1.0). This slice closes audit **High 5** in full — XSS through external links, YouTube IDs, and the brand-script `innerHTML` concat. The other Phase B items (CSP, HSTS, Zod, health endpoint, migration 003 recovery) come in subsequent v6.2.x patches.
+
+### Closed in this slice
+
+- **YouTube ID validation.** `lib/sanitize.ts` extended with `isValidYouTubeId(s)` — strict `/^[A-Za-z0-9_-]{11}$/` regex. Patched `components/film-glance.jsx:3217-3228` so the iframe is only rendered when the ID validates; otherwise an inline "Video unavailable" placeholder. Defends against corrupted cache rows or any future Claude/RapidAPI source returning non-canonical IDs.
+- **Generic URL sanitizer.** `lib/sanitize.ts` also exports `safeExternalUrl(raw)` — accepts only `http:` / `https:` URLs, parses cleanly, returns null otherwise. Available for future use at any other render site that consumes a URL from external data (Claude output, cached source rows, etc.). Not retro-applied this round; existing `<a href={...}>` consumers already use `rel="noopener noreferrer"` and are static enough that the audit didn't flag them as exploitable.
+- **`filmglance-brand.js` username innerHTML → DOM API.** Replaced the `container.innerHTML = '...href="..." + username + ..."' + username + ...'` concat with `document.createElement('a')` + `link.href = FORUM_BASE + '/user/' + encodeURIComponent(username)` + `link.appendChild(document.createTextNode(username))`. SVG icon also rebuilt via `document.createElementNS()`. Defense in depth: NodeBB sanitizes usernames upstream, but never trust upstream sanitization at the render boundary. Old `while (firstChild) removeChild` clears the container safely instead of resetting innerHTML. Login-button branch likewise reconstructed via DOM API.
+
+### Deploy
+
+`scripts/deploy-forum-assets.ps1` (added in v6.1.2) drove the brand.js sync. First real-world use; ran clean. New VPS hash `c32326b3edb8ac380b41e30572a35f3d`, size 17,491 B (was `be3f004c…`, 16,119 B). Backup at `/var/www/html/filmglance-brand.js.bak-20260506-190218`.
+
+### Remaining Phase B work (queued for subsequent v6.2.x patches)
+
+- CSP `Content-Security-Policy-Report-Only` static header in `next.config.js` + `/api/csp-report` endpoint
+- Global HSTS header in `next.config.js` (currently only set in middleware for `/api/*`)
+- Zod input schemas for `/api/enrich` + `/api/suggest`
+- `/api/health` sanitization (drop `anthropic_key: configured/missing` + per-service status codes from public response)
+- Recover missing `003_anonymous_searches.sql` migration via Supabase Management API schema dump
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `lib/sanitize.ts` | Added `isValidYouTubeId` + `safeExternalUrl` exports |
+| `components/film-glance.jsx` | Imported `isValidYouTubeId`; guarded YouTube iframe render; "Video unavailable" fallback |
+| `filmglance-brand.js` | `updateAuthButton` rebuilt via DOM API; SVG via `createElementNS`; login branch likewise |
+| `tech-specs.md` + `conversation-summary.md` | This entry |
+| VPS `/var/www/html/filmglance-brand.js` | Already synced via deploy script |
+
+### Validation
+
+`npx tsc --noEmit` clean.
+
+---
+
 ## Session: May 6, 2026 (later) — v6.1.2 forum end-to-end review + Tier-1 wins shipped
 
 User commissioned a deep review of the NodeBB forum setup ahead of import completion (~May 7 evening UTC). Asked specifically about why the ACP felt broken, requested wins / recommendations / management guide. Did read-only enumeration via SSH + Postgres queries, then shipped four production-safe changes (Tier 1 partial — only items that don't require NodeBB restart while the import is still running). Full review document is in this session's response.
