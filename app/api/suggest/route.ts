@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { SuggestQuerySchema } from "@/lib/schemas";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY;
@@ -223,10 +224,17 @@ function sortReleasedFirst(items: Suggestion[]): Suggestion[] {
 }
 
 export async function GET(req: NextRequest) {
-  const q = req.nextUrl.searchParams.get("q")?.trim();
-  if (!q || q.length < 2) {
+  // Validate `q` length-bounded via Zod (audit Phase B — Medium 14).
+  // Empty / too-short / too-long queries return empty suggestions instead of
+  // 400 because this endpoint is hit by typeahead — surfaces in the UI as
+  // "no suggestions yet, keep typing".
+  const parsed = SuggestQuerySchema.safeParse({
+    q: req.nextUrl.searchParams.get("q") ?? "",
+  });
+  if (!parsed.success) {
     return NextResponse.json({ suggestions: [] });
   }
+  const { q } = parsed.data;
 
   const [tmdb, fuzzy] = await Promise.all([
     tmdbSuggestions(q),
