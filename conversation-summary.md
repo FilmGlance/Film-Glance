@@ -1,5 +1,58 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (final v6.2.x slice) — v6.2.1 audit Phase B completes (CSP / HSTS / Zod / health / migration 003)
+
+User merged PR #60 + said "continue." Shipping the rest of audit Phase B per the agreed plan. After this commit, every Phase B item is closed. Phase C (Upstash distributed rate limit, GitHub Actions CI, user-scoped Supabase client refactor) remains for a future v6.3.x cycle.
+
+### Items closed this slice
+
+| Audit # | Severity | Item | Implementation |
+|---|---|---|---|
+| 6 | High | No global CSP | `Content-Security-Policy-Report-Only` static header in `next.config.js`, allowlist sized to current dependencies (TMDB images, Supabase, Anthropic, Vercel Analytics, YouTube, Google Fonts/favicons). `'unsafe-inline'` + `'unsafe-eval'` retained for Next.js inline runtime scripts; tightening to nonces would require per-request middleware on every page (deferred). New `app/api/csp-report/route.ts` (edge runtime, no auth — browsers POST these unauthenticated by spec) logs violations to Vercel runtime logs. Plan: collect violations for ~7 days, review, tighten allowlist, then flip header name to `Content-Security-Policy` (enforcing). |
+| 7 | High | HSTS only on `/api/*` | `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` added to the global `headers()` block in `next.config.js`. Now every page response carries it, not just `/api/*`. The middleware copy stays — it's still applied to inline rate-limit-429 / auth-401 responses where `next.config.js` headers don't reach. Slight overlap; harmless. |
+| 10 | High | `/api/health` leaks dependency detail | Public response now `{status, timestamp}` only. The detailed probe (per-service status + anthropic_key) lives behind `?detailed=1` + `requireCronSecret`. Public mode flips to 503 only when Supabase is down (the only dep whose availability the user actually depends on for cache reads / login flow). |
+| 14 | Medium | No Zod / inconsistent input validation | New `lib/schemas.ts` exporting `EnrichRequestSchema` + `SuggestQuerySchema`. `/api/enrich` now uses `safeParse` + 400 with issues array on failure. `/api/suggest` validates the `q` querystring; over-/under-length returns empty `suggestions` array (typeahead UX, not a 400). zod was already in `node_modules` v4.4.3 as a transitive dep; lifted to first-class via `package.json` so future installs lock it. |
+| Missing 003 | Build-quality | `003_anonymous_searches.sql` was applied in prod but never committed (per the v5.4 / v5.10 audit comments in 004's header) | Reconstructed from production schema dumped via Supabase Management API. File contains the `anonymous_searches` table + 2 indexes + RLS enable. The companion `check_anonymous_limit` RPC is left to whichever later migration most-recently `CREATE OR REPLACE`d it (the v5.10 whitelist-aware version is what's running in prod today). Migration uses `CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS` so it's safe to re-run; verified idempotent against prod (HTTP 201, empty result, no schema drift). |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `next.config.js` | Added `Strict-Transport-Security` + `Content-Security-Policy-Report-Only` to global `headers()` |
+| `app/api/csp-report/route.ts` | NEW — POST endpoint, edge runtime, console.warn violations |
+| `app/api/health/route.ts` | Sanitized public response; `?detailed=1` gated by `requireCronSecret` |
+| `app/api/enrich/route.ts` | Zod input via `EnrichRequestSchema.safeParse` |
+| `app/api/suggest/route.ts` | Zod input via `SuggestQuerySchema.safeParse` |
+| `lib/schemas.ts` | NEW — Zod schemas |
+| `sql/migrations/003_anonymous_searches.sql` | NEW — recovery from prod schema dump |
+| `package.json` | Added `zod ^4.4.3` (was already in node_modules transitively) |
+
+### Hook noise dismissed during this slice
+
+The plug-in hooks fired several false-positive validations against the new files:
+- "`next.config.js` `headers()` is async in Next 16, add await" — confusing `next/headers` (server-component request helper, async in 16) with the `next.config.js` `headers()` *config function* which has been async-allowed since v9. Same pattern already shipped clean in v6.0.0.
+- "External font loader detected, use next/font" — `fonts.googleapis.com` in my code is a CSP allowlist entry, not a `<link>` import.
+- "Route handler has no observability instrumentation" — out of scope for security work.
+
+### Validation
+
+`npx tsc --noEmit` clean. Migration 003 verified idempotent against prod.
+
+### Phase B → done. Phase C parked for a future cycle:
+
+- Upstash Redis distributed rate limit (replaces in-memory token-bucket)
+- GitHub Actions security CI (`eslint .` + `tsc --noEmit` + `npm audit` + CodeQL + service-role grep guard)
+- User-scoped Supabase client refactor for `/api/favorites`, `/api/folders`, `/api/enrich-favorites`
+
+### Phase D (deferred / accepted risk) unchanged:
+
+- Monolithic `film-glance.jsx` refactor — tech debt, not security
+- Stripe placeholder hardening — pricing disabled, only matters when reactivated
+- localStorage→cookie SSR migration — material refactor for marginal gain (CSP compensates)
+- Operational doc redaction — repo is private
+
+---
+
 ## Session: May 6, 2026 (later still) — v6.2.0 audit Phase B starts (High 5 — XSS surfaces closed)
 
 User said "proceed" after v6.1.2 (forum review). Most natural next thing per the agreed plan: start audit Phase B (the medium-priority security work that wasn't critical enough for v6.1.0). This slice closes audit **High 5** in full — XSS through external links, YouTube IDs, and the brand-script `innerHTML` concat. The other Phase B items (CSP, HSTS, Zod, health endpoint, migration 003 recovery) come in subsequent v6.2.x patches.
