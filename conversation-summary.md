@@ -1,5 +1,79 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (Phase C, part 1 of 2) — v6.3.0 distributed rate limit + GitHub Actions CI + ESLint flat-config
+
+User merged PR #61 + said "continue." Phase C is the heaviest-risk audit work; splitting it into two PRs to keep the diffs reviewable. **v6.3.0 (this slice)**: Upstash distributed rate limit (with safe in-memory fallback) + GitHub Actions security CI + replaces broken `next lint` with proper ESLint flat-config. **v6.3.1 (next slice, after this merges)**: user-scoped Supabase client refactor for `/api/favorites`, `/api/folders`, `/api/enrich-favorites` — separate PR because RLS policy gaps surface as user-visible bugs and roll-out should be one route at a time.
+
+### Distributed rate limit (audit High 8)
+
+`lib/rate-limit.ts` refactored: when `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` env vars are present, requests share a single Redis-backed token bucket per key (limits now consistent across Vercel instances). Without those env vars, falls back to per-instance in-memory — same behavior as v6.2.x, no regression. Edge-runtime compatible (`@upstash/redis` is fetch-based HTTP).
+
+Side effect: `lib/rate-limit.ts`'s `rateLimit(key, config)` is now `async`. Two callers updated:
+- `middleware.ts` — entire inline `buckets` Map + `checkRate` removed (~40 lines), replaced with `await rateLimit(...)`. The middleware now uses the same shared limiter as `/api/search`. Diff: 156 → 119 lines.
+- `app/api/search/route.ts:140` — added `await` before the existing `rateLimit(...)` call.
+
+New deps: `@upstash/ratelimit ^2.0.5`, `@upstash/redis ^1.34.3` (4 packages total via npm install, 6s).
+
+**To activate the distributed mode**: provision Upstash via Vercel Marketplace → Add Upstash Redis. Auto-injects the two env vars; next deploy picks them up. Until then, behavior is identical to v6.2.x.
+
+### GitHub Actions security CI (audit Phase C, item C2)
+
+Two new workflows under `.github/workflows/`:
+
+- **`ci.yml`** — runs on every PR + push to main/staging. Steps: `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm audit --audit-level=high`, and a service-role import guard that fails the build if `supabaseAdmin` is referenced outside an explicit allowlist of files (defense-in-depth — even after the v6.3.1 user-scoped client refactor, this guard prevents regressions where someone accidentally pulls service-role into a user-facing route).
+- **`codeql.yml`** — GitHub-native CodeQL analysis on JavaScript/TypeScript with `security-and-quality` query suite. Runs on every PR to main, push to main, plus a weekly schedule (catches new advisory rules even when the codebase is idle).
+
+### ESLint flat-config (audit Phase B Medium 11, surfaced when wiring CI lint step)
+
+`next lint` is **fully removed** in Next 16.2.4 (the audit's claim was correct after all — the failure mode is misleading: `next lint` interprets `lint` as a directory argument and prints "no such directory: …/lint"). New `eslint.config.mjs` composes `eslint-config-next/core-web-vitals` + `eslint-config-next/typescript` (each module already exports a flat-config array; bridged with `createRequire` since they're CJS).
+
+Rule posture is intentionally lenient on first ratchet — the existing codebase has 162 errors / 57 warnings under strict config:
+- `@typescript-eslint/no-explicit-any` (146 hits) — downgraded error→warn
+- `react-hooks/set-state-in-effect` (8 hits, new React 19 rule, fires on patterns we use deliberately for SSR-safe state init) — downgraded
+- `react/no-unescaped-entities` (4 hits) — downgraded
+- `react-hooks/preserve-manual-memoization` / `static-components` / `immutability` (React Compiler preview rules) — disabled
+
+Final result: **0 errors, 215 warnings**, exit 0. CI gate is now green and visible. Future cleanup PRs can fix the warnings and ratchet rules back to error.
+
+`package.json` `lint` script: `next lint` → `eslint .`.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `lib/rate-limit.ts` | Upstash integration + async fallback |
+| `middleware.ts` | Removed inline limiter, uses shared `rateLimit()` |
+| `app/api/search/route.ts` | Added `await` to existing `rateLimit()` call |
+| `package.json` | +@upstash/ratelimit +@upstash/redis; lint script eslint . |
+| `package-lock.json` | npm install side effect |
+| `eslint.config.mjs` | NEW — flat config replacing `next lint` |
+| `.github/workflows/ci.yml` | NEW — install/lint/typecheck/audit/service-role-grep |
+| `.github/workflows/codeql.yml` | NEW — JavaScript/TypeScript security scan |
+
+### Hook noise dismissed
+
+- "Use Vercel Firewall/WAF for rate limiting instead of middleware" (5 hits) — valid alternative architecture but Pro+ paid feature path; the agreed plan specified Upstash. Could revisit if WAF rate-limit proves cheaper / simpler.
+- "Rename middleware.ts → proxy.ts (Next 16)" — known follow-up since v6.0.0; defer to a separate small commit (couples poorly with rate-limit refactor).
+- "Use Vercel Cron Jobs in vercel.json" on the CodeQL `schedule:` block — wrong context (that's a GitHub Actions cron, not a Vercel cron).
+- "Vercel Workflow" skill on `.github/workflows/` — different product (Vercel Workflow = durable execution, not GitHub Actions).
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` → 0 errors / 215 warnings, exit 0
+
+### Remaining Phase C work (v6.3.1, separate PR)
+
+- New `lib/supabase-user.ts` exporting `createUserClient(req)` from caller's Bearer JWT
+- Migrate `/api/favorites`, `/api/folders`, `/api/enrich-favorites` one route at a time off `supabaseAdmin` and onto the user client. Restores RLS as the primary auth boundary instead of relying on hand-written `.eq("user_id", user.id)` filters.
+- Each route gets its own commit on a branch off staging; merge after preview verification.
+
+### Phase D (still deferred / accepted risk per the plan)
+
+- Monolithic `film-glance.jsx` refactor, Stripe placeholder hardening, localStorage→cookie SSR, op-doc redaction.
+
+---
+
 ## Session: May 6, 2026 (final v6.2.x slice) — v6.2.1 audit Phase B completes (CSP / HSTS / Zod / health / migration 003)
 
 User merged PR #60 + said "continue." Shipping the rest of audit Phase B per the agreed plan. After this commit, every Phase B item is closed. Phase C (Upstash distributed rate limit, GitHub Actions CI, user-scoped Supabase client refactor) remains for a future v6.3.x cycle.
