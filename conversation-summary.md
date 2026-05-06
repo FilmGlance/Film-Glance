@@ -1,5 +1,114 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (later still) — v6.2.0 audit Phase B starts (High 5 — XSS surfaces closed)
+
+User said "proceed" after v6.1.2 (forum review). Most natural next thing per the agreed plan: start audit Phase B (the medium-priority security work that wasn't critical enough for v6.1.0). This slice closes audit **High 5** in full — XSS through external links, YouTube IDs, and the brand-script `innerHTML` concat. The other Phase B items (CSP, HSTS, Zod, health endpoint, migration 003 recovery) come in subsequent v6.2.x patches.
+
+### Closed in this slice
+
+- **YouTube ID validation.** `lib/sanitize.ts` extended with `isValidYouTubeId(s)` — strict `/^[A-Za-z0-9_-]{11}$/` regex. Patched `components/film-glance.jsx:3217-3228` so the iframe is only rendered when the ID validates; otherwise an inline "Video unavailable" placeholder. Defends against corrupted cache rows or any future Claude/RapidAPI source returning non-canonical IDs.
+- **Generic URL sanitizer.** `lib/sanitize.ts` also exports `safeExternalUrl(raw)` — accepts only `http:` / `https:` URLs, parses cleanly, returns null otherwise. Available for future use at any other render site that consumes a URL from external data (Claude output, cached source rows, etc.). Not retro-applied this round; existing `<a href={...}>` consumers already use `rel="noopener noreferrer"` and are static enough that the audit didn't flag them as exploitable.
+- **`filmglance-brand.js` username innerHTML → DOM API.** Replaced the `container.innerHTML = '...href="..." + username + ..."' + username + ...'` concat with `document.createElement('a')` + `link.href = FORUM_BASE + '/user/' + encodeURIComponent(username)` + `link.appendChild(document.createTextNode(username))`. SVG icon also rebuilt via `document.createElementNS()`. Defense in depth: NodeBB sanitizes usernames upstream, but never trust upstream sanitization at the render boundary. Old `while (firstChild) removeChild` clears the container safely instead of resetting innerHTML. Login-button branch likewise reconstructed via DOM API.
+
+### Deploy
+
+`scripts/deploy-forum-assets.ps1` (added in v6.1.2) drove the brand.js sync. First real-world use; ran clean. New VPS hash `c32326b3edb8ac380b41e30572a35f3d`, size 17,491 B (was `be3f004c…`, 16,119 B). Backup at `/var/www/html/filmglance-brand.js.bak-20260506-190218`.
+
+### Remaining Phase B work (queued for subsequent v6.2.x patches)
+
+- CSP `Content-Security-Policy-Report-Only` static header in `next.config.js` + `/api/csp-report` endpoint
+- Global HSTS header in `next.config.js` (currently only set in middleware for `/api/*`)
+- Zod input schemas for `/api/enrich` + `/api/suggest`
+- `/api/health` sanitization (drop `anthropic_key: configured/missing` + per-service status codes from public response)
+- Recover missing `003_anonymous_searches.sql` migration via Supabase Management API schema dump
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `lib/sanitize.ts` | Added `isValidYouTubeId` + `safeExternalUrl` exports |
+| `components/film-glance.jsx` | Imported `isValidYouTubeId`; guarded YouTube iframe render; "Video unavailable" fallback |
+| `filmglance-brand.js` | `updateAuthButton` rebuilt via DOM API; SVG via `createElementNS`; login branch likewise |
+| `tech-specs.md` + `conversation-summary.md` | This entry |
+| VPS `/var/www/html/filmglance-brand.js` | Already synced via deploy script |
+
+### Validation
+
+`npx tsc --noEmit` clean.
+
+---
+
+## Session: May 6, 2026 (later) — v6.1.2 forum end-to-end review + Tier-1 wins shipped
+
+User commissioned a deep review of the NodeBB forum setup ahead of import completion (~May 7 evening UTC). Asked specifically about why the ACP felt broken, requested wins / recommendations / management guide. Did read-only enumeration via SSH + Postgres queries, then shipped four production-safe changes (Tier 1 partial — only items that don't require NodeBB restart while the import is still running). Full review document is in this session's response.
+
+### Forum architecture (verified state, May 6, 2026)
+
+- NodeBB v3.12.7 + Harmony theme, port 4567 listening on `0.0.0.0` (security concern flagged), Postgres backend (6.2 GB).
+- Branding via Nginx `sub_filter` injecting three assets at `/var/www/html/`: `filmglance-theme.css`, `filmglance-auth.css`, `filmglance-brand.js`. Brand JS lives in repo root and is the source of truth; theme CSS files are live-only.
+- Vercel rewrite `/discuss/:path*` → `https://discuss.filmglance.com/discuss/:path*`. NodeBB `url` is `https://filmglance.com/discuss` (canonical for cookies/CSRF).
+- 254,300 topics + 2,156,978 posts in DB pre-completion. 21 categories. 1 admin (fgadmin/uid 1), 0 mods, 3 users total.
+
+### Why the ACP felt broken — three causes diagnosed
+
+1. **Nginx `client_max_body_size` undefined** → defaulted to 1 MB → silent HTTP 413 on every upload (category icons, avatars, banners). Bible doc Apr 7 had captured the symptom; cause was Nginx not NodeBB.
+2. **Two-origin asymmetry** — accessing ACP via `discuss.filmglance.com` while NodeBB cookies/CSRF are scoped to `filmglance.com` → "Save" buttons silently fail. Same root cause for "20 categories created manually (API/WebSocket calls failed)" from Apr 7.
+3. **`Accept-Encoding ""` set globally** for sub_filter to work → ACP responses uncompressed, slightly sluggish. Tolerable side effect.
+
+### Tier-1 wins shipped this session (production-safe; no service restart)
+
+| # | Change | State |
+|---|---|---|
+| 1 | Nginx `client_max_body_size 25M;` added + `nginx -s reload` (graceful) | ✅ Live |
+| 3 | Synced `filmglance-brand.js` from repo (16,119 B / md5 be3f004c) → VPS (was 15,722 B / md5 658b782b, last touched Apr 10). Backup at `/var/www/html/filmglance-brand.js.bak-20260506-174935`. | ✅ Live |
+| 5 | Backup script `/root/backups/run-backup.sh` (chmod 750, root-owned) + root cron `0 3 * * * …` for nightly pg_dump → `/root/backups/postgres/{daily,weekly}/`. Daily retention 7, weekly retention 4. First run 03:00 UTC tonight (post-import). Logs at `/var/log/nodebb-backup.log`. | ✅ Live |
+| 8 | Local PowerShell deploy script `scripts/deploy-forum-assets.ps1` — one-shot scp + sudo cp to /var/www/html/ with timestamped backup on VPS. Idempotent. | ✅ In repo |
+
+### Also shipped: docs/forum-management.md
+
+Comprehensive runbook covering canonical access pattern, day-to-day ops, post-import action list (5 items), backup recovery, SSH break-glass, hygiene reminders. Replaces ad-hoc forum knowledge that was scattered across April session entries.
+
+### Items NOT shipped this session (queued for post-import or user-only)
+
+| # | Item | Why not now | Owner |
+|---|---|---|---|
+| 2 | Bind NodeBB to 127.0.0.1 | Requires NodeBB restart — would kill running import | Queued in `docs/forum-management.md §5.1` |
+| 4 | 301 redirect from `discuss.filmglance.com` → `filmglance.com/discuss` | Architectural conflict: Nginx-side 301 creates infinite loop with the Vercel rewrite. The right place is a Cloudflare Transform Rule once item 10 (proxy) is on. Documented in §5.4. | Queued |
+| 6 | Promote moderator | User explicitly deferred this session | — |
+| 7 | SMTP setup | Has to be done in ACP (shouldn't pass Zoho creds via SSH config). Exact field values documented in §5.2. | User |
+| 9 | Quarterly token rotation reminder | Advisory; added to §8 Hygiene reminders | — |
+| 10 | Cloudflare proxy enable | Cloudflare dashboard click; documented in §5.3 | User |
+| 11 | Category icons | Will work after #1 (Nginx limit) which IS now live; user uploads via ACP | User |
+| 12 | Plugin install (write-api / iframely) | Requires `./nodebb build && start` cycle; queued in §5.5 | Post-import |
+| 13 | Custom NodeBB theme | ~1 day rebuild; separate dedicated session | Future |
+
+### User decisions captured
+
+- Cleanest-path approach for the cross-origin issue (option 2 in the report)
+- SMTP via existing Zoho mail
+- Cloudflare proxy on for `discuss`
+- Backup destination: Hostinger (specifics TBD — Object Storage subscription vs hPanel snapshots; deferred)
+- Moderators deferred
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `scripts/deploy-forum-assets.ps1` | NEW — PowerShell scp + sudo cp deploy script for brand.js |
+| `docs/forum-management.md` | NEW — 8-section forum runbook |
+| `tech-specs.md` | Change Log v6.1.2 + Version History |
+| `conversation-summary.md` | This entry |
+| VPS `/etc/nginx/sites-available/filmglance-forum` | `client_max_body_size 25M;` added (already live) |
+| VPS `/var/www/html/filmglance-brand.js` | Synced from repo (already live) |
+| VPS `/root/backups/run-backup.sh` | NEW (already live) |
+| VPS root crontab | Added `0 3 * * * /root/backups/run-backup.sh` (already live) |
+
+### NEXT (after import completes)
+
+In one coordinated VPS session: §5.1 (bind to localhost), §5.5 (plugins), then user's-turn items §5.2 (SMTP), §5.3 (Cloudflare proxy), §5.6 (icons). Estimated total ~30 min.
+
+---
+
 ## Session: May 6, 2026 — v6.1.1 fuzzy-suggestion hygiene + daily Box Office cron
 
 User reported searching "avatar 2" surfaced bogus picker entries (`avatarrr`, `avatarrrrrrrrrrrrr`) on the Did-You-Mean page. Probe: 10 degenerate rows in `movie_cache` with `year=0` AND `<5` source ratings, all `hit_count=0`, all from the v5.9 title-gate testing window (Mar 13, 2026) plus a few Claude-fallback partials. The `fuzzy_movie_suggestions` Postgres RPC matched them via pg_trgm with no quality filter, scoring sim=0.5 against typo'd queries.

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { GridBackground } from "@/components/ui/grid-background";
+import { isValidYouTubeId } from "@/lib/sanitize";
 const FG_VERSION = "5.12.0";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3214,13 +3215,19 @@ export default function FilmGlance() {
               <X size={14} /> Close
             </button>
             <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,215,0,0.1)", aspectRatio: "16/9", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
-              <iframe
-                src={`https://www.youtube.com/embed/${videoModal.id}?autoplay=1&rel=0&modestbranding=1`}
-                title={videoModal.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                style={{ width: "100%", height: "100%", border: "none" }}
-              />
+              {isValidYouTubeId(videoModal.id) ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${videoModal.id}?autoplay=1&rel=0&modestbranding=1`}
+                  title={videoModal.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              ) : (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a", color: "#888", fontSize: 13 }}>
+                  Video unavailable
+                </div>
+              )}
             </div>
             <p style={{ textAlign: "center", color: "#666", fontSize: 11, marginTop: 10, fontWeight: 500 }}>{videoModal.title}</p>
           </div>
