@@ -15,9 +15,15 @@
 //
 // Response: { enriched: [{ title, year, director, runtime, overview }, ...] }
 // Updated rows are also written to favorites in the same handler.
+//
+// v6.3.1 (audit Phase C part 2): switched to user-scoped Supabase client.
+// RLS is now the primary auth boundary — ownership filtering and the UPDATE
+// permission both flow through migrations 011 + 008's policies. Service-role
+// is no longer imported here.
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-server";
+import { createUserClient, getBearerToken } from "@/lib/supabase-user";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const SONNET_MODEL = "claude-sonnet-4-6";
@@ -32,12 +38,13 @@ interface EnrichedItem {
   overview: string | null;
 }
 
-async function getUser(req: NextRequest) {
-  const auth = req.headers.get("Authorization");
-  if (!auth?.startsWith("Bearer ")) return null;
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(auth.split(" ")[1]);
+async function authedClient(req: NextRequest): Promise<SupabaseClient | null> {
+  const token = getBearerToken(req);
+  if (!token) return null;
+  const supa = createUserClient(token);
+  const { data: { user }, error } = await supa.auth.getUser();
   if (error || !user) return null;
-  return user;
+  return supa;
 }
 
 function buildPrompt(items: InputItem[]): string {
@@ -92,8 +99,8 @@ function parseClaudeResponse(text: string): ClaudeResult[] {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser(req);
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const supa = await authedClient(req);
+  if (!supa) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
@@ -115,12 +122,11 @@ export async function POST(req: NextRequest) {
 
   if (items.length === 0) return NextResponse.json({ enriched: [] });
 
-  // Validate each (title, year) pair belongs to this user — prevents using
-  // this endpoint as a free Claude oracle for arbitrary movie lookups.
-  const { data: ownedRows, error: ownErr } = await supabaseAdmin
+  // Validate each (title, year) pair belongs to this user. RLS auto-filters
+  // the SELECT to the caller's rows, so anything missing isn't theirs.
+  const { data: ownedRows, error: ownErr } = await supa
     .from("favorites")
-    .select("title, year")
-    .eq("user_id", user.id);
+    .select("title, year");
   if (ownErr) {
     console.error("[enrich-favorites] ownership query error:", ownErr);
     return NextResponse.json({ error: "Failed to validate favourites" }, { status: 500 });
@@ -164,7 +170,9 @@ export async function POST(req: NextRequest) {
     .join("\n");
   const results = parseClaudeResponse(txt);
 
-  // Build the response payload + write back to favorites.
+  // Build the response payload + write back to favorites. Migration 008
+  // adds the UPDATE policy that lets these writes succeed under RLS; before
+  // it, this would silently 0-row.
   const enriched: EnrichedItem[] = [];
   await Promise.all(results.map(async (r) => {
     const src = validItems[r.i];
@@ -175,10 +183,9 @@ export async function POST(req: NextRequest) {
     if (r.overview) update.overview = r.overview;
     if (Object.keys(update).length === 0) return;
 
-    const baseQuery = supabaseAdmin
+    const baseQuery = supa
       .from("favorites")
       .update(update)
-      .eq("user_id", user.id)
       .eq("title", src.title);
     const { error: updErr } = await (src.year == null
       ? baseQuery.is("year", null)

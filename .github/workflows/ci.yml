@@ -43,14 +43,16 @@ jobs:
         #     (cron, webhooks, admin/seed/backfill batch jobs, search pipeline,
         #     read-only public surfaces like /boxoffice and /posters)
         #
-        # When v6.3.1 lands, REMOVE `favorites|folders|enrich-favorites` from
-        # the route allowlist so the guard catches regressions if anyone
-        # re-introduces supabaseAdmin to those routes.
+        # v6.3.1 tightened this list — `favorites`, `enrich-favorites`, and
+        # `folders` have been removed because those routes are now on the
+        # user-scoped Supabase client (RLS handles auth, no service-role).
+        # Re-introducing `supabaseAdmin` to any of them would now fail this
+        # guard, which is exactly the protection we wanted.
         run: |
           set -e
           MATCHES=$(grep -RIn "supabaseAdmin" app lib --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null \
             | grep -vE "^lib/" \
-            | grep -vE "^app/api/(webhooks|cron|admin|seed|patch-video-reviews|search|suggest|enrich|enrich-favorites|favorites|folders|auth|health|csp-report|boxoffice|posters)/" \
+            | grep -vE "^app/api/(webhooks|cron|admin|seed|patch-video-reviews|search|suggest|enrich|auth|health|csp-report|boxoffice|posters)/" \
             || true)
           if [ -n "$MATCHES" ]; then
             echo "Unexpected supabaseAdmin imports outside the approved surface:"
