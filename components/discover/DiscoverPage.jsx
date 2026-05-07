@@ -18,10 +18,12 @@ import SiteHeader from "@/components/SiteHeader";
 import GoldScrollbar from "@/components/GoldScrollbar";
 import { useFavorites } from "@/lib/use-favorites";
 import FolderPickerModal from "@/components/box-office/FolderPickerModal";
+import BackdropLayer from "@/components/box-office/BackdropLayer";
 
 import DiscoverHero from "./DiscoverHero";
 import DiscoverFilterBar from "./DiscoverFilterBar";
 import DiscoverGrid from "./DiscoverGrid";
+import DiscoverFeatured from "./DiscoverFeatured";
 import RecentlyAddedRail from "./RecentlyAddedRail";
 import RouletteSpinner from "./RouletteSpinner";
 import DecadeBrowseRail from "./DecadeBrowseRail";
@@ -150,9 +152,12 @@ export default function DiscoverPage() {
   );
 
   const entries = data?.entries || [];
+  const heroEntry = entries[0] || null;
+  const restEntries = entries.slice(1);
 
   return (
     <div style={{ position: "relative", minHeight: "100vh", color: "#f0f0f0" }}>
+      <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
       <SiteHeader active="discover" />
 
       <main
@@ -203,9 +208,20 @@ export default function DiscoverPage() {
                   : `100 films · ranked by Film Glance score`}
         </div>
 
-        {entries.length > 0 && (
+        {heroEntry && (
+          <div style={{ marginBottom: 28 }}>
+            <DiscoverFeatured
+              entry={heroEntry}
+              releaseWindow={releaseWindow}
+              favorited={isFavorited(heroEntry)}
+              onToggleFavorite={handleHeartClick}
+            />
+          </div>
+        )}
+
+        {restEntries.length > 0 && (
           <DiscoverGrid
-            entries={entries}
+            entries={restEntries}
             releaseWindow={releaseWindow}
             isFavorited={isFavorited}
             onToggleFavorite={handleHeartClick}

@@ -6,6 +6,8 @@ import {
   Film,
   Search,
   MessageSquare,
+  TrendingUp,
+  Compass,
   ArrowRight,
   Star,
   Mail,
@@ -699,7 +701,7 @@ export default function PreviewLanding() {
           transition: "padding 0.35s ease, border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease",
         }}
       >
-        <Link href="/preview-landing" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
           <div
             style={{
               width: 32, height: 32, borderRadius: 8,
@@ -733,6 +735,38 @@ export default function PreviewLanding() {
             <MessageSquare size={13} />
             <span className="nav-forum-label">Discussion Forum</span>
             <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
+          </Link>
+          <Link
+            href="/discover"
+            className="nav-btn nav-discover-btn"
+            aria-label="Discover films on Film Glance"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 15px", borderRadius: 9,
+              border: "1px solid rgba(255, 215, 0, 0.18)",
+              background: "rgba(255, 215, 0, 0.03)",
+              color: "#FFD700", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+            }}
+          >
+            <Compass size={13} />
+            <span className="nav-forum-label">Discover</span>
+          </Link>
+          <Link
+            href="/boxoffice"
+            className="nav-btn nav-boxoffice-btn"
+            aria-label="Open Box Office page"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 15px", borderRadius: 9,
+              border: "1px solid rgba(255, 215, 0, 0.18)",
+              background: "rgba(255, 215, 0, 0.03)",
+              color: "#FFD700", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+            }}
+          >
+            <TrendingUp size={13} />
+            <span className="nav-forum-label">Box Office</span>
           </Link>
           {authUser && (
             <Link

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
   Search, Star, ExternalLink, X, ChevronDown, Zap, Crown,
-  Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check,
+  Eye, EyeOff, Mail, Lock, User, Film, TrendingUp, Loader2, Check, Compass,
   Users, RefreshCw, Play, Tv, DollarSign, Award, Heart, Trash2,
   MessageSquare, ArrowRight, ChevronRight, LogIn, BarChart3, Flame, Video, Sparkles,
   ThumbsUp, ThumbsDown, Clock, Calendar, Trophy, Globe, Quote,
@@ -3056,7 +3056,7 @@ export default function FilmGlance() {
           willChange: "transform",
         }}
       >
-        <Link href="/preview-landing" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, rgba(255,215,0,0.20), rgba(255,165,0,0.06))", border: "1px solid rgba(255, 215, 0, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 18px rgba(255, 215, 0, 0.10)" }}>
             <Film size={15} style={{ color: "#FFD700" }} />
           </div>
@@ -3082,6 +3082,22 @@ export default function FilmGlance() {
             <MessageSquare size={13} />
             <span className="nav-forum-label">Discussion Forum</span>
             <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
+          </Link>
+          <Link
+            href="/discover"
+            className="nav-btn nav-discover-btn"
+            aria-label="Discover films on Film Glance"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 15px", borderRadius: 9,
+              border: "1px solid rgba(255, 215, 0, 0.18)",
+              background: "rgba(255, 215, 0, 0.03)",
+              color: "#FFD700", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", fontFamily: "'Syne', sans-serif", letterSpacing: 0.2,
+            }}
+          >
+            <Compass size={13} />
+            <span className="nav-forum-label">Discover</span>
           </Link>
           <Link
             href="/boxoffice"
