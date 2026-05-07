@@ -283,6 +283,14 @@ export async function runFullPipeline(
   // films Claude can't recognize still get TMDB + BOM data.
   await applyBoxOfficeAugmentation(mv, releaseInfo, queryForRatings);
 
+  // v6.5.0 — surface tmdb_id on the returned mv so writeCacheEntries can
+  // store it as a top-level column on movie_cache (migration 021 added the
+  // column + partial UNIQUE index). This is the dedup primary defense for
+  // the bulk seed and every future cache write.
+  if (releaseInfo?.tmdbId && !mv.tmdb_id) {
+    mv.tmdb_id = releaseInfo.tmdbId;
+  }
+
   return mv;
 }
 
@@ -402,13 +410,19 @@ export async function writeCacheEntries(
   ip: string,
   source: string
 ) {
-  const cacheData = {
+  // v6.5.0 — write tmdb_id at top level too so the partial UNIQUE index
+  // (migration 021) can prevent duplicate cache rows for the same film.
+  // The value also stays inside `data` for legacy code paths that read it
+  // from JSONB; redundancy is fine.
+  const tmdbId = typeof mv?.tmdb_id === "number" ? mv.tmdb_id : null;
+  const cacheData: Record<string, unknown> = {
     data: mv,
     source,
     hit_count: 0,
     cached_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
   };
+  if (tmdbId) cacheData.tmdb_id = tmdbId;
 
   const normalize = (s: string) => s.toLowerCase().trim()
     .replace(/^(the|a|an)\s+/i, "")

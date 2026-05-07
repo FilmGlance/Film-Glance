@@ -1,5 +1,73 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (later) — v6.5.0 cache growth Phase A — tmdb_id schema + scripts shipped (seed not yet run)
+
+User asked to grow `movie_cache` from 5,532 → 30,000 with the absolute guarantee of zero duplicates. Per planning Q&A: full pipeline, video reviews pre-cached, run as a one-shot Node script on VPS after the forum import wraps. Plan file: `~/.claude/plans/project-will-be-the-ticklish-corbato.md`.
+
+This session ships **Phase A** — the dedup infrastructure and operator scripts. Phase B (the actual ~10-12h seed run) is the user's job to kick off on VPS once the forum import completes.
+
+### Migration 021 (applied to prod)
+
+`sql/migrations/021_movie_cache_tmdb_id.sql`:
+- `ALTER TABLE movie_cache ADD COLUMN tmdb_id INTEGER`
+- `CREATE UNIQUE INDEX movie_cache_tmdb_id_uidx ON movie_cache(tmdb_id) WHERE tmdb_id IS NOT NULL` — partial-unique pattern allows multiple NULL legacy rows but enforces uniqueness on every non-NULL value.
+
+This is the bulletproof dedup primary defense going forward. Title-based dedup (search_key) will continue to fail on variations like "Pride and Prejudice" vs "Pride & Prejudice"; tmdb_id is stable, integer, one per real film.
+
+### `lib/search-pipeline.ts` patched
+
+- `runFullPipeline` now sets `mv.tmdb_id = releaseInfo.tmdbId` before returning, surfacing the value the pipeline already had mid-flight.
+- `writeCacheEntries` writes `tmdb_id` as a top-level column on the upsert (when present). Redundant with the JSONB copy intentionally — keeps legacy code paths that read from JSONB working, while the partial-UNIQUE index protects writes.
+- Net effect: every new cache row from /api/search going forward carries tmdb_id. Combined with the bulk-seed script (Phase B) and the legacy backfill (also Phase B), every row in the cache will have it.
+
+### Operator scripts (in repo, not yet run)
+
+**`scripts/backfill-tmdb-id.ts`** — one-shot backfill of legacy 5,532 rows. For each row missing tmdb_id, TMDB `/search/movie` lookup by title+year, write tmdb_id back. 250ms throttle (~4 req/s, 23min total). Logs unmatched titles to `scratch/tmdb-backfill-unmatched.txt` for review. If two rows resolve to the same tmdb_id (residual mig-019 dup), keeps the highest-fg_score / highest-hit_count row and DELETEs the rest.
+
+**`scripts/bulk-seed.ts`** — main 24,500-movie seed:
+- Imports `runFullPipeline` + `writeCacheEntries` from `lib/search-pipeline` directly via tsx (no porting; data shape matches every other cache row).
+- Stratification grid: 6 vote-count buckets × 9 year ranges = 54 buckets, paged through TMDB Discover. Higher-quality films (high vote_count) seeded first.
+- Two-step dedup: in-memory `Set<number>` of existing tmdb_ids loaded at startup; partial-UNIQUE index is the safety net against races.
+- Concurrency: 5 parallel pipelines (Anthropic tier-1 cap).
+- Resumable via `~/.bulk-seed-state.json` — re-running picks up where it left off.
+- Failures logged to `~/.bulk-seed-failures.log`; per-movie try/catch never stops the run.
+- Cost tracking with running total in console.
+
+### Operator playbook (Phase B — user runs on VPS)
+
+1. Wait for forum import to wrap (currently 96.6%, ~few hours to go).
+2. SSH to VPS, clone staging branch, `npm ci`.
+3. Copy `.env.local` (or set env vars manually).
+4. Dry run: `npx tsx scripts/bulk-seed.ts --dry-run --limit 10` to verify pipeline.
+5. Backfill first: `npx tsx scripts/backfill-tmdb-id.ts` (~23 min).
+6. Real seed: `nohup npx tsx scripts/bulk-seed.ts > ~/bulk-seed.log 2>&1 &` (~10-12h, ~$300-400 in API spend).
+7. Monitor with `tail -f ~/bulk-seed.log`.
+
+### Validation (this session)
+
+- Migration 021 applied + verified live (`tmdb_id` column exists, partial-unique index in place)
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (no regression)
+
+### What's NOT done this session
+
+- Backfill not run yet (waiting for user/VPS post-import)
+- Bulk seed not run yet (same)
+- Bible-doc-style verification of post-seed cache size (user runs Phase C after Phase B completes)
+- Pool-size impact on /discover not yet visible (will be after seed completes)
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/021_movie_cache_tmdb_id.sql` | NEW (applied to prod) |
+| `lib/search-pipeline.ts` | runFullPipeline surfaces tmdb_id; writeCacheEntries writes tmdb_id column |
+| `scripts/backfill-tmdb-id.ts` | NEW operator script |
+| `scripts/bulk-seed.ts` | NEW operator script |
+| `tech-specs.md`, `conversation-summary.md` | This session entry |
+
+---
+
 ## Session: May 7, 2026 (round 5) — v6.4.1 polish: count-line wording + roulette-card de-yellowing
 
 User flagged 4 issues:
