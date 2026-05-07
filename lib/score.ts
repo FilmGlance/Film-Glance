@@ -1,6 +1,15 @@
 // lib/score.ts
 // Score calculation logic — extracted from the frontend so it can run
 // server-side where it cannot be tampered with.
+//
+// ⚠ SYNC REQUIREMENT (v6.4.0): a pure-SQL mirror of `calcScore()` lives in
+// `sql/migrations/016_fg_score_column.sql` as `compute_fg_score(jsonb)`.
+// The /discover page reads the denormalized `movie_cache.fg_score` column
+// (maintained by a trigger using that SQL function) instead of recomputing
+// in JS for 5,700+ rows on every request. If you change the algorithm here
+// — source normalization, auto-correct rules, rounding — you MUST update
+// the SQL function in lockstep. A divergence will cause the same movie to
+// show different scores on /search vs /discover.
 
 export interface SourceScore {
   name: string;

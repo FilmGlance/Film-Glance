@@ -1,5 +1,107 @@
 # Film Glance — Conversation Summary
 
+## Session: May 6, 2026 (post-audit, new feature) — v6.4.0 /discover page
+
+User asked for a Discover page so visitors can browse what's worth watching by where it's available (In Theaters / At Home), genre, and year — plus a "Movie Reel Roulette" slot-machine that spins to a random ≥8/10 film. Per the agreed plan (`~/.claude/plans/clever-riding-alpaca.md`): single bundled v6.4.0 PR including data layer + cron + APIs + UI + nav.
+
+### Decisions baked from plan-mode questions
+- 60-day theatrical window (matches modern US averages)
+- All three "in the spirit" features: Hidden Gems toggle, Recently Added rail, Decade Browse rail
+- Bundled into one PR
+
+### Data layer — three migrations
+
+- **015_movie_release_window.sql**: adds `release_window` (in_theaters/at_home/unreleased/unknown), `release_window_source`, `release_window_updated_at`. Initial backfill via 60-day date heuristic. **Pre-flight surprise**: only 33 of 5,702 cached movies have `release_date` populated (it's a v5.13.x-era field), so the heuristic falls back to `at_home` for everything without one. Distribution after backfill: 5,688 at_home / 14 in_theaters / 2 unreleased.
+- **016_fg_score_column.sql**: adds `fg_score numeric(3,1)` column maintained by a BEFORE-INSERT/UPDATE trigger. New `compute_fg_score(jsonb)` PL/pgSQL function is a pure-SQL mirror of `calcScore()` from `lib/score.ts` — score normalization, auto-correct rules, rounding all duplicated. ⚠ Sync requirement: changes to `calcScore()` must update the SQL function in lockstep. Cross-reference comment added to `lib/score.ts`. Backfill: all 5,702 rows now have fg_score (range 2.5-10.0, avg 6.96). Indexes: standalone fg_score DESC + composite (release_window, fg_score DESC) for the discover hot path.
+- **017_discover_rpcs.sql**: six RPCs.
+  - `discover_movies(release_window, genre?, year?, hidden_gems?, limit)` — list of up to 100 ranked films.
+  - `discover_genres()` — splits `data->>'genre'` on " · " for the dropdown (top genre: Drama with 3,016 films).
+  - `discover_random(decade_start?, decade_end?, min_score)` — Movie Reel Roulette pick.
+  - `discover_random_pool_size(...)` — fast count for the "spinning from N films" ticker.
+  - `discover_recent(limit)` — last N cached for the Recently Added rail.
+  - `discover_years(release_window, genre?)` — distinct years per filter combo.
+  - `discover_refresh_heuristic(protect_days)` — service-role-only, called by cron.
+  - All anon-grants execute through SECURITY DEFINER + locked search_path. Decade pool sizes verified for ≥8/10 threshold: any=965, 2020s=118, 2010s=240, 2000s=150, 1990s=133, 1980s=86, 1970s=82, pre-1970=156 — every decade has plenty for the slot machine.
+
+### Daily cron `/api/cron/discover/refresh-release-window`
+
+`vercel.json` adds `15 4 * * *` schedule. Two-pass logic:
+1. Bulk pass via `discover_refresh_heuristic(7)` RPC — re-classifies via 60-day rule, but skips rows whose release_window was set by `tmdb_providers` within the last 7 days (preserves the more-accurate signal).
+2. TMDB augmentation pass — top 500 by fg_score over the last 24 months, fetch `/movie/{id}/watch/providers` for region US. Has `flatrate|buy|rent`? → `at_home`. Otherwise (and within 60 days of release) → `in_theaters`. 250ms throttle = ~4 req/s, well under TMDB's 40/10s burst. Total runtime ~2.5min on 500 calls; fits in `maxDuration=300`.
+3. Failure logging via existing `cron_failures` + `sendAlertEmail` patterns from `lib/alert.ts`.
+
+### API endpoints
+
+- **GET /api/discover** — query: release_window (required), genre, year, hidden_gems, limit. Validated via `DiscoverQuerySchema` (Zod). Returns `{entries[100], available_genres, available_years, count, ...}`. Cache: `s-maxage=600, stale-while-revalidate=3600`.
+- **GET /api/discover/random** — query: decade (`any|2020s|...|pre-1970`), min_score. `Cache-Control: no-store` (every spin fresh). Returns `{entry, pool_size, decade, spun_at}` or 404 if empty.
+- **GET /api/discover/recent** — last 10 cached for the rail.
+- All three use the new `lib/supabase-anon.ts` (anon-key client) — RPCs are GRANTED to anon, no service-role needed. Service-role import guard in CI stays untouched.
+- Rate-limit: added `/api/discover` to ROUTE_LIMITS at `30/min` and to PUBLIC_ROUTES.
+
+### UI — `app/discover/page.tsx` + 9 components in `components/discover/*`
+
+- **DiscoverPage** (main) — URL sync (rw/genre/year/hg query params), data fetch, layout.
+- **DiscoverHero** — "Discover." italic Playfair gold, soft halo, `disHeroLineIn` keyframe.
+- **RecentlyAddedRail** — horizontal-scroll mini-cards from `/api/discover/recent`.
+- **RouletteSpinner** — slot-machine. Three vertically-scrolling poster reels (240×360 desktop, 1 reel <520px), staggered 3.6s/3.9s/4.2s decel cubic-bezier, top/bottom gradient masks for the "window" feel. Pool-size ticker. After third reel stops: RouletteCard fades in.
+- **RouletteCard** — hero variant of DiscoverCard with "🎬 Roulette pick" badge + 80px gold-gradient score + "Watch it" CTA + "Spin again" button.
+- **DiscoverFilterBar** — release-window toggle (pill row) + Genre + Year dropdowns (reusing the box-office `FilterDropdown` portal component) + Hidden Gems toggle. Stacks vertically <720px.
+- **DiscoverGrid** — IntersectionObserver-batched (initial 30, +30 per scroll). 3-col >960, 2-col 640-960, 1-col <640.
+- **DiscoverCard** — fork of box-office StandardCard. 2:3 poster, FG score badge bottom-left, heart top-right, italic Playfair title, director · year, genre chip, release-window pill at bottom. Click → `/?q=<title>` (existing landing-page hook auto-fires search).
+- **DecadeBrowseRail** — six tiles (2020s/2010s/2000s/1990s/1980s/1970s) below grid, each shows count from `available_years` + clicks to set year filter to most recent year of that decade.
+- **SiteHeader.jsx** — added Discover link with Compass icon between Discussion Forum and Box Office. Reuses existing `nav-forum-label` icon-only collapse at ≤520px.
+- **Mobile parity check** (CLAUDE.md mandate): nav `display:none` grep returns only label-target rules, never `.nav-X-btn`. ✅
+
+### Hook noise dismissed
+
+- "Move polling to Vercel Workflow" on cron (250ms TMDB throttle, fits in 300s budget — same false-positive class as prior crons)
+- "Use Vercel Firewall/WAF" on middleware (alternative architecture; agreed plan specified Upstash)
+- "Rename middleware.ts → proxy.ts" (deferred Next 16 cosmetic since v6.0.0)
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 223 warnings (one inline error caught + fixed: RouletteSpinner read `ref.current` during render — converted to state)
+- Service-role import guard passes locally with current allowlist (no new `supabaseAdmin` imports — anon client used instead)
+- Migrations 015/016/017 verified live: distribution + pool sizes + RPC outputs all sane
+
+### What needs user action at merge
+
+- **Vercel preview verification**: visit `/discover`, walk through filter combos, spin roulette across decades, click into a card to confirm `?q=<title>` triggers search auto-fire
+- **Watch the daily cron's first run** at 04:15 UTC the morning after merge to confirm TMDB augmentation lands cleanly
+- **Spot-check classification** on a few known recent films
+
+### What's left (not Discover-related)
+
+- News page (next planning session — user said "we will then move to the News page" after this lands)
+- CSP enforcement flip after 7-day report-only window
+- Upstash provisioning when ready
+- Forum post-import checklist
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/015_movie_release_window.sql` | NEW (applied to prod) |
+| `sql/migrations/016_fg_score_column.sql` | NEW (applied to prod) |
+| `sql/migrations/017_discover_rpcs.sql` | NEW (applied to prod) — 6 RPCs |
+| `lib/score.ts` | Cross-reference comment to compute_fg_score |
+| `lib/schemas.ts` | DiscoverQuerySchema + DiscoverRandomQuerySchema + decadeRange |
+| `lib/supabase-anon.ts` | NEW — anon-key client |
+| `middleware.ts` | /api/discover added to PUBLIC_ROUTES + ROUTE_LIMITS |
+| `vercel.json` | +1 cron entry |
+| `app/api/discover/route.ts` | NEW — list endpoint |
+| `app/api/discover/random/route.ts` | NEW — roulette endpoint |
+| `app/api/discover/recent/route.ts` | NEW — recently-added rail |
+| `app/api/cron/discover/refresh-release-window/route.ts` | NEW |
+| `app/discover/page.tsx` | NEW — Suspense shell |
+| `components/discover/*` | NEW — 9 components |
+| `components/SiteHeader.jsx` | Added Discover nav link |
+| `tech-specs.md` | Change Log v6.4.0 + Version History |
+| `conversation-summary.md` | This entry |
+
+---
+
 ## Session: May 6, 2026 (Phase C, part 2 of 2 — audit COMPLETE) — v6.3.1 user-scoped Supabase client refactor
 
 User merged PR #62 + said "continue." Last actionable Phase C item per the agreed plan: migrate `/api/favorites`, `/api/folders`, `/api/enrich-favorites` off `supabaseAdmin` (service-role) onto a user-scoped client so RLS becomes the primary auth boundary.
