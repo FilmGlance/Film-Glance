@@ -1,5 +1,51 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (early AM) — v6.4.0 fix-forward (still pre-merge)
+
+User pulled up the v6.4.0 Vercel preview and reported three serious issues, suspected something had been pushed to production. **Production safety verified live**: `origin/main` is at `591e4e1` = PR #63 = v6.3.1 (audit Phase C complete). PR #64 (v6.4.0) is OPEN on `staging`, never merged. The URL the user saw — `film-glance-gm3yqthmc-rs-projects-c0025ef0.vercel.app/preview-landing` — was a Vercel preview deployment auto-generated for PR #64 (note `vercel.app` host, not `filmglance.com`). **filmglance.com production is unaffected.** No revert needed; the fix-forward goes onto the same `staging` branch which feeds PR #64.
+
+### Bug 1 — Showstopper: anon could not read movie_cache, all RPCs returned `[]`
+
+Diagnostic via `SET ROLE anon; SELECT COUNT(*) FROM discover_movies('at_home', NULL, NULL, FALSE, 5);` → returned **0**. Same for every discover_* RPC. Root cause: `movie_cache` has exactly one RLS policy — `auth.role() = 'authenticated'` — and the discover RPCs were `LANGUAGE sql STABLE` (SECURITY INVOKER by default). When called by anon, the inner `SELECT FROM movie_cache` was RLS-blocked. Same reason `/api/suggest` uses `supabaseAdmin` to call `fuzzy_movie_suggestions`.
+
+**Fix — migration 018**: `ALTER FUNCTION ... SECURITY DEFINER` on the six read-side RPCs (discover_movies, discover_genres, discover_years, discover_random, discover_random_pool_size, discover_recent). They now run as the postgres owner which has BYPASSRLS in Supabase. Same pattern that `discover_refresh_heuristic` already uses. Applied via Management API; verified live: anon now gets `count=100` from discover_movies, `62` from discover_genres, `107` from discover_years, and a real movie title from discover_random(2020, 2029, 8.0) ("My Octopus Teacher", 2020, 8.3).
+
+### Bug 2 — Brand mark from `/boxoffice` went to `/preview-landing` instead of `/`
+
+`components/SiteHeader.jsx:81` had `href="/preview-landing"` for the brand mark. Same bug existed in `components/film-glance.jsx:3059` and `components/preview-landing.jsx:702`. All three changed to `href="/"`.
+
+### Bug 3 — Discover link missing on the two custom-nav landing pages
+
+There are two distinct surfaces with their own inline custom nav (not using `SiteHeader.jsx`):
+
+- `components/film-glance.jsx:3068+` — the `/` landing (search interface). Had Discussion Forum + Box Office, missing Discover.
+- `components/preview-landing.jsx:719+` — the marketing-style preview surface. Had only Discussion Forum, missing both Discover AND Box Office.
+
+Added Discover link with Compass icon to both, and added Box Office to preview-landing as a side fix. Imported `Compass` from lucide-react in film-glance.jsx, imported `TrendingUp + Compass` in preview-landing.jsx.
+
+### Bonus polish — Discover page visual richness
+
+Two genuine gaps closed to bring Discover up to box-office's polish level:
+
+1. **`BackdropLayer`** added to `DiscoverPage.jsx`: pulls the #1 movie's backdrop image, renders it blurred behind page chrome with crossfade on filter change. Same component reused from box-office (`components/box-office/BackdropLayer.jsx`).
+2. **`DiscoverFeatured` hero card** (new file): horizontal hero variant for `entries[0]`. Crown badge "TOP PICK" + release pill, italic Playfair title, director · year, genre, gold-gradient FG score with "/10 FILM GLANCE SCORE" subtitle, heart button overlaid on poster. Mirrors box-office's `FeaturedCard` rhythm. Grid below renders `entries.slice(1)` (99 cards instead of 100).
+
+Most of the user's "atrocious" perception was downstream of Bug 1 — empty data showing only the filter bar + empty decade rail. Now: backdrop layer + featured hero + populated 99-card grid + working dropdowns + real roulette. Same visual identity as `/boxoffice`.
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings
+- Mobile-parity grep clean (only label-target `display:none` rules)
+- Migration 018 verified live for anon role on all 6 RPCs
+
+### Process learnings (added to memory of how this user works)
+
+- The user wants three navs (SiteHeader.jsx + film-glance.jsx inline + preview-landing.jsx inline) kept in sync. Architectural cleanup (replacing the inline navs with the shared SiteHeader) is a separate refactor.
+- Vercel preview URLs (`*.vercel.app`) look enough like production that they can be misread as filmglance.com — be explicit when surfacing a preview-only result.
+
+---
+
 ## Session: May 6, 2026 (post-audit, new feature) — v6.4.0 /discover page
 
 User asked for a Discover page so visitors can browse what's worth watching by where it's available (In Theaters / At Home), genre, and year — plus a "Movie Reel Roulette" slot-machine that spins to a random ≥8/10 film. Per the agreed plan (`~/.claude/plans/clever-riding-alpaca.md`): single bundled v6.4.0 PR including data layer + cron + APIs + UI + nav.
