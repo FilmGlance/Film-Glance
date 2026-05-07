@@ -1,5 +1,51 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (round 3) — v6.4.1 polish round (8 more user fixes + sophistication pass)
+
+PR #65 (v6.3.2 logo hotfix) merged to production. User reviewed staging preview for PR #64 (v6.4.0 + v6.4.1) and reported 8 more issues + a general "make it sophisticated/upscale" mandate.
+
+### Discovery: cache uses `description` not `overview`
+Probed cache schema and found `0 of 5,530 rows` had `data->>'overview'` populated — the field doesn't exist. The actual cached field is `data->>'description'` (Claude's prompt asks for "description", not "overview"). My migration 019 was reading the wrong key, so every Roulette result + every card synopsis came back null. **Migration 020** fixes this by mapping `data->>'description'` AS overview in all four discover RPCs (kept the API field name as `overview` so route + UI code didn't have to change). Verified live — anon roulette spin now returns Poor Things with full synopsis text.
+
+### Roulette spinner polish (issues 1, 3, 4)
+- Copy: "Spin for a random film with Film Glance score 8/10 or higher." → **"Spin the Movie Roulette Wheel to find a high-ranking Film Glance movie."**
+- Removed the gold-radial halo behind the section header (user called it a "yellow smear")
+- Section background switched to the same dark glass treatment used by box-office cards (`rgba(8,6,2,0.62)` + thin gold border + soft drop shadow)
+- New `SpinButton` component: bigger (`14px 30px` padding vs `11px 22px`), uppercase 800-weight tracking, embedded inset gold ring, animated **pulsing radial halo** behind the button (`disSpinPulse` keyframe, 2.4s gentle scale+opacity), translateY(-2) + scale(1.02) + brightness boost on hover. Reads exciting now, not boring.
+
+### Card layout overhaul (issues 6, 7, 8)
+The big gold-gradient italic FG score "headline" was the source of the "yellow smear" the user disliked. Removed entirely. New `DiscoverCard` body:
+1. Title (italic Playfair, 2-line clamp)
+2. "Director: NAME · YEAR" line
+3. **Genre row** — full-width JetBrains Mono caps (was column 2 of the 3-stat strip, where it truncated to "Biograp..." / "Animati...")
+4. **Synopsis snippet** — 3-line clamp italic Syne gray, fills the visual middle of the card so the layout doesn't feel hollow without the headline
+5. 2-stat strip: **Year · FG Score** — clean Playfair italic gold (#FFD700), no drop-shadow, no gradient. Matches box-office StandardCard's StandardStat treatment exactly. **Sources count removed.**
+6. Release-window pill at the very bottom
+
+### Filter bar buttons (issue 5)
+`ToggleButton` restyled — the active "In Theaters" / "At Home" / "Hidden Gems" pills now use the **full gold gradient** (matching the Spin button + the brand CTAs across the rest of the site) with embedded inset ring + drop shadow. Inactive state has a subtle hover lift + border/color transition. "Hidden Gems off" relabeled to just "Hidden Gems" (less noisy).
+
+### Issue 2 — Synopsis on roulette result
+Was in code already; was rendering blank because of the wrong cache field. Fixed by migration 020. Roulette result card now reliably shows a 1-2 paragraph synopsis below the title.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/020_discover_rpcs_use_description.sql` | NEW (applied to prod) — discover RPCs read `data->>'description'` AS overview |
+| `components/discover/RouletteSpinner.jsx` | Removed halo; updated copy; new SpinButton with pulse glow |
+| `components/discover/DiscoverCard.jsx` | Dropped FG-score headline; full-width genre row; synopsis 3-line clamp; 2-stat strip (Year · FG Score); no Sources |
+| `components/discover/DiscoverFilterBar.jsx` | ToggleButton restyled with gold-gradient active state + hover lift |
+| `tech-specs.md` + `conversation-summary.md` | This round logged |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings
+- Migration 020 verified live — anon roulette returns synopsis text
+
+---
+
 ## Session: May 7, 2026 (round 2) — v6.3.2 production hotfix + v6.4.1 fix-forward
 
 User reviewed the v6.4.0 Vercel preview and reported 9 issues, including a critical production bug. Two PRs ship from this session:

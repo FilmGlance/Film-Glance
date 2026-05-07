@@ -2,18 +2,15 @@
 
 // DiscoverCard — single movie card on /discover.
 //
-// v6.4.1 rewrite: mirrors components/box-office/PosterCard.jsx StandardCard
-// structure (per user feedback "format the movie suggestions in the same
-// formatting as the Box Office page"). Adaptations:
-//   • Where box-office shows gross → big gold-gradient italic Playfair
-//     FG score with "/10 FILM GLANCE SCORE" subtitle
-//   • Where box-office shows Theaters / Per-theater / FG Score 3-stat strip
-//     → Year / Genre / Sources (the relevant Discover dimensions)
-//   • No rank badge (Discover ranking shifts per filter)
-//   • Adds release-window pill (In Theaters / At Home) at the bottom
+// v6.4.1 round 2: dropped the big gold-gradient FG-score "headline" (the
+// user called it a "yellow smear"); FG score now lives in the small stat
+// strip alongside Year — exactly the box-office StandardCard treatment.
+// Synopsis snippet (first 2 lines, italic) fills the visual middle of the
+// card so it doesn't feel empty without the headline. Genre row is
+// full-width (no longer in the stat strip) so it can't truncate.
+// Sources count removed (per user request).
 //
-// Click → /?q=<title>; landing page's URL hook auto-fires doSearch on mount.
-// Heart button stop-propagates the click so the card's <Link> doesn't fire.
+// Click → /?q=<title>; landing-page URL hook auto-fires doSearch on mount.
 
 import React from "react";
 import Link from "next/link";
@@ -78,8 +75,9 @@ function StandardStat({ label, value, isScore, scoreLoaded, monoValue }) {
       <div
         style={{
           fontFamily: monoValue ? "'JetBrains Mono', monospace" : (isScore ? "'Playfair Display', serif" : "'Syne', sans-serif"),
+          fontStyle: isScore ? "italic" : "normal",
           fontWeight: 700,
-          fontSize: 18,
+          fontSize: 20,
           lineHeight: 1,
           color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
           letterSpacing: -0.2,
@@ -126,18 +124,13 @@ function ReleasePill({ window: rw }) {
         fontSize: 11,
         fontWeight: 600,
         letterSpacing: 0.4,
+        whiteSpace: "nowrap",
       }}
     >
       <Icon size={11} aria-hidden="true" />
       {label}
     </span>
   );
-}
-
-function firstGenre(g) {
-  if (!g) return null;
-  const i = g.indexOf(" · ");
-  return i > 0 ? g.slice(0, i) : g;
 }
 
 export default function DiscoverCard({
@@ -150,8 +143,6 @@ export default function DiscoverCard({
   if (!entry) return null;
   const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
   const score = entry.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
-  const sourceCount = typeof entry.source_count === "number" ? entry.source_count : null;
-  const primaryGenre = firstGenre(entry.genre);
 
   return (
     <Link
@@ -188,7 +179,7 @@ export default function DiscoverCard({
           e.currentTarget.style.boxShadow = "0 6px 22px rgba(0,0,0,0.4)";
         }}
       >
-        {/* Poster — heart only (no rank badge for Discover; rank shifts per filter) */}
+        {/* Poster */}
         <div
           style={{
             position: "relative",
@@ -219,7 +210,6 @@ export default function DiscoverCard({
             </div>
           )}
 
-          {/* Bottom-of-poster legibility gradient */}
           <div
             style={{
               position: "absolute", left: 0, right: 0, bottom: 0,
@@ -242,13 +232,13 @@ export default function DiscoverCard({
           )}
         </div>
 
-        {/* Body — same fixed structure as box-office StandardCard */}
+        {/* Body */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             gap: 10,
-            padding: 14,
+            padding: 16,
             flex: 1,
             minWidth: 0,
           }}
@@ -260,7 +250,7 @@ export default function DiscoverCard({
               fontFamily: "'Playfair Display', serif",
               fontStyle: "italic",
               fontWeight: 700,
-              fontSize: 18,
+              fontSize: 20,
               lineHeight: 1.2,
               color: "#fff",
               wordBreak: "break-word",
@@ -269,17 +259,18 @@ export default function DiscoverCard({
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
               minHeight: "2.4em",
+              letterSpacing: -0.2,
             }}
           >
             {entry.title}
           </h3>
 
-          {/* Director · year — single line clipped */}
+          {/* Director · year */}
           <div
             style={{
               fontFamily: "'Syne', sans-serif",
-              fontSize: 13.5,
-              color: "rgba(255,255,255,0.72)",
+              fontSize: 13,
+              color: "rgba(255,255,255,0.7)",
               letterSpacing: 0.2,
               lineHeight: 1.35,
               whiteSpace: "nowrap",
@@ -293,66 +284,66 @@ export default function DiscoverCard({
             {entry.year ? <span>{entry.year}</span> : null}
           </div>
 
-          {/* Spacer pushes score + stats to bottom */}
-          <div style={{ flex: 1, minHeight: 4 }} />
-
-          {/* FG score — big gold-gradient (where box-office has gross) */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 8,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "'Playfair Display', serif",
-                fontStyle: "italic",
-                fontWeight: 700,
-                fontSize: 38,
-                lineHeight: 1,
-                background: score
-                  ? "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)"
-                  : "rgba(255,255,255,0.3)",
-                WebkitBackgroundClip: score ? "text" : "border-box",
-                backgroundClip: score ? "text" : "border-box",
-                WebkitTextFillColor: score ? "transparent" : "rgba(255,255,255,0.3)",
-                color: score ? "transparent" : "rgba(255,255,255,0.3)",
-                filter: score ? "drop-shadow(0 0 12px rgba(255,215,0,0.42))" : "none",
-                letterSpacing: -0.6,
-                paddingBottom: "0.06em",
-              }}
-            >
-              {score ?? "—"}
-            </span>
-            <span
+          {/* Genre — full-width row, won't truncate inside a 1/3-column stat */}
+          {entry.genre && (
+            <div
               style={{
                 fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10,
-                color: "rgba(255,215,0,0.6)",
-                letterSpacing: 1.2,
+                fontSize: 10.5,
+                color: "rgba(255, 215, 0, 0.55)",
+                letterSpacing: 0.6,
+                lineHeight: 1.4,
+                wordBreak: "break-word",
               }}
             >
-              /10 FILM GLANCE SCORE
-            </span>
-          </div>
+              {entry.genre}
+            </div>
+          )}
 
-          {/* 3-stat strip */}
+          {/* Synopsis — 2-line clamp italic, fills the visual middle of the card */}
+          {entry.overview && (
+            <p
+              style={{
+                margin: 0,
+                fontFamily: "'Syne', sans-serif",
+                fontStyle: "italic",
+                fontSize: 12.5,
+                lineHeight: 1.5,
+                color: "rgba(255,255,255,0.6)",
+                letterSpacing: 0.1,
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {entry.overview}
+            </p>
+          )}
+
+          {/* Spacer pushes stats + pill to bottom */}
+          <div style={{ flex: 1, minHeight: 6 }} />
+
+          {/* 2-stat strip: Year · FG Score (clean — no smear) */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 8,
-              paddingTop: 8,
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              paddingTop: 10,
               borderTop: "1px solid rgba(255,215,0,0.10)",
             }}
           >
             <StandardStat label="Year" value={entry.year ?? "—"} monoValue />
-            <StandardStat label="Genre" value={primaryGenre ?? "—"} />
-            <StandardStat label="Sources" value={sourceCount ?? "—"} monoValue />
+            <StandardStat
+              label="FG Score"
+              value={score ?? "—"}
+              isScore
+              scoreLoaded={score != null}
+            />
           </div>
 
-          {/* Release-window pill at the very bottom */}
+          {/* Release pill */}
           {releaseWindow && (
             <div style={{ display: "flex", marginTop: 4 }}>
               <ReleasePill window={releaseWindow} />

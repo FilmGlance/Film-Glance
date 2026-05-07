@@ -8,8 +8,9 @@
 //
 // Mobile (<520px): single reel, full-width — same rhythm, less crowding.
 //
-// v6.4.1: added Genre dropdown alongside Decade. Visual polish — italic
-// Playfair gold-gradient section title, soft gold halo behind heading.
+// v6.4.1 round 2: removed yellow-smear halo behind heading, restyled
+// section as a clean dark glass card, made the Spin button bigger with
+// pulse-glow halo so it actually looks exciting.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Dice3 } from "lucide-react";
@@ -104,6 +105,70 @@ function Reel({ posters, finalPoster, durationSec, animKey, isMobile, hidden }) 
   );
 }
 
+function SpinButton({ disabled, onClick, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="dis-spin-btn"
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "14px 30px",
+        borderRadius: 14,
+        background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+        color: "#0a0805",
+        fontFamily: "'Syne', sans-serif",
+        fontWeight: 800,
+        fontSize: 15,
+        letterSpacing: 0.6,
+        textTransform: "uppercase",
+        border: "none",
+        cursor: disabled ? "wait" : "pointer",
+        opacity: disabled ? 0.7 : 1,
+        boxShadow:
+          "0 14px 36px rgba(255,215,0,0.42), 0 0 0 1px rgba(255,215,0,0.45) inset, 0 0 60px rgba(255,215,0,0.32)",
+        transition: "transform 0.25s cubic-bezier(0.16,1,0.3,1), box-shadow 0.25s ease, filter 0.25s ease",
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.transform = "translateY(-2px) scale(1.02)";
+        e.currentTarget.style.boxShadow =
+          "0 22px 56px rgba(255,215,0,0.55), 0 0 0 1px rgba(255,215,0,0.55) inset, 0 0 100px rgba(255,215,0,0.45)";
+        e.currentTarget.style.filter = "brightness(1.06)";
+      }}
+      onMouseLeave={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.transform = "translateY(0) scale(1)";
+        e.currentTarget.style.boxShadow =
+          "0 14px 36px rgba(255,215,0,0.42), 0 0 0 1px rgba(255,215,0,0.45) inset, 0 0 60px rgba(255,215,0,0.32)";
+        e.currentTarget.style.filter = "brightness(1)";
+      }}
+    >
+      {/* Pulsing halo behind the button */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: -12,
+          borderRadius: 22,
+          background:
+            "radial-gradient(ellipse at center, rgba(255,215,0,0.45), rgba(255,215,0,0) 65%)",
+          filter: "blur(14px)",
+          animation: disabled ? "none" : "disSpinPulse 2.4s ease-in-out infinite",
+          pointerEvents: "none",
+          zIndex: -1,
+        }}
+      />
+      <Dice3 size={18} aria-hidden="true" strokeWidth={2.4} />
+      {label}
+    </button>
+  );
+}
+
 export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
   const [decade, setDecade] = useState("any");
   const [genre, setGenre] = useState(null); // null = "Any genre"
@@ -168,36 +233,18 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
     <section
       aria-label="Movie Reel Roulette"
       style={{
-        position: "relative",
         marginBottom: 28,
         padding: 24,
         borderRadius: 18,
-        background: "linear-gradient(180deg, rgba(20,15,4,0.72) 0%, rgba(8,6,2,0.78) 100%)",
-        border: "1.5px solid rgba(255,215,0,0.22)",
+        background: "rgba(8,6,2,0.62)",
+        border: "1px solid rgba(255,215,0,0.10)",
         backdropFilter: "blur(20px) saturate(1.1)",
         WebkitBackdropFilter: "blur(20px) saturate(1.1)",
-        boxShadow: "0 16px 48px rgba(0,0,0,0.45), 0 0 80px rgba(255,215,0,0.06), inset 0 1px 0 rgba(255,215,0,0.08)",
+        boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
       }}
     >
-      {/* Soft gold halo behind heading */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: -16,
-          top: -20,
-          right: -16,
-          height: 140,
-          pointerEvents: "none",
-          background:
-            "radial-gradient(ellipse at 18% 50%, rgba(255,215,0,0.10), transparent 60%)",
-          filter: "blur(6px)",
-          zIndex: 0,
-        }}
-      />
-
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 14, marginBottom: 18 }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 16, marginBottom: 18 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
           <h2
             style={{
               margin: 0,
@@ -207,12 +254,7 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
               fontSize: "clamp(28px, 3.4vw, 38px)",
               lineHeight: 1.05,
               letterSpacing: -0.4,
-              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              color: "transparent",
-              filter: "drop-shadow(0 0 18px rgba(255,215,0,0.22))",
+              color: "#fff",
               paddingBottom: "0.06em",
             }}
           >
@@ -222,12 +264,14 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
             style={{
               margin: "8px 0 0",
               fontFamily: "'Syne', sans-serif",
-              fontSize: 13,
-              color: "rgba(255,255,255,0.62)",
+              fontSize: 14,
+              color: "rgba(255,255,255,0.7)",
               letterSpacing: 0.2,
+              lineHeight: 1.45,
+              maxWidth: 540,
             }}
           >
-            Spin for a random film with Film Glance score 8/10 or higher.
+            Spin the Movie Roulette Wheel to find a high-ranking Film Glance movie.
             {poolSize != null && spinState !== "idle"
               ? ` Spinning from ${poolSize} films.`
               : null}
@@ -239,7 +283,7 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
           options={DECADE_OPTIONS}
           onChange={(v) => setDecade(v ?? "any")}
           placeholder="Any year"
-          width={160}
+          width={150}
         />
         <FilterDropdown
           label="GENRE"
@@ -247,40 +291,18 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
           options={genreOptions}
           onChange={(v) => setGenre(v)}
           placeholder="Any genre"
-          width={180}
+          width={170}
         />
-        <button
-          type="button"
-          onClick={spin}
+        <SpinButton
           disabled={spinState === "loading" || spinState === "spinning"}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "11px 22px",
-            borderRadius: 12,
-            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-            color: "#0a0805",
-            fontFamily: "'Syne', sans-serif",
-            fontWeight: 700,
-            fontSize: 14,
-            letterSpacing: 0.4,
-            border: "none",
-            cursor: spinState === "loading" || spinState === "spinning" ? "wait" : "pointer",
-            opacity: spinState === "loading" || spinState === "spinning" ? 0.7 : 1,
-            boxShadow: "0 10px 28px rgba(255,215,0,0.35)",
-          }}
-        >
-          <Dice3 size={15} aria-hidden="true" />
-          {spinState === "loading" ? "Loading…" : spinState === "spinning" ? "Spinning…" : "Spin"}
-        </button>
+          onClick={spin}
+          label={spinState === "loading" ? "Loading…" : spinState === "spinning" ? "Spinning…" : "Spin"}
+        />
       </div>
 
       {showReels && (
         <div
           style={{
-            position: "relative",
-            zIndex: 1,
             display: "flex",
             justifyContent: "center",
             gap: 14,
@@ -306,16 +328,12 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
       )}
 
       {spinState === "done" && pickedEntry && (
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <RouletteCard entry={pickedEntry} onSpinAgain={spin} />
-        </div>
+        <RouletteCard entry={pickedEntry} onSpinAgain={spin} />
       )}
 
       {spinState === "error" && errorMsg && (
         <div
           style={{
-            position: "relative",
-            zIndex: 1,
             padding: 16,
             borderRadius: 10,
             background: "rgba(255,215,0,0.05)",
@@ -328,6 +346,13 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
           {errorMsg}
         </div>
       )}
+
+      <style jsx global>{`
+        @keyframes disSpinPulse {
+          0%, 100% { opacity: 0.55; transform: scale(0.96); }
+          50%      { opacity: 1;    transform: scale(1.06); }
+        }
+      `}</style>
     </section>
   );
 }
