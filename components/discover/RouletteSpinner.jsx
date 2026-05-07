@@ -254,11 +254,11 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
               fontSize: "clamp(28px, 3.4vw, 38px)",
               lineHeight: 1.05,
               letterSpacing: -0.4,
-              color: "#fff",
+              color: "#FFD700",
               paddingBottom: "0.06em",
             }}
           >
-            Movie Reel Roulette.
+            Movie Reel Roulette
           </h2>
           <p
             style={{

@@ -1,5 +1,45 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (round 4) — v6.4.1 polish: header style + truncation + redundant pill
+
+User reviewed staging preview and reported:
+- **Issue 1**: roulette pool size confusion ("spinning from 98 films") — yes, the roulette pool is the cached movie set with `fg_score >= 8.0` after applying decade + genre filters. With Decade=Any+Genre=Any the pool is ~965; narrower filters drop it. This is **cache-only** (5,532 rows post-dedup), not the universe of films — Film Glance only has fg_scores for movies that have been searched at least once.
+- **Issues 2 + 6**: section headers should match the "True Movie Rating Score" style (italic Playfair solid gold) shown on the result page; italic was overused on body text.
+- **Issue 3**: DiscoverFeatured (TOP PICK card) was missing the synopsis paragraph — added inline within the same card, non-italic.
+- **Issue 4**: Card synopses were truncating mid-sentence at 3-line clamp + italic looked off. Fixed: dropped italic, raised clamp to 5 lines, ensured `text-overflow: ellipsis`, slightly bigger font (12.5 → 13px) and lighter color for readability.
+- **Issue 5**: Release-window pill ("At Home") on every card was redundant when the user is already filtering to At Home. Removed pill from both `DiscoverCard` and `DiscoverFeatured`.
+- **Issue 7**: VPS forum import — **3,195/3,308 boards (96.6%)**, ~8.3h remaining per script ETA, completes mid-day May 8 UTC.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverCard.jsx` | Synopsis: drop italic, 5-line clamp + ellipsis, 13px size, slightly higher contrast (rgba 0.72). Release pill removed. |
+| `components/discover/DiscoverFeatured.jsx` | Synopsis paragraph added below genre, non-italic 15px Syne. Release pill removed. |
+| `components/discover/RouletteSpinner.jsx` | Section heading "Movie Reel Roulette" — color `#fff` → `#FFD700` to match image-21 reference; trailing period dropped (cleaner, matches image). |
+
+### Italics audit (per user issue 6)
+
+Section headers and stylized titles still use italic Playfair (intentional — that's the brand pattern shown in image 21 and across `/boxoffice`):
+- Hero h1 subtitle "Films Worth Your Evening." — italic gold-gradient (mirrors /boxoffice)
+- Card titles — italic Playfair (mirrors /boxoffice)
+- "Movie Reel Roulette" h2 — italic Playfair gold (image-21 pattern)
+- FG Score numbers — italic Playfair gold (mirrors /boxoffice StandardStat)
+
+Body text and meta lines are now all upright:
+- Card synopsis — non-italic
+- Featured synopsis — non-italic
+- Director · Year line — non-italic
+- Genre rows — non-italic (mono caps)
+- Stats labels — non-italic
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (4 added warnings are JSX no-img-element warnings on the new synopsis area; benign)
+
+---
+
 ## Session: May 7, 2026 (round 3) — v6.4.1 polish round (8 more user fixes + sophistication pass)
 
 PR #65 (v6.3.2 logo hotfix) merged to production. User reviewed staging preview for PR #64 (v6.4.0 + v6.4.1) and reported 8 more issues + a general "make it sophisticated/upscale" mandate.

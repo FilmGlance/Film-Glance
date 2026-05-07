@@ -206,7 +206,7 @@ export default function DiscoverFeatured({ entry, releaseWindow, favorited = fal
                 TOP PICK
               </span>
             </div>
-            {releaseWindow && <ReleasePill window={releaseWindow} />}
+            {/* Release pill removed v6.4.1 round 4 — redundant with filter. */}
           </div>
 
           {/* Title + meta */}
@@ -253,6 +253,23 @@ export default function DiscoverFeatured({ entry, releaseWindow, favorited = fal
               >
                 {entry.genre}
               </div>
+            )}
+            {/* Synopsis — added v6.4.1 round 4. Non-italic, fits inline
+                in the same card as the rest of the metadata. */}
+            {entry.overview && (
+              <p
+                style={{
+                  margin: "14px 0 0",
+                  fontFamily: "'Syne', sans-serif",
+                  fontSize: 15,
+                  lineHeight: 1.55,
+                  color: "rgba(255,255,255,0.78)",
+                  letterSpacing: 0.05,
+                  maxWidth: 560,
+                }}
+              >
+                {entry.overview}
+              </p>
             )}
           </div>
 

@@ -300,21 +300,24 @@ export default function DiscoverCard({
             </div>
           )}
 
-          {/* Synopsis — 2-line clamp italic, fills the visual middle of the card */}
+          {/* Synopsis — 5-line clamp, non-italic body. v6.4.1 round-4 polish:
+              user found italic + 3-line clamp truncated mid-sentence on
+              cards like Schindler's List ("his Jewish workfor..."). Dropped
+              italic, raised clamp to 5, added ellipsis. */}
           {entry.overview && (
             <p
               style={{
                 margin: 0,
                 fontFamily: "'Syne', sans-serif",
-                fontStyle: "italic",
-                fontSize: 12.5,
-                lineHeight: 1.5,
-                color: "rgba(255,255,255,0.6)",
-                letterSpacing: 0.1,
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "rgba(255,255,255,0.72)",
+                letterSpacing: 0.05,
                 display: "-webkit-box",
-                WebkitLineClamp: 3,
+                WebkitLineClamp: 5,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
               {entry.overview}
@@ -343,12 +346,8 @@ export default function DiscoverCard({
             />
           </div>
 
-          {/* Release pill */}
-          {releaseWindow && (
-            <div style={{ display: "flex", marginTop: 4 }}>
-              <ReleasePill window={releaseWindow} />
-            </div>
-          )}
+          {/* Release pill removed v6.4.1 round 4 — was redundant with the
+              In Theaters / At Home filter the user already chose. */}
         </div>
       </article>
     </Link>
