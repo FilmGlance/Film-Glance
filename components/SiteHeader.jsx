@@ -78,7 +78,7 @@ export default function SiteHeader({ active = null }) {
       }}
     >
       <Link
-        href="/preview-landing"
+        href="/"
         style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none", color: "#fff" }}
       >
         <div
