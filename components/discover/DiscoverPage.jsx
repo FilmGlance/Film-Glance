@@ -186,15 +186,17 @@ export default function DiscoverPage() {
           onChange={onFilterChange}
         />
 
-        {/* Result count line */}
+        {/* Result count line — adaptive wording per user spec:
+            "The Top 100 Film Glance [Genre] Films from [Year]" with
+            either filter falling out gracefully when set to "Any". */}
         <div
           style={{
             margin: "0 0 18px",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11.5,
-            letterSpacing: 1.4,
-            textTransform: "uppercase",
-            color: "rgba(255, 215, 0, 0.62)",
+            fontFamily: "'Syne', sans-serif",
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            color: "rgba(255, 255, 255, 0.78)",
           }}
         >
           {loading
@@ -203,9 +205,13 @@ export default function DiscoverPage() {
               ? "Error — try refreshing"
               : entries.length === 0
                 ? "No films match — try clearing a filter"
-                : entries.length < 100
-                  ? `Showing ${entries.length} of 100 — your filters narrowed the pool`
-                  : `100 films · ranked by Film Glance score`}
+                : (() => {
+                    const n = entries.length;
+                    const top = n === 100 ? "The Top 100" : `Top ${n}`;
+                    const genrePart = genre ? ` ${genre}` : "";
+                    const yearPart = year ? ` from ${year}` : "";
+                    return `${top} Film Glance${genrePart} Films${yearPart}`;
+                  })()}
         </div>
 
         {heroEntry && (

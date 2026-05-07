@@ -28,9 +28,9 @@ export default function RouletteCard({ entry, onSpinAgain }) {
         gap: 26,
         padding: 24,
         borderRadius: 18,
-        background: "linear-gradient(180deg, rgba(20,15,4,0.86) 0%, rgba(8,6,2,0.92) 100%)",
-        border: "1.5px solid rgba(255,215,0,0.40)",
-        boxShadow: "0 28px 80px rgba(0,0,0,0.6), 0 0 100px rgba(255,215,0,0.16)",
+        background: "rgba(8,6,2,0.62)",
+        border: "1px solid rgba(255,215,0,0.16)",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
         animation: "disResultIn 0.6s cubic-bezier(0.16,1,0.3,1) both",
       }}
     >
@@ -89,7 +89,6 @@ export default function RouletteCard({ entry, onSpinAgain }) {
           style={{
             margin: 0,
             fontFamily: "'Playfair Display', serif",
-            fontStyle: "italic",
             fontWeight: 700,
             fontSize: "clamp(28px, 3.5vw, 44px)",
             lineHeight: 1.05,
@@ -163,16 +162,10 @@ export default function RouletteCard({ entry, onSpinAgain }) {
           <span
             style={{
               fontFamily: "'Playfair Display', serif",
-              fontStyle: "italic",
               fontWeight: 700,
               fontSize: "clamp(48px, 6vw, 72px)",
               lineHeight: 1,
-              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              color: "transparent",
-              filter: "drop-shadow(0 0 22px rgba(255,215,0,0.5)) drop-shadow(0 0 60px rgba(255,215,0,0.18))",
+              color: "#FFD700",
               letterSpacing: -0.6,
               paddingBottom: "0.06em",
             }}

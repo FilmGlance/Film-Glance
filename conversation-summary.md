@@ -1,5 +1,27 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (round 5) — v6.4.1 polish: count-line wording + roulette-card de-yellowing
+
+User flagged 4 issues:
+- **#1** asked whether the roulette pool can extend beyond the cache. Architectural question (no code change this round) — answered in chat: yes it's possible via TMDB Discover API, but matching our fg_score (which aggregates 9 sources via `calcScore`) requires the full Claude+TMDB+ratings pipeline per movie (~5-10s + ~$0.01 per call). Not feasible inline during a 4.2s spin animation. Two practical paths offered: (a) trust TMDB `vote_average` as a proxy for un-cached movies (different scoring model, fast/free, but mixed semantics), or (b) keep cache-only roulette but grow the cache via background `seed/discover` cron — pool widens passively over time. User can pick a path next round if they want.
+- **#2 yellow overuse on RouletteCard**: dialed back. `border` `0.40` → `0.16`, dropped the `0 0 100px rgba(255,215,0,0.16)` halo box-shadow, simpler `rgba(8,6,2,0.62)` background matching DiscoverCard, score number lost its gold-gradient drop-shadow filter (now solid `#FFD700` Playfair without italic).
+- **#3 count-line wording**: "100 FILMS · RANKED BY FILM GLANCE SCORE" → adaptive "The Top 100 Film Glance [Genre] Films from [Year]". Either or both filters fall out gracefully when set to "Any" (e.g. `genre=null` & `year=null` → "The Top 100 Film Glance Films"; `genre="Action"` & `year=2024` → "The Top 100 Film Glance Action Films from 2024"). Format also switched from mono caps to Syne 14px so it reads as a sentence, not a label.
+- **#4 italics still excessive on RouletteCard**: dropped `fontStyle: "italic"` from both the title and the score number (the two prominent italics in image 25). DiscoverCard titles still italic to match /boxoffice convention; if the user wants those non-italic too, easy follow-up.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverPage.jsx` | Count line restyled — Syne 14px sentence-case, adaptive Genre/Year wording |
+| `components/discover/RouletteCard.jsx` | Toned down border + box-shadow; simpler bg; score lost italic + drop-shadow; title lost italic |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings
+
+---
+
 ## Session: May 7, 2026 (round 4) — v6.4.1 polish: header style + truncation + redundant pill
 
 User reviewed staging preview and reported:
