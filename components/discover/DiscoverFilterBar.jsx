@@ -52,7 +52,7 @@ export default function DiscoverFilterBar({
     { value: null, label: "All genres", italic: true },
     ...((availableGenres || []).map((g) => ({
       value: g.genre,
-      label: `${g.genre} · ${g.n}`,
+      label: g.genre,
     }))),
   ];
 
@@ -60,7 +60,7 @@ export default function DiscoverFilterBar({
     { value: null, label: "Any year", italic: true },
     ...((availableYears || []).map((y) => ({
       value: y.year,
-      label: `${y.year} · ${y.n}`,
+      label: String(y.year),
     }))),
   ];
 

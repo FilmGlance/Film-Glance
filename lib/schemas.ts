@@ -50,11 +50,12 @@ export const DiscoverQuerySchema = z.object({
 
 export type DiscoverQuery = z.infer<typeof DiscoverQuerySchema>;
 
-// /api/discover/random — Movie Reel Roulette spin (v6.4.0).
+// /api/discover/random — Movie Reel Roulette spin (v6.4.0; genre added v6.4.1).
 const DECADE_LABELS = ["any", "2020s", "2010s", "2000s", "1990s", "1980s", "1970s", "pre-1970"] as const;
 export const DiscoverRandomQuerySchema = z.object({
   decade: z.enum(DECADE_LABELS).default("any"),
   min_score: z.coerce.number().gte(0).lte(10).optional(),
+  genre: z.string().trim().min(1).max(40).optional(),
 });
 
 export type DiscoverRandomQuery = z.infer<typeof DiscoverRandomQuerySchema>;

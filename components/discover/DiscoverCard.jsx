@@ -2,12 +2,18 @@
 
 // DiscoverCard — single movie card on /discover.
 //
-// Visual: 2:3 poster top, FG score badge bottom-left of poster, heart top-
-// right, body has italic Playfair title (2-line clamp), director · year,
-// genre chip line, release-window pill at bottom.
+// v6.4.1 rewrite: mirrors components/box-office/PosterCard.jsx StandardCard
+// structure (per user feedback "format the movie suggestions in the same
+// formatting as the Box Office page"). Adaptations:
+//   • Where box-office shows gross → big gold-gradient italic Playfair
+//     FG score with "/10 FILM GLANCE SCORE" subtitle
+//   • Where box-office shows Theaters / Per-theater / FG Score 3-stat strip
+//     → Year / Genre / Sources (the relevant Discover dimensions)
+//   • No rank badge (Discover ranking shifts per filter)
+//   • Adds release-window pill (In Theaters / At Home) at the bottom
 //
-// Click → /?q=<title>; landing page's URL hook auto-fires doSearch on mount
-// (existing behavior in components/film-glance.jsx:1428-1432).
+// Click → /?q=<title>; landing page's URL hook auto-fires doSearch on mount.
+// Heart button stop-propagates the click so the card's <Link> doesn't fire.
 
 import React from "react";
 import Link from "next/link";
@@ -66,62 +72,43 @@ function FavoriteButton({ favorited, onToggle, ariaLabel }) {
   );
 }
 
-function ScoreBadge({ score }) {
-  const display = score != null ? Number(score).toFixed(1) : "—";
+function StandardStat({ label, value, isScore, scoreLoaded, monoValue }) {
   return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 10,
-        left: 10,
-        padding: "4px 11px",
-        borderRadius: 10,
-        background: "rgba(8, 6, 2, 0.86)",
-        backdropFilter: "blur(12px) saturate(1.1)",
-        WebkitBackdropFilter: "blur(12px) saturate(1.1)",
-        border: "1px solid rgba(255, 215, 0, 0.40)",
-        boxShadow: "0 4px 14px rgba(0,0,0,0.55), 0 0 18px rgba(255,215,0,0.16)",
-        userSelect: "none",
-        pointerEvents: "none",
-        lineHeight: 1,
-      }}
-    >
-      <span
+    <div style={{ minWidth: 0 }}>
+      <div
         style={{
-          fontFamily: "'Playfair Display', serif",
-          fontStyle: "italic",
+          fontFamily: monoValue ? "'JetBrains Mono', monospace" : (isScore ? "'Playfair Display', serif" : "'Syne', sans-serif"),
           fontWeight: 700,
-          fontSize: 22,
-          background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          color: "transparent",
-          filter: "drop-shadow(0 0 8px rgba(255,215,0,0.42))",
-          letterSpacing: -0.4,
-          paddingBottom: "0.06em",
-          display: "inline-block",
+          fontSize: 18,
+          lineHeight: 1,
+          color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
+          letterSpacing: -0.2,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
       >
-        {display}
-      </span>
-      <span
+        {value}
+      </div>
+      <div
         style={{
-          marginLeft: 4,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 10,
-          color: "rgba(255,215,0,0.6)",
+          marginTop: 5,
+          fontFamily: "'Syne', sans-serif",
+          fontSize: 11,
           letterSpacing: 1.2,
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.55)",
+          fontWeight: 600,
         }}
       >
-        /10
-      </span>
+        {label}
+      </div>
     </div>
   );
 }
 
-function ReleasePill({ window }) {
-  const isTheaters = window === "in_theaters";
+function ReleasePill({ window: rw }) {
+  const isTheaters = rw === "in_theaters";
   const Icon = isTheaters ? FilmIcon : Tv;
   const label = isTheaters ? "In Theaters" : "At Home";
   return (
@@ -147,6 +134,12 @@ function ReleasePill({ window }) {
   );
 }
 
+function firstGenre(g) {
+  if (!g) return null;
+  const i = g.indexOf(" · ");
+  return i > 0 ? g.slice(0, i) : g;
+}
+
 export default function DiscoverCard({
   entry,
   staggerDelayMs = 0,
@@ -156,6 +149,9 @@ export default function DiscoverCard({
 }) {
   if (!entry) return null;
   const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
+  const score = entry.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
+  const sourceCount = typeof entry.source_count === "number" ? entry.source_count : null;
+  const primaryGenre = firstGenre(entry.genre);
 
   return (
     <Link
@@ -192,7 +188,7 @@ export default function DiscoverCard({
           e.currentTarget.style.boxShadow = "0 6px 22px rgba(0,0,0,0.4)";
         }}
       >
-        {/* Poster */}
+        {/* Poster — heart only (no rank badge for Discover; rank shifts per filter) */}
         <div
           style={{
             position: "relative",
@@ -223,9 +219,7 @@ export default function DiscoverCard({
             </div>
           )}
 
-          <ScoreBadge score={entry.fg_score} />
-
-          {/* Bottom-of-poster gradient for legibility */}
+          {/* Bottom-of-poster legibility gradient */}
           <div
             style={{
               position: "absolute", left: 0, right: 0, bottom: 0,
@@ -248,13 +242,18 @@ export default function DiscoverCard({
           )}
         </div>
 
-        {/* Body */}
+        {/* Body — same fixed structure as box-office StandardCard */}
         <div
           style={{
-            display: "flex", flexDirection: "column", gap: 8, padding: 14,
-            flex: 1, minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            padding: 14,
+            flex: 1,
+            minWidth: 0,
           }}
         >
+          {/* Title — italic Playfair, 2-line clamp */}
           <h3
             style={{
               margin: 0,
@@ -275,11 +274,13 @@ export default function DiscoverCard({
             {entry.title}
           </h3>
 
+          {/* Director · year — single line clipped */}
           <div
             style={{
               fontFamily: "'Syne', sans-serif",
-              fontSize: 13,
-              color: "rgba(255,255,255,0.7)",
+              fontSize: 13.5,
+              color: "rgba(255,255,255,0.72)",
+              letterSpacing: 0.2,
               lineHeight: 1.35,
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -287,31 +288,73 @@ export default function DiscoverCard({
               minHeight: "1.35em",
             }}
           >
-            {entry.director ? <span>{entry.director}</span> : null}
+            {entry.director ? <span>Director: {entry.director}</span> : null}
             {entry.director && entry.year ? <span> · </span> : null}
             {entry.year ? <span>{entry.year}</span> : null}
           </div>
 
-          {entry.genre && (
-            <div
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10.5,
-                color: "rgba(255, 215, 0, 0.55)",
-                letterSpacing: 0.6,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {entry.genre}
-            </div>
-          )}
-
+          {/* Spacer pushes score + stats to bottom */}
           <div style={{ flex: 1, minHeight: 4 }} />
 
+          {/* FG score — big gold-gradient (where box-office has gross) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontStyle: "italic",
+                fontWeight: 700,
+                fontSize: 38,
+                lineHeight: 1,
+                background: score
+                  ? "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)"
+                  : "rgba(255,255,255,0.3)",
+                WebkitBackgroundClip: score ? "text" : "border-box",
+                backgroundClip: score ? "text" : "border-box",
+                WebkitTextFillColor: score ? "transparent" : "rgba(255,255,255,0.3)",
+                color: score ? "transparent" : "rgba(255,255,255,0.3)",
+                filter: score ? "drop-shadow(0 0 12px rgba(255,215,0,0.42))" : "none",
+                letterSpacing: -0.6,
+                paddingBottom: "0.06em",
+              }}
+            >
+              {score ?? "—"}
+            </span>
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10,
+                color: "rgba(255,215,0,0.6)",
+                letterSpacing: 1.2,
+              }}
+            >
+              /10 FILM GLANCE SCORE
+            </span>
+          </div>
+
+          {/* 3-stat strip */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 8,
+              paddingTop: 8,
+              borderTop: "1px solid rgba(255,215,0,0.10)",
+            }}
+          >
+            <StandardStat label="Year" value={entry.year ?? "—"} monoValue />
+            <StandardStat label="Genre" value={primaryGenre ?? "—"} />
+            <StandardStat label="Sources" value={sourceCount ?? "—"} monoValue />
+          </div>
+
+          {/* Release-window pill at the very bottom */}
           {releaseWindow && (
-            <div style={{ display: "flex" }}>
+            <div style={{ display: "flex", marginTop: 4 }}>
               <ReleasePill window={releaseWindow} />
             </div>
           )}

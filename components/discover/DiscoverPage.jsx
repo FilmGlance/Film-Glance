@@ -24,7 +24,6 @@ import DiscoverHero from "./DiscoverHero";
 import DiscoverFilterBar from "./DiscoverFilterBar";
 import DiscoverGrid from "./DiscoverGrid";
 import DiscoverFeatured from "./DiscoverFeatured";
-import RecentlyAddedRail from "./RecentlyAddedRail";
 import RouletteSpinner from "./RouletteSpinner";
 import DecadeBrowseRail from "./DecadeBrowseRail";
 
@@ -172,9 +171,10 @@ export default function DiscoverPage() {
       >
         <DiscoverHero />
 
-        <RecentlyAddedRail />
-
-        <RouletteSpinner posterPool={posterPool} />
+        <RouletteSpinner
+          posterPool={posterPool}
+          availableGenres={data?.available_genres || []}
+        />
 
         <DiscoverFilterBar
           releaseWindow={releaseWindow}

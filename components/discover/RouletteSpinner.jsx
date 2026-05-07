@@ -1,12 +1,15 @@
 "use client";
 
-// RouletteSpinner — Movie Reel Roulette. Decade picker + Spin button.
-// On click: animate three vertically-scrolling poster reels (slot machine
-// style), staggered 3.6s/3.9s/4.2s decel cubic-bezier(0.16,1,0.3,1).
-// After the third reel stops, fade in the RouletteCard with the actual
-// chosen movie.
+// RouletteSpinner — Movie Reel Roulette. Decade + Genre pickers (both
+// default "Any") + Spin button. On click: animate three vertically-
+// scrolling poster reels (slot machine), staggered 3.6s/3.9s/4.2s decel
+// cubic-bezier(0.16,1,0.3,1). After the third reel stops, fade in the
+// RouletteCard with the actual chosen movie.
 //
 // Mobile (<520px): single reel, full-width — same rhythm, less crowding.
+//
+// v6.4.1: added Genre dropdown alongside Decade. Visual polish — italic
+// Playfair gold-gradient section title, soft gold halo behind heading.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Dice3 } from "lucide-react";
@@ -16,7 +19,7 @@ import RouletteCard from "./RouletteCard";
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w300";
 
 const DECADE_OPTIONS = [
-  { value: "any",      label: "Any year" },
+  { value: "any",      label: "Any year", italic: true },
   { value: "2020s",    label: "2020s" },
   { value: "2010s",    label: "2010s" },
   { value: "2000s",    label: "2000s" },
@@ -40,7 +43,6 @@ function pickRandomPosters(pool, count) {
 }
 
 function Reel({ posters, finalPoster, durationSec, animKey, isMobile, hidden }) {
-  // 23 random + 1 final at index 23 — total 24 frames.
   const frames = useMemo(() => [...posters.slice(0, 23), finalPoster], [posters, finalPoster]);
   const finalY = -23 * REEL_HEIGHT;
 
@@ -96,15 +98,15 @@ function Reel({ posters, finalPoster, durationSec, animKey, isMobile, hidden }) 
           </div>
         ))}
       </div>
-      {/* Top + bottom gradient masks for slot-machine "window" feel */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 60, background: "linear-gradient(180deg, rgba(8,6,2,0.95) 0%, rgba(8,6,2,0) 100%)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60, background: "linear-gradient(0deg, rgba(8,6,2,0.95) 0%, rgba(8,6,2,0) 100%)", pointerEvents: "none" }} />
     </div>
   );
 }
 
-export default function RouletteSpinner({ posterPool }) {
+export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
   const [decade, setDecade] = useState("any");
+  const [genre, setGenre] = useState(null); // null = "Any genre"
   const [spinState, setSpinState] = useState("idle"); // idle | loading | spinning | done | error
   const [animKey, setAnimKey] = useState(0);
   const [poolSize, setPoolSize] = useState(null);
@@ -122,15 +124,24 @@ export default function RouletteSpinner({ posterPool }) {
     return () => mql.removeEventListener?.("change", upd);
   }, []);
 
+  const genreOptions = useMemo(() => [
+    { value: null, label: "Any genre", italic: true },
+    ...((availableGenres || []).map((g) => ({ value: g.genre, label: g.genre }))),
+  ], [availableGenres]);
+
   async function spin() {
     if (spinState === "spinning" || spinState === "loading") return;
     setSpinState("loading");
     setPickedEntry(null);
     setErrorMsg(null);
     try {
-      const r = await fetch(`/api/discover/random?decade=${encodeURIComponent(decade)}`);
+      const params = new URLSearchParams({ decade });
+      if (genre) params.set("genre", genre);
+      const r = await fetch(`/api/discover/random?${params.toString()}`);
       if (r.status === 404) {
-        setErrorMsg("No movies match this decade. Try another.");
+        setErrorMsg(genre
+          ? `No ${genre.toLowerCase()} films match this decade. Try another combo.`
+          : "No movies match this decade. Try another.");
         setSpinState("error");
         return;
       }
@@ -140,7 +151,6 @@ export default function RouletteSpinner({ posterPool }) {
       setFinalPoster(d.entry?.poster_path || null);
       setAnimKey((k) => k + 1);
       setSpinState("spinning");
-      // Stop after the third reel finishes
       setTimeout(() => {
         setPickedEntry(d.entry);
         setSpinState("done");
@@ -158,33 +168,59 @@ export default function RouletteSpinner({ posterPool }) {
     <section
       aria-label="Movie Reel Roulette"
       style={{
+        position: "relative",
         marginBottom: 28,
-        padding: 22,
-        borderRadius: 16,
-        background: "rgba(8,6,2,0.55)",
-        border: "1px solid rgba(255,215,0,0.16)",
+        padding: 24,
+        borderRadius: 18,
+        background: "linear-gradient(180deg, rgba(20,15,4,0.72) 0%, rgba(8,6,2,0.78) 100%)",
+        border: "1.5px solid rgba(255,215,0,0.22)",
         backdropFilter: "blur(20px) saturate(1.1)",
         WebkitBackdropFilter: "blur(20px) saturate(1.1)",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.45), 0 0 80px rgba(255,215,0,0.06), inset 0 1px 0 rgba(255,215,0,0.08)",
       }}
     >
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 14, marginBottom: 18 }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
+      {/* Soft gold halo behind heading */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: -16,
+          top: -20,
+          right: -16,
+          height: 140,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(ellipse at 18% 50%, rgba(255,215,0,0.10), transparent 60%)",
+          filter: "blur(6px)",
+          zIndex: 0,
+        }}
+      />
+
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 14, marginBottom: 18 }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
           <h2
             style={{
               margin: 0,
               fontFamily: "'Playfair Display', serif",
               fontStyle: "italic",
               fontWeight: 700,
-              fontSize: 26,
-              color: "#fff",
-              letterSpacing: -0.3,
+              fontSize: "clamp(28px, 3.4vw, 38px)",
+              lineHeight: 1.05,
+              letterSpacing: -0.4,
+              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              color: "transparent",
+              filter: "drop-shadow(0 0 18px rgba(255,215,0,0.22))",
+              paddingBottom: "0.06em",
             }}
           >
-            Movie Reel Roulette
+            Movie Reel Roulette.
           </h2>
           <p
             style={{
-              margin: "4px 0 0",
+              margin: "8px 0 0",
               fontFamily: "'Syne', sans-serif",
               fontSize: 13,
               color: "rgba(255,255,255,0.62)",
@@ -201,8 +237,16 @@ export default function RouletteSpinner({ posterPool }) {
           label="DECADE"
           value={decade}
           options={DECADE_OPTIONS}
-          onChange={(v) => setDecade(v)}
+          onChange={(v) => setDecade(v ?? "any")}
           placeholder="Any year"
+          width={160}
+        />
+        <FilterDropdown
+          label="GENRE"
+          value={genre}
+          options={genreOptions}
+          onChange={(v) => setGenre(v)}
+          placeholder="Any genre"
           width={180}
         />
         <button
@@ -232,10 +276,11 @@ export default function RouletteSpinner({ posterPool }) {
         </button>
       </div>
 
-      {/* Reels — visible only during spinning */}
       {showReels && (
         <div
           style={{
+            position: "relative",
+            zIndex: 1,
             display: "flex",
             justifyContent: "center",
             gap: 14,
@@ -261,12 +306,16 @@ export default function RouletteSpinner({ posterPool }) {
       )}
 
       {spinState === "done" && pickedEntry && (
-        <RouletteCard entry={pickedEntry} onSpinAgain={spin} />
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <RouletteCard entry={pickedEntry} onSpinAgain={spin} />
+        </div>
       )}
 
       {spinState === "error" && errorMsg && (
         <div
           style={{
+            position: "relative",
+            zIndex: 1,
             padding: 16,
             borderRadius: 10,
             background: "rgba(255,215,0,0.05)",

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const parsed = DiscoverRandomQuerySchema.safeParse({
     decade: sp.get("decade") ?? undefined,
     min_score: sp.get("min_score") ?? undefined,
+    genre: sp.get("genre") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json(
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
-  const { decade, min_score } = parsed.data;
+  const { decade, min_score, genre } = parsed.data;
   const { start, end } = decadeRange(decade);
   const minScore = min_score ?? 8.0;
 
@@ -35,11 +36,13 @@ export async function GET(req: NextRequest) {
       p_decade_start: start,
       p_decade_end: end,
       p_min_score: minScore,
+      p_genre: genre ?? null,
     }),
     supabaseAnon().rpc("discover_random", {
       p_decade_start: start,
       p_decade_end: end,
       p_min_score: minScore,
+      p_genre: genre ?? null,
     }),
   ]);
 
@@ -63,6 +66,7 @@ export async function GET(req: NextRequest) {
     entry,
     pool_size,
     decade,
+    genre: genre ?? null,
     min_score: minScore,
     spun_at: new Date().toISOString(),
   });

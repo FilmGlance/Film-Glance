@@ -1,5 +1,79 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (round 2) — v6.3.2 production hotfix + v6.4.1 fix-forward
+
+User reviewed the v6.4.0 Vercel preview and reported 9 issues, including a critical production bug. Two PRs ship from this session:
+
+### v6.3.2 hotfix (PR #65, off main, NOT staging)
+
+User issue #9 — clicking the Film Glance logo on filmglance.com from any non-landing page (e.g. /boxoffice) routed to `/preview-landing` instead of `/`. Production was on v6.3.1 (pre-fix-forward), so this bug was live. Fixed `href="/preview-landing"` → `href="/"` in three places: `SiteHeader.jsx:81`, `film-glance.jsx:3059`, `preview-landing.jsx:702`. Branched off main (skipping staging, per user approval) so v6.4.0 work continues uninterrupted on staging while prod gets a same-day fix.
+
+### v6.4.1 fix-forward (rides PR #64 on staging)
+
+Eight issues addressed; bundled into one commit on top of v6.4.0.
+
+#### Migration 019 — cache dedup + RPC v2 (applied to prod)
+
+Pre-flight diagnostic: `movie_cache` had **165 (title, year) groups with 338 total dup rows**. Examples — "The Matrix" 1999 had 4 keys (`matrix`/`matrx`/`the matrix`/`the matrx`), "Casino" 1995 had 3 (typo'd test queries cached as separate rows). Same-title rows triggered the search route's ambiguity-picker on click → DYM page never resolved (issue 5).
+
+Hard-deleted 173 dup rows. Tiebreak: most rating sources, then highest hit_count, then earliest cached_at. Cache now: **5,532 rows, 0 dup groups**. (Some "dup groups" had >2 rows; total deleted = 338 - 165 = 173.)
+
+Same migration: dropped + recreated discover_movies, discover_random, discover_random_pool_size, discover_recent with new return shape (added `overview` field), made discover_random / discover_random_pool_size accept a `p_genre TEXT` parameter (issue 3 — Roulette genre filter). Initial DISTINCT ON attempt broke the fg_score sort (forced alphabetical title order); reverted since cache is now clean.
+
+#### Issue 1 — Title style matches /boxoffice
+`DiscoverHero.jsx` rewritten: two-line italic Playfair, white "Discover." + gold-gradient italic "Films Worth Your Evening." subtitle, left-aligned, soft gold halo. Mirrors `components/box-office/PageHero.jsx` exactly.
+
+#### Issue 2 — Recently Added rail removed
+Dropped the import + render in `DiscoverPage.jsx`. The `RecentlyAddedRail.jsx` component file stays in tree (orphaned, harmless); `/api/discover/recent` endpoint also stays since it's behind a route.
+
+#### Issue 3 — Roulette: Genre dropdown alongside Decade
+Added Genre dropdown to `RouletteSpinner.jsx` (default "Any genre"). Passes `genre` query param to `/api/discover/random`. Both `discover_random` and `discover_random_pool_size` RPCs accept `p_genre TEXT DEFAULT NULL` and apply `data->>'genre' ILIKE '%' || p_genre || '%'` filter. Verified live: `discover_random(2020, 2029, 8.0, 'Romance')` returns "The Worst Person in the World" 2021 (pool size 7).
+
+#### Issue 4 — Roulette font/colour + result polish
+- Section header now italic Playfair gold-gradient with soft halo behind it (was white)
+- Section background upgraded to gradient + warmer border + inset highlight (matches box-office featured-card styling)
+- `RouletteCard.jsx`: explicit "Director:" label before the director name; new synopsis paragraph below genre using `entry.overview` from the RPC; "/10 FILM GLANCE SCORE" label moved beside the score number; Spin Again button restyled with gold border
+
+#### Issue 5 + 7 — Click-to-DYM bug + duplicate cards
+Both resolved by migration 019's cache dedup. With one row per (title, year), search route's ambiguity-picker no longer fires on click; cards in grid no longer duplicate.
+
+#### Issue 6 — Drop count suffix from dropdowns
+`DiscoverFilterBar.jsx`: changed `${g.genre} · ${g.n}` → `g.genre`, same for years.
+
+#### Issue 8 — Card formatting matches /boxoffice
+`DiscoverCard.jsx` rewritten to mirror `components/box-office/PosterCard.jsx`'s StandardCard structure:
+- Same poster aspect ratio + heart top-right + bottom legibility gradient
+- Same italic Playfair 2-line clamped title
+- Same "Director: NAME · YEAR" line
+- **Big gold-gradient italic Playfair FG score** (where box-office had gross), with "/10 FILM GLANCE SCORE" label
+- 3-stat strip: Year · Genre (primary genre) · Sources (count)
+- Release-window pill (In Theaters / At Home) at the bottom
+- No rank badge (rank shifts per filter combo, doesn't apply here)
+
+#### Files modified this slice
+
+| File | Change |
+|---|---|
+| `sql/migrations/019_dedup_cache_and_discover_v2.sql` | NEW (applied via Mgmt API) |
+| `lib/schemas.ts` | DiscoverRandomQuerySchema + `genre` |
+| `app/api/discover/random/route.ts` | Pass genre to RPC; include in response |
+| `components/discover/DiscoverHero.jsx` | Rewrite to mirror PageHero |
+| `components/discover/DiscoverPage.jsx` | Drop RecentlyAddedRail; pass availableGenres to RouletteSpinner |
+| `components/discover/DiscoverFilterBar.jsx` | Drop count suffix from genre + year labels |
+| `components/discover/DiscoverCard.jsx` | Rewrite to mirror box-office StandardCard |
+| `components/discover/RouletteSpinner.jsx` | Genre dropdown + visual polish (gold-gradient header, halo) |
+| `components/discover/RouletteCard.jsx` | Director: label + synopsis paragraph |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings (no regression)
+- Migration 019 verified live: anon `discover_movies('at_home')` returns 100 rows top by fg_score (Avatar Fire and Ash 10.0, Godfather 9.2, 12 Angry Men 9.2…)
+- `discover_random(2020, 2029, 8.0, 'Romance')` returns valid 2020s romance ≥8.0
+- 0 duplicate (title, year) groups remain
+
+---
+
 ## Session: May 7, 2026 (early AM) — v6.4.0 fix-forward (still pre-merge)
 
 User pulled up the v6.4.0 Vercel preview and reported three serious issues, suspected something had been pushed to production. **Production safety verified live**: `origin/main` is at `591e4e1` = PR #63 = v6.3.1 (audit Phase C complete). PR #64 (v6.4.0) is OPEN on `staging`, never merged. The URL the user saw — `film-glance-gm3yqthmc-rs-projects-c0025ef0.vercel.app/preview-landing` — was a Vercel preview deployment auto-generated for PR #64 (note `vercel.app` host, not `filmglance.com`). **filmglance.com production is unaffected.** No revert needed; the fix-forward goes onto the same `staging` branch which feeds PR #64.

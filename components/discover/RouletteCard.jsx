@@ -1,7 +1,11 @@
 "use client";
 
 // RouletteCard — result card after a Roulette spin completes. Hero variant
-// of DiscoverCard with "🎬 Roulette pick" badge + larger Watch It CTA.
+// of DiscoverCard with "ROULETTE PICK" badge + Director label + synopsis +
+// "Watch It" CTA + Spin Again.
+//
+// v6.4.1: added Director: label + synopsis paragraph (uses `entry.overview`
+// from the discover_random RPC).
 
 import React from "react";
 import Link from "next/link";
@@ -20,9 +24,9 @@ export default function RouletteCard({ entry, onSpinAgain }) {
       style={{
         position: "relative",
         display: "grid",
-        gridTemplateColumns: "minmax(0, 220px) minmax(0, 1fr)",
-        gap: 24,
-        padding: 22,
+        gridTemplateColumns: "minmax(0, 240px) minmax(0, 1fr)",
+        gap: 26,
+        padding: 24,
         borderRadius: 18,
         background: "linear-gradient(180deg, rgba(20,15,4,0.86) 0%, rgba(8,6,2,0.92) 100%)",
         border: "1.5px solid rgba(255,215,0,0.40)",
@@ -60,102 +64,130 @@ export default function RouletteCard({ entry, onSpinAgain }) {
       </div>
 
       {/* Right column */}
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 14, minWidth: 0 }}>
-        <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            alignSelf: "flex-start",
+            padding: "5px 12px",
+            borderRadius: 999,
+            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+            color: "#0a0805",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: 1.4,
+          }}
+        >
+          <Sparkles size={12} aria-hidden="true" />
+          ROULETTE PICK
+        </div>
+
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: "'Playfair Display', serif",
+            fontStyle: "italic",
+            fontWeight: 700,
+            fontSize: "clamp(28px, 3.5vw, 44px)",
+            lineHeight: 1.05,
+            color: "#fff",
+            wordBreak: "break-word",
+            letterSpacing: -0.4,
+          }}
+        >
+          {entry.title}
+        </h2>
+
+        {/* Director · year — explicit "Director:" label per user feedback */}
+        <div
+          style={{
+            fontFamily: "'Syne', sans-serif",
+            fontSize: 14,
+            color: "rgba(255,255,255,0.78)",
+            letterSpacing: 0.2,
+            lineHeight: 1.4,
+          }}
+        >
+          {entry.director && (
+            <>
+              <span style={{ color: "rgba(255,215,0,0.7)", fontWeight: 600 }}>Director:</span>{" "}
+              <span>{entry.director}</span>
+            </>
+          )}
+          {entry.director && entry.year ? <span style={{ color: "rgba(255,255,255,0.4)" }}>{"  ·  "}</span> : null}
+          {entry.year ? <span>{entry.year}</span> : null}
+        </div>
+
+        {entry.genre && (
           <div
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 12px",
-              borderRadius: 999,
-              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              color: "#0a0805",
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: 1.4,
+              color: "rgba(255, 215, 0, 0.6)",
+              letterSpacing: 0.6,
+              textTransform: "uppercase",
             }}
           >
-            <Sparkles size={12} aria-hidden="true" />
-            ROULETTE PICK
+            {entry.genre}
           </div>
+        )}
 
-          <h2
+        {/* Synopsis / overview — added v6.4.1 */}
+        {entry.overview && (
+          <p
             style={{
-              margin: "12px 0 8px",
-              fontFamily: "'Playfair Display', serif",
-              fontStyle: "italic",
-              fontWeight: 700,
-              fontSize: "clamp(28px, 3.5vw, 44px)",
-              lineHeight: 1.05,
-              color: "#fff",
-              wordBreak: "break-word",
-            }}
-          >
-            {entry.title}
-          </h2>
-
-          <div
-            style={{
+              margin: 0,
               fontFamily: "'Syne', sans-serif",
               fontSize: 14,
-              color: "rgba(255,255,255,0.78)",
-              letterSpacing: 0.2,
+              lineHeight: 1.55,
+              color: "rgba(255,255,255,0.72)",
+              letterSpacing: 0.1,
             }}
           >
-            {entry.director ? <span>{entry.director}</span> : null}
-            {entry.director && entry.year ? <span> · </span> : null}
-            {entry.year ? <span>{entry.year}</span> : null}
-          </div>
-
-          {entry.genre && (
-            <div
-              style={{
-                marginTop: 6,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11,
-                color: "rgba(255, 215, 0, 0.55)",
-                letterSpacing: 0.6,
-              }}
-            >
-              {entry.genre}
-            </div>
-          )}
-        </div>
+            {entry.overview}
+          </p>
+        )}
 
         {/* Score */}
         <div
           style={{
-            fontFamily: "'Playfair Display', serif",
-            fontStyle: "italic",
-            fontWeight: 700,
-            fontSize: "clamp(48px, 6vw, 80px)",
-            lineHeight: 1,
-            background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            color: "transparent",
-            filter: "drop-shadow(0 0 22px rgba(255,215,0,0.5)) drop-shadow(0 0 80px rgba(255,215,0,0.22))",
-            letterSpacing: -0.6,
-            paddingBottom: "0.06em",
+            display: "flex",
+            alignItems: "baseline",
+            gap: 12,
+            marginTop: "auto",
           }}
         >
-          {score}
           <span
             style={{
-              marginLeft: 8,
-              fontFamily: "'JetBrains Mono', monospace",
-              fontStyle: "normal",
-              fontSize: 14,
-              color: "rgba(255,215,0,0.6)",
-              letterSpacing: 1.2,
-              WebkitTextFillColor: "rgba(255,215,0,0.6)",
-              filter: "none",
+              fontFamily: "'Playfair Display', serif",
+              fontStyle: "italic",
+              fontWeight: 700,
+              fontSize: "clamp(48px, 6vw, 72px)",
+              lineHeight: 1,
+              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              color: "transparent",
+              filter: "drop-shadow(0 0 22px rgba(255,215,0,0.5)) drop-shadow(0 0 60px rgba(255,215,0,0.18))",
+              letterSpacing: -0.6,
+              paddingBottom: "0.06em",
             }}
           >
-            /10
+            {score}
+          </span>
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              color: "rgba(255,215,0,0.6)",
+              letterSpacing: 1.4,
+            }}
+          >
+            /10 FILM GLANCE SCORE
           </span>
         </div>
 
@@ -193,8 +225,8 @@ export default function RouletteCard({ entry, onSpinAgain }) {
                 padding: "11px 18px",
                 borderRadius: 12,
                 background: "rgba(0,0,0,0.32)",
-                border: "1px solid rgba(255,255,255,0.16)",
-                color: "rgba(255,255,255,0.85)",
+                border: "1px solid rgba(255,215,0,0.22)",
+                color: "#FFD700",
                 fontFamily: "'Syne', sans-serif",
                 fontWeight: 600,
                 fontSize: 13,
@@ -213,6 +245,7 @@ export default function RouletteCard({ entry, onSpinAgain }) {
           .dis-roulette-card {
             grid-template-columns: 1fr !important;
             padding: 16px !important;
+            gap: 18px !important;
           }
         }
       `}</style>
