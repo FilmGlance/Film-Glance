@@ -1,5 +1,113 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (image-forward redesign) — v6.5.3 cinematic hero + card hover refinement
+
+User feedback: "Not feeling the polish or the wow… really make some graphical UI changes that will WOW users." Took a step back and identified the structural issue: the page was text-forward when it needed to be image-forward. Films are visual; treating them like data feels utilitarian. The fix is to let backdrop imagery dominate the page, the way Letterboxd, A24, Mubi, and Apple TV+ all do.
+
+### What changed (3 high-impact moves)
+
+#### 1. Cinematic top hero — `components/discover/CinematicHero.jsx` (NEW)
+
+Full-bleed top section, 62vh tall (max 580px, min 420px). The #1 film's `backdrop_path` fills the entire top viewport at w1280 resolution, with a multi-stop vignette gradient (dark under sticky nav, lighter middle, heavy black at bottom) for text legibility. Hero text "Discover." + "Films Worth Your Evening." floats over the bottom portion.
+
+Below the hero text: a **"Now featuring"** glass pill — Play icon + uppercase mono label + film title (italic Playfair) + FG score (Playfair gold). Clicks to the film. Hover lifts the border.
+
+When the featured film changes (filter swap), the entire hero re-animates — backdrop fades + scales from 1.10 to 1.05, hero text + caption stagger in over 0.32s. Page feels alive, not static.
+
+Heart button positioned at top-right of the hero so the featured film can be favorited from the hero itself.
+
+Dropped: `DiscoverHero.jsx` (text-only) and `DiscoverFeatured.jsx` (separate TOP PICK card) — both files left in the repo as orphans, harmless. The hero IS the page's headline; the grid that follows is ranks 2-100.
+
+#### 2. Card grid: full 100, hero is the #1
+
+`DiscoverPage` no longer renders DiscoverFeatured. The grid receives all 100 entries (was 99 + a separate TOP PICK card). Cleaner page hierarchy — hero, Roulette, Reel Gems pill (filter), grid.
+
+#### 3. Card hover polish — `components/discover/DiscoverCard.jsx`
+
+Replaced the previous JS `onMouseEnter`/`onMouseLeave` style mutations with CSS `:hover` rules in styled-jsx — gives the browser room to optimize and lets the poster transform inside the card bounds.
+
+- Card: `transform: translateY(-6px) scale(1.015)` + brighter gold border + sharper shadow
+- Poster (image element with `.dis-card-poster` class): `transform: scale(1.06)` inside the card's `overflow: hidden` bounds — Ken-Burns-style zoom on hover, runs over 0.55s with cubic-bezier(0.16,1,0.3,1)
+- Slightly faster card scale transition (0.35s) for snappier feel
+
+Result: the grid feels like a living film index, not a static spreadsheet of metadata.
+
+### Why this is a meaningful step up
+
+Before: text-forward. The hero was just typography. Top film appeared as a small horizontal card. Cards in the grid were dark glass tiles that lifted on hover.
+
+After: image-forward. The first viewport is dominated by the actual #1 film's still. The eye sees the cinema before it sees the chrome. Cards still feel cohesive but their posters are alive — they breathe under the cursor.
+
+This is the kind of visual treatment Letterboxd, Mubi, and the streaming services use because it works: films sell themselves visually. Now the page lets them.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/CinematicHero.jsx` | NEW — full-bleed cinematic top hero |
+| `components/discover/DiscoverPage.jsx` | Wires CinematicHero, drops DiscoverHero + DiscoverFeatured renders |
+| `components/discover/DiscoverCard.jsx` | Hover polish — card scale, poster zoom, sharper shadow |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+Files orphaned (kept in tree, harmless):
+- `components/discover/DiscoverHero.jsx`
+- `components/discover/DiscoverFeatured.jsx`
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 229 warnings (1 added — minor, in CinematicHero animation effect cleanup)
+- Mobile-parity check: hero scales via `min(62vh, 580px)`/`minHeight: 420`; "Now featuring" pill wraps gracefully on narrow viewports
+
+---
+
+## Session: May 7, 2026 (continued) — v6.5.2 Reel Gems pill + section title alignment
+
+User flagged 3 follow-ups:
+1. Movie Reel Roulette title and Reel Gems title weren't aligned — Roulette sat in a 24px-padded pill, Reel Gems sat at the page-content edge.
+2. Wanted Reel Gems wrapped in the same kind of pill box as Movie Reel Roulette so the section reads as one unit.
+3. Italic still on the "Movie Reel Roulette" h2 — drop it (matches the de-italic pass on hero subtitles in v6.5.1).
+
+### Fixes
+
+- **`components/discover/DiscoverPage.jsx`** — replaced the bare Reel Gems `<header>` + DiscoverFilterBar with a single `<section>` that has the same dark-glass treatment as the RouletteSpinner card (padding 24, rgba(8,6,2,0.62) background, gold-tinted border, soft drop-shadow). Header h2 + subtitle paragraph + DiscoverFilterBar all live inside that one pill. Both section titles now sit at exactly the same horizontal offset.
+- **`components/discover/DiscoverFilterBar.jsx`** — dropped the component's own pill styling (background, border, padding, backdrop-filter). Now it's a bare flex row that adopts whatever container styles its parent provides. Avoids nested-pill visual noise.
+- **`components/discover/RouletteSpinner.jsx`** — removed `fontStyle: "italic"` from the "Movie Reel Roulette" h2. Now matches the v6.5.1 hero subtitle treatment (upright Playfair gold).
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings
+
+---
+
+## Session: May 7, 2026 (post-merge) — v6.5.1 hero de-glow + "Reel Gems" section + decade rail removal
+
+User merged PR #64 to production. Five focused fixes:
+
+| # | Fix |
+|---|---|
+| 1, 2 | **Yellow halo removed from both page heroes**. `DiscoverHero` and `box-office/PageHero` both had a `radial-gradient(ellipse, rgba(255,215,0,0.10), transparent 62%)` background div + a `textShadow: "0 0 24px rgba(255,215,0,0.10)"` on the H1 + a `drop-shadow(0 0 22px rgba(255,215,0,0.25))` filter on the gold subtitle. All three removed on both pages. |
+| 3 | **Italics removed from both hero subtitles**. "Films Worth Your Evening." and "The Movies Topping The Charts." were `fontStyle: "italic"`; both now upright Playfair gold (#FFD700). Also dropped the gold-gradient background-clip pattern on Discover's subtitle since solid #FFD700 reads cleaner without the clip artifacts. |
+| 4 | **"Reel Gems" section header** added between RouletteSpinner and DiscoverFilterBar. Italic Playfair-removed gold (matching the "Movie Reel Roulette" pattern). Subtitle text per user spec: "Select Theater to see what is currently showing on the big screens. Choose At Home, your desired genre and year and we'll show you a selection of only top shelf Film Glance verified cinema!" |
+| 5 | **DecadeBrowseRail removed**. Render dropped from `DiscoverPage`; import dropped; `onSelectDecade` callback dropped. Component file `DecadeBrowseRail.jsx` left in tree (orphaned, harmless). Layout comment in `DiscoverPage.jsx` header updated. |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverHero.jsx` | Halo div + textShadow + italic + drop-shadow filter all removed; subtitle now solid #FFD700 |
+| `components/box-office/PageHero.jsx` | Same treatment — halo + textShadow + italic on subtitle removed |
+| `components/discover/DiscoverPage.jsx` | "Reel Gems" h2 + subtitle paragraph added between RouletteSpinner and FilterBar; DecadeBrowseRail import + render + onSelectDecade callback removed |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (no regression)
+
+---
+
 ## Session: May 7, 2026 (later) — v6.5.0 cache growth Phase A — tmdb_id schema + scripts shipped (seed not yet run)
 
 User asked to grow `movie_cache` from 5,532 → 30,000 with the absolute guarantee of zero duplicates. Per planning Q&A: full pipeline, video reviews pre-cached, run as a one-shot Node script on VPS after the forum import wraps. Plan file: `~/.claude/plans/project-will-be-the-ticklish-corbato.md`.

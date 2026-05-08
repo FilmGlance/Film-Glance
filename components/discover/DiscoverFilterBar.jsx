@@ -96,13 +96,9 @@ export default function DiscoverFilterBar({
         flexWrap: "wrap",
         alignItems: "flex-end",
         gap: 14,
-        marginBottom: 28,
-        padding: 16,
-        borderRadius: 14,
-        background: "rgba(8,6,2,0.45)",
-        border: "1px solid rgba(255,215,0,0.10)",
-        backdropFilter: "blur(20px) saturate(1.1)",
-        WebkitBackdropFilter: "blur(20px) saturate(1.1)",
+        // v6.5.2: outer wrapper in DiscoverPage owns the pill (background +
+        // border + padding); FilterBar is now a bare flex row so the Reel
+        // Gems title aligns with the Movie Reel Roulette title.
       }}
     >
       <div

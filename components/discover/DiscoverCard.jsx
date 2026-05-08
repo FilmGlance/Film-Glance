@@ -150,6 +150,16 @@ export default function DiscoverCard({
       aria-label={`View ${entry.title} on Film Glance`}
       style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}
     >
+      <style jsx>{`
+        .dis-card:hover {
+          transform: translateY(-6px) scale(1.015);
+          border-color: rgba(255, 215, 0, 0.42) !important;
+          box-shadow: 0 28px 70px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 215, 0, 0.16);
+        }
+        .dis-card:hover :global(.dis-card-poster) {
+          transform: scale(1.06);
+        }
+      `}</style>
       <article
         className="dis-card"
         style={{
@@ -164,19 +174,9 @@ export default function DiscoverCard({
           WebkitBackdropFilter: "blur(20px) saturate(1.1)",
           boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
           animation: `disCardIn 0.45s cubic-bezier(0.16,1,0.3,1) ${staggerDelayMs}ms both`,
-          transition: "transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
+          transition: "transform 0.35s cubic-bezier(0.16,1,0.3,1), border-color 0.25s ease, box-shadow 0.25s ease",
           cursor: "pointer",
           overflow: "hidden",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "translateY(-4px)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.32)";
-          e.currentTarget.style.boxShadow = "0 22px 60px rgba(0,0,0,0.6), 0 0 80px rgba(255,215,0,0.06)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.10)";
-          e.currentTarget.style.boxShadow = "0 6px 22px rgba(0,0,0,0.4)";
         }}
       >
         {/* Poster */}
@@ -192,10 +192,18 @@ export default function DiscoverCard({
         >
           {posterUrl ? (
             <img
+              className="dis-card-poster"
               src={posterUrl}
               alt={entry.title}
               loading="lazy"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+                transition: "transform 0.55s cubic-bezier(0.16,1,0.3,1)",
+                transform: "scale(1)",
+              }}
             />
           ) : (
             <div

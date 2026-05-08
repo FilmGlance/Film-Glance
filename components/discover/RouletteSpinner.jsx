@@ -249,7 +249,6 @@ export default function RouletteSpinner({ posterPool, availableGenres = [] }) {
             style={{
               margin: 0,
               fontFamily: "'Playfair Display', serif",
-              fontStyle: "italic",
               fontWeight: 700,
               fontSize: "clamp(28px, 3.4vw, 38px)",
               lineHeight: 1.05,

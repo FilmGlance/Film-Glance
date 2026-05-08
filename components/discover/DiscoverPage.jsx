@@ -5,11 +5,13 @@
 // Main client component for /discover. Owns:
 //   • Filter state (release_window, genre, year, hidden_gems) + URL sync
 //   • Data fetching from /api/discover
-//   • Layout: SiteHeader → DiscoverHero → RecentlyAddedRail → RouletteSpinner
-//             → DiscoverFilterBar → DiscoverGrid → DecadeBrowseRail
+//   • Layout: SiteHeader → DiscoverHero → RouletteSpinner
+//             → "Reel Gems" header → DiscoverFilterBar → count line
+//             → DiscoverFeatured → DiscoverGrid
 //   • Favorites integration (heart on each card → folder picker modal)
 //
-// v6.4.0.
+// v6.4.0; v6.5.x dropped the legacy Recently Added rail + Decade Browse rail
+// per user feedback.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -20,12 +22,10 @@ import { useFavorites } from "@/lib/use-favorites";
 import FolderPickerModal from "@/components/box-office/FolderPickerModal";
 import BackdropLayer from "@/components/box-office/BackdropLayer";
 
-import DiscoverHero from "./DiscoverHero";
+import CinematicHero from "./CinematicHero";
 import DiscoverFilterBar from "./DiscoverFilterBar";
 import DiscoverGrid from "./DiscoverGrid";
-import DiscoverFeatured from "./DiscoverFeatured";
 import RouletteSpinner from "./RouletteSpinner";
-import DecadeBrowseRail from "./DecadeBrowseRail";
 
 const VALID_RELEASE_WINDOWS = ["in_theaters", "at_home"];
 
@@ -110,17 +110,6 @@ export default function DiscoverPage() {
     [releaseWindow, genre, year, hiddenGems, syncURL],
   );
 
-  const onSelectDecade = useCallback(
-    (d) => {
-      // Filtering by decade isn't a single year — set the most recent year in
-      // the decade to land the user roughly there. The decade rail's primary
-      // role is wayfinding; for finer control they use the year dropdown.
-      setYear(d.end);
-      syncURL({ release_window: releaseWindow, genre, year: d.end, hidden_gems: hiddenGems });
-    },
-    [releaseWindow, genre, hiddenGems, syncURL],
-  );
-
   // Favorites — same pattern as box-office.
   const { signedIn, folders, isFavorited, addFavorite, removeFavorite, createFolder, requestSignIn } = useFavorites();
   const [pickerEntry, setPickerEntry] = useState(null);
@@ -152,12 +141,20 @@ export default function DiscoverPage() {
 
   const entries = data?.entries || [];
   const heroEntry = entries[0] || null;
-  const restEntries = entries.slice(1);
 
   return (
     <div style={{ position: "relative", minHeight: "100vh", color: "#f0f0f0" }}>
       <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
       <SiteHeader active="discover" />
+
+      {/* Cinematic hero — full-bleed, dominates first viewport. The #1 film
+          IS the page's headline; no separate TOP PICK card below. */}
+      <CinematicHero
+        entry={heroEntry}
+        loading={loading}
+        favorited={heroEntry ? isFavorited(heroEntry) : false}
+        onToggleFavorite={handleHeartClick}
+      />
 
       <main
         style={{
@@ -165,26 +162,70 @@ export default function DiscoverPage() {
           zIndex: 2,
           maxWidth: 1200,
           margin: "0 auto",
-          padding: "44px 24px 96px",
+          padding: "0 24px 96px",
           fontFamily: "'Syne', sans-serif",
         }}
       >
-        <DiscoverHero />
-
         <RouletteSpinner
           posterPool={posterPool}
           availableGenres={data?.available_genres || []}
         />
 
-        <DiscoverFilterBar
-          releaseWindow={releaseWindow}
-          genre={genre}
-          year={year}
-          hiddenGems={hiddenGems}
-          availableGenres={data?.available_genres || []}
-          availableYears={data?.available_years || []}
-          onChange={onFilterChange}
-        />
+        {/* Reel Gems pill — header + subtitle + filter bar in one card,
+            matching the Movie Reel Roulette section geometry so the two
+            section titles align (same 24px inner padding). */}
+        <section
+          style={{
+            marginBottom: 28,
+            padding: 24,
+            borderRadius: 18,
+            background: "rgba(8,6,2,0.62)",
+            border: "1px solid rgba(255,215,0,0.10)",
+            backdropFilter: "blur(20px) saturate(1.1)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.1)",
+            boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              fontSize: "clamp(28px, 3.4vw, 38px)",
+              lineHeight: 1.05,
+              letterSpacing: -0.4,
+              color: "#FFD700",
+              paddingBottom: "0.06em",
+            }}
+          >
+            Reel Gems
+          </h2>
+          <p
+            style={{
+              margin: "8px 0 18px",
+              maxWidth: 720,
+              fontFamily: "'Syne', sans-serif",
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: "rgba(255, 255, 255, 0.7)",
+              letterSpacing: 0.2,
+            }}
+          >
+            Select Theater to see what is currently showing on the big screens.
+            Choose At Home, your desired genre and year and we&apos;ll show you a
+            selection of only top shelf Film Glance verified cinema!
+          </p>
+
+          <DiscoverFilterBar
+            releaseWindow={releaseWindow}
+            genre={genre}
+            year={year}
+            hiddenGems={hiddenGems}
+            availableGenres={data?.available_genres || []}
+            availableYears={data?.available_years || []}
+            onChange={onFilterChange}
+          />
+        </section>
 
         {/* Result count line — adaptive wording per user spec:
             "The Top 100 Film Glance [Genre] Films from [Year]" with
@@ -214,30 +255,16 @@ export default function DiscoverPage() {
                   })()}
         </div>
 
-        {heroEntry && (
-          <div style={{ marginBottom: 28 }}>
-            <DiscoverFeatured
-              entry={heroEntry}
-              releaseWindow={releaseWindow}
-              favorited={isFavorited(heroEntry)}
-              onToggleFavorite={handleHeartClick}
-            />
-          </div>
-        )}
-
-        {restEntries.length > 0 && (
+        {/* Grid — full 100 entries (no separate TOP PICK card; hero shows
+            the #1 film as a cinematic banner instead). */}
+        {entries.length > 0 && (
           <DiscoverGrid
-            entries={restEntries}
+            entries={entries}
             releaseWindow={releaseWindow}
             isFavorited={isFavorited}
             onToggleFavorite={handleHeartClick}
           />
         )}
-
-        <DecadeBrowseRail
-          availableYears={data?.available_years || []}
-          onSelectDecade={onSelectDecade}
-        />
       </main>
 
       <GoldScrollbar />
