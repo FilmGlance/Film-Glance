@@ -1,5 +1,83 @@
 # Film Glance — Conversation Summary
 
+## Session: May 8, 2026 — v6.6.1 design fixes (rides on PR #67) + Phase B kickoff prep
+
+User feedback after merging PR #66 and reviewing the v6.6.0 Box Office preview, four items:
+
+1. **Hero image doesn't load right away** + Discover and Box Office hero treatments not visually consistent → unify the brand experience.
+2. **Remove the period chip** (`WEEKLY · APR 27 — MAY 3, 2026`) — info already lives in the dynamic subtitle.
+3. **Discover card layout doesn't feel as premium as the Box Office card.** Apply the same treatment.
+4. **Forum import status check** — if complete, kick off the cache-growth Phase B run.
+
+### Item 4 — VPS import is COMPLETE
+
+Final stats from `/root/filmboards-crawl/import.log` at 2026-05-08 05:55:49 UTC:
+- Boards processed: **3,308 / 3,308** (100%)
+- Topics created: **262,981**
+- Replies created: **1,973,172**
+- Duplicates removed: 46,284
+- Same-title merged: 2,713
+- Errors: 40
+
+The python `import_filmboards.py` process is no longer running. **VPS is free for the bulk-seed run.** Phase B prep starts now (operator playbook below).
+
+### v6.6.1 design fixes
+
+#### 1. Eager-loaded backdrop image (faster first paint, brand consistency)
+
+Both `CinematicHero` (discover) and `CinematicBoxOfficeHero` (box office) previously rendered the backdrop via CSS `backgroundImage: url(...)` on a `<div>`. The browser only fetches CSS background images **after** the parent's first paint, which caused the visible "gradient appears, then image flashes in late" experience the user flagged.
+
+**Fix**: replaced the background-image div with a real `<img>` element carrying `loading="eager"` + `fetchpriority="high"` + `decoding="async"`. The browser now starts the fetch on HTML parse — image arrives in time for first paint. Same change applied to BOTH heroes for consistency.
+
+#### 2. Period chip removed from Box Office hero
+
+The `WEEKLY · APR 27 — MAY 3, 2026` chip carried the same info as the dynamic subtitle (`The Top 10 of Apr 27 — May 3.`). Dropped the chip; the subtitle now uppercases the year as well so the period is fully readable in one place. Side benefit: removing the chip makes the Box Office hero structurally consistent with the Discover hero (both now have `H1 + subtitle + glass-pill`, no extra chrome above).
+
+Also dropped the `Crown` icon import from `CinematicBoxOfficeHero` (was used only by the chip).
+
+#### 3. DiscoverCard refactored to match the v6.6.0 Box Office card's premium feel
+
+User: "Fix the discover page so it is JUST AS GOOD AND PREMIUM as the box office page." Applied the same anti-smear treatment + visual encoding pattern:
+
+- **Big focal FG Score figure** (Playfair, 30px, solid `#FFD700`) at the bottom of the card body — analog of the box office gross figure. Uppercase mono `/10 FG SCORE` label inline so it's self-documenting.
+- **Score bar** — 6px gold-gradient horizontal bar visualizing `score/10 × 100%`, clamped to `[4%, 100%]`. Score 8.6 → 86% bar; 7.0 → 70% bar. Direct analog of the Box Office gross-share bar.
+- **Synopsis tightened** from 5 lines → 3 to leave room for the score block at the bottom without making cards taller.
+- **Dropped the redundant 2-stat strip** (was Year + FG Score) — Year already lives in the director · year row above; FG Score is now the headline.
+- **Hover bar pulse** — `filter: brightness(1.12)` on the score bar when card is hovered, matching the Box Office card hover.
+
+Result: Discover and Box Office cards now share the same architectural rhythm — title → director · year → context (genre / synopsis on Discover, just director · year on Box Office) → spacer → big focal number → bar → (optional 3-stat strip on Box Office only). Brand consistency is real.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `components/discover/CinematicHero.jsx` | Backdrop CSS-bg → real `<img>` w/ eager + fetchpriority="high" |
+| `components/box-office/CinematicBoxOfficeHero.jsx` | Same eager-image fix. Removed period chip + `Crown` import. `formatPeriod` → `formatPeriodSubline` |
+| `components/discover/DiscoverCard.jsx` | Refactored: big focal FG Score, score bar, synopsis 5→3 lines, dropped 2-stat strip |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` (pending — written here pre-result; expected baseline)
+- Mobile parity unchanged from v6.6.0 — the changes only affected internal element types and layout density, not the responsive clamps or media queries
+
+### Phase B kickoff (operator playbook)
+
+With the import complete, the VPS is ready. Plan from `~/.claude/plans/project-will-be-the-ticklish-corbato.md`:
+
+1. Clone the staging branch on VPS or rsync the relevant `lib/`, `scripts/`, package files
+2. `npm ci` on VPS
+3. Copy `.env.local` (needs `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `RAPIDAPI_KEY`, `OMDB_API_KEY`, `SIMKL_CLIENT_ID`, `TRAKT_CLIENT_ID`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+4. **Dry run**: `npx tsx scripts/bulk-seed.ts --dry-run --limit 10` (verifies pipeline end-to-end on 10 candidates without writing)
+5. **Backfill** (cheap, ~23 min, free — TMDB lookups for legacy 5,532 rows missing tmdb_id): `npx tsx scripts/backfill-tmdb-id.ts`
+6. **Main seed** (~10-12h, ~$300-400 in API costs): `nohup npx tsx scripts/bulk-seed.ts > ~/bulk-seed.log 2>&1 &`
+7. Monitor: `tail -f ~/bulk-seed.log`. State file at `~/.bulk-seed-state.json` makes the run resumable if interrupted.
+
+Steps 1-4 are setup + verification (zero $ risk). Step 5 is free + reversible. **Step 6 is the one that costs real money + takes 10+ hours** — pause for explicit user confirmation before kicking off.
+
+---
+
 ## Session: May 7, 2026 (image-forward redesign, /boxoffice) — v6.6.0 cinematic Box Office hero + gross-share bar + card hover
 
 User feedback after merging PR #66 (v6.5.3 /discover cinematic redesign): "Much better. Merged PR #66. I want you to use that same amount of focus and apply the same rigor and review to the Box Office page. You elevated the Discover page, now apply that same level of review rigor to improve the UI of the Box Office page. Take a very long time and extreme high effort. I want to see a polished UI and user experience."

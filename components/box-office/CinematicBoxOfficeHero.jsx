@@ -13,7 +13,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Heart, Crown } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useCountUp } from "@/lib/use-count-up";
 
 const TMDB_BACKDROP_W1280 = "https://image.tmdb.org/t/p/w1280";
@@ -21,13 +21,14 @@ const TMDB_BACKDROP_W1280 = "https://image.tmdb.org/t/p/w1280";
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// Format the period chip + headline subline based on period_type + dates.
+// Format the headline subline based on period_type + dates.
+// v6.6.1: dropped the period chip — info was redundant with the subline.
 //
-//   weekly  Oct 6 — 12, 2025      → "WEEKLY · OCT 6 — 12, 2025" / "The Top 10 of Oct 6 — 12."
-//   monthly Oct 2025              → "MONTHLY · OCTOBER 2025"     / "The Top 10 of October 2025."
-//   yearly  2025                  → "YEARLY · 2025"              / "The Top 10 of 2025."
-function formatPeriod(periodType, periodStart, periodEnd) {
-  if (!periodStart) return { chip: "", subline: "The Top 10." };
+//   weekly  Oct 6 — 12, 2025  → "The Top 10 of Oct 6 — 12, 2025."
+//   monthly Oct 2025          → "The Top 10 of October 2025."
+//   yearly  2025              → "The Top 10 of 2025."
+function formatPeriodSubline(periodType, periodStart, periodEnd) {
+  if (!periodStart) return "The Top 10.";
   const start = new Date(`${periodStart}T00:00:00Z`);
   const startMonthShort = MONTH_SHORT[start.getUTCMonth()];
   const startMonthLong = MONTH_LONG[start.getUTCMonth()];
@@ -35,16 +36,10 @@ function formatPeriod(periodType, periodStart, periodEnd) {
   const startYear = start.getUTCFullYear();
 
   if (periodType === "yearly") {
-    return {
-      chip: `YEARLY · ${startYear}`,
-      subline: `The Top 10 of ${startYear}.`,
-    };
+    return `The Top 10 of ${startYear}.`;
   }
   if (periodType === "monthly") {
-    return {
-      chip: `MONTHLY · ${startMonthLong.toUpperCase()} ${startYear}`,
-      subline: `The Top 10 of ${startMonthLong} ${startYear}.`,
-    };
+    return `The Top 10 of ${startMonthLong} ${startYear}.`;
   }
   // weekly — render "Oct 6 — 12, 2025" if start/end share a month, else
   // "Sep 28 — Oct 4, 2025" if it crosses a boundary.
@@ -54,20 +49,11 @@ function formatPeriod(periodType, periodStart, periodEnd) {
     const endDay = end.getUTCDate();
     const endYear = end.getUTCFullYear();
     if (start.getUTCMonth() === end.getUTCMonth() && startYear === endYear) {
-      return {
-        chip: `WEEKLY · ${startMonthShort.toUpperCase()} ${startDay} — ${endDay}, ${startYear}`,
-        subline: `The Top 10 of ${startMonthShort} ${startDay} — ${endDay}.`,
-      };
+      return `The Top 10 of ${startMonthShort} ${startDay} — ${endDay}, ${startYear}.`;
     }
-    return {
-      chip: `WEEKLY · ${startMonthShort.toUpperCase()} ${startDay} — ${endMonthShort.toUpperCase()} ${endDay}, ${endYear}`,
-      subline: `The Top 10 of ${startMonthShort} ${startDay} — ${endMonthShort} ${endDay}.`,
-    };
+    return `The Top 10 of ${startMonthShort} ${startDay} — ${endMonthShort} ${endDay}, ${endYear}.`;
   }
-  return {
-    chip: `WEEKLY · ${startMonthShort.toUpperCase()} ${startDay}, ${startYear}`,
-    subline: `The Top 10 of ${startMonthShort} ${startDay}.`,
-  };
+  return `The Top 10 of ${startMonthShort} ${startDay}, ${startYear}.`;
 }
 
 function formatExactDollars(d) {
@@ -143,7 +129,7 @@ export default function CinematicBoxOfficeHero({
   const backdrop = entry?.backdrop_path ? `${TMDB_BACKDROP_W1280}${entry.backdrop_path}` : null;
   const score = entry?.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
   const buildHref = (e) => `/?q=${encodeURIComponent(e.title)}`;
-  const { chip, subline } = formatPeriod(periodType, periodStart, periodEnd);
+  const subline = formatPeriodSubline(periodType, periodStart, periodEnd);
 
   return (
     <header
@@ -157,15 +143,25 @@ export default function CinematicBoxOfficeHero({
         marginBottom: 48,
       }}
     >
-      {/* Backdrop layer */}
+      {/* Backdrop layer — v6.6.1: moved from CSS background-image to a real
+          <img> with loading="eager" + fetchpriority="high" so the browser
+          starts the fetch on parse instead of after first paint. Result:
+          the still appears on first paint instead of flashing in late. */}
       {backdrop ? (
-        <div
+        <img
+          src={backdrop}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          loading="eager"
+          decoding="async"
           style={{
             position: "absolute",
             inset: 0,
-            backgroundImage: `url("${backdrop}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center 28%",
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center 28%",
             transform: "scale(1.05)",
             animation: "boCinematicBackdropFade 1.2s cubic-bezier(0.16,1,0.3,1) both",
           }}
@@ -232,39 +228,8 @@ export default function CinematicBoxOfficeHero({
           </div>
         )}
 
-        {/* Period chip — surfaces "what am I looking at" without a separate
-            stamp element. Crown icon ties it to the "rule the chart" theme. */}
-        {chip && (
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "5px 12px 5px 11px",
-              borderRadius: 999,
-              background: "rgba(255,215,0,0.08)",
-              border: "1px solid rgba(255,215,0,0.32)",
-              backdropFilter: "blur(8px) saturate(1.1)",
-              WebkitBackdropFilter: "blur(8px) saturate(1.1)",
-              animation: "boCinematicLineIn 0.85s cubic-bezier(0.16,1,0.3,1) both",
-              marginBottom: 14,
-            }}
-          >
-            <Crown size={11} color="#FFD700" strokeWidth={2.4} aria-hidden="true" />
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10.5,
-                letterSpacing: 1.6,
-                fontWeight: 600,
-                color: "#FFD700",
-              }}
-            >
-              {chip}
-            </span>
-          </div>
-        )}
-
+        {/* v6.6.1: period chip removed — the dynamic subline already says
+            "The Top 10 of [period]." Period info was duplicated. */}
         <h1
           style={{
             margin: 0,

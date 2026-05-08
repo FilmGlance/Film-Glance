@@ -80,15 +80,25 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
         marginBottom: 48,
       }}
     >
-      {/* Backdrop layer */}
+      {/* Backdrop layer — v6.6.1: moved from CSS background-image to a real
+          <img> with loading="eager" + fetchpriority="high" so the still
+          appears on first paint (was flashing in late). Same change applied
+          to the box-office hero for visual consistency. */}
       {backdrop ? (
-        <div
+        <img
+          src={backdrop}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          loading="eager"
+          decoding="async"
           style={{
             position: "absolute",
             inset: 0,
-            backgroundImage: `url("${backdrop}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center 28%",
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center 28%",
             transform: "scale(1.05)",
             animation: "cinematicBackdropFade 1.2s cubic-bezier(0.16,1,0.3,1) both",
           }}

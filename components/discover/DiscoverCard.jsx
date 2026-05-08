@@ -2,19 +2,25 @@
 
 // DiscoverCard — single movie card on /discover.
 //
-// v6.4.1 round 2: dropped the big gold-gradient FG-score "headline" (the
-// user called it a "yellow smear"); FG score now lives in the small stat
-// strip alongside Year — exactly the box-office StandardCard treatment.
-// Synopsis snippet (first 2 lines, italic) fills the visual middle of the
-// card so it doesn't feel empty without the headline. Genre row is
-// full-width (no longer in the stat strip) so it can't truncate.
-// Sources count removed (per user request).
+// v6.6.1: brought into visual parity with the v6.6.0 box-office PosterCard
+// per user feedback "Fix the discover page so it is JUST AS GOOD AND
+// PREMIUM as the box office page." Mirror moves:
+//   • Big focal FG Score figure (Playfair, 30px, solid #FFD700) where
+//     the box office card has its gross figure.
+//   • Score bar — 6px gold-gradient horizontal bar visualizing
+//     score/10 × 100% (analog of the box office gross-share bar). Score
+//     of 8.6 → 86% bar; 7.0 → 70% bar; visual encoding of quality.
+//   • Synopsis tightened from 5 lines → 3 to leave room for the score
+//     block at the bottom.
+//   • Dropped the redundant 2-stat strip (Year + FG Score) — Year
+//     already lives in the director · year row above; FG Score is now
+//     the headline.
 //
 // Click → /?q=<title>; landing-page URL hook auto-fires doSearch on mount.
 
 import React from "react";
 import Link from "next/link";
-import { Heart, Tv, Film as FilmIcon } from "lucide-react";
+import { Heart } from "lucide-react";
 
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500";
 
@@ -69,80 +75,19 @@ function FavoriteButton({ favorited, onToggle, ariaLabel }) {
   );
 }
 
-function StandardStat({ label, value, isScore, scoreLoaded, monoValue }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div
-        style={{
-          fontFamily: monoValue ? "'JetBrains Mono', monospace" : (isScore ? "'Playfair Display', serif" : "'Syne', sans-serif"),
-          fontStyle: isScore ? "italic" : "normal",
-          fontWeight: 700,
-          fontSize: 20,
-          lineHeight: 1,
-          color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
-          letterSpacing: -0.2,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          marginTop: 5,
-          fontFamily: "'Syne', sans-serif",
-          fontSize: 11,
-          letterSpacing: 1.2,
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.55)",
-          fontWeight: 600,
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function ReleasePill({ window: rw }) {
-  const isTheaters = rw === "in_theaters";
-  const Icon = isTheaters ? FilmIcon : Tv;
-  const label = isTheaters ? "In Theaters" : "At Home";
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "3px 10px",
-        borderRadius: 999,
-        border: `1px solid ${isTheaters ? "rgba(255,215,0,0.42)" : "rgba(255,255,255,0.16)"}`,
-        background: isTheaters ? "rgba(255, 215, 0, 0.06)" : "rgba(255, 255, 255, 0.04)",
-        color: isTheaters ? "#FFD700" : "rgba(255,255,255,0.78)",
-        fontFamily: "'Syne', sans-serif",
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: 0.4,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <Icon size={11} aria-hidden="true" />
-      {label}
-    </span>
-  );
-}
-
 export default function DiscoverCard({
   entry,
   staggerDelayMs = 0,
   favorited = false,
   onToggleFavorite,
-  releaseWindow,
 }) {
   if (!entry) return null;
   const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
-  const score = entry.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
+  const scoreNum = entry.fg_score != null ? Number(entry.fg_score) : null;
+  const scoreText = scoreNum != null ? scoreNum.toFixed(1) : null;
+  // Score bar — clamp to [4%, 100%] so a 0.4 score still shows a tiny nub.
+  const scorePct =
+    scoreNum != null ? Math.min(100, Math.max(4, Math.round((scoreNum / 10) * 100))) : null;
 
   return (
     <Link
@@ -154,10 +99,14 @@ export default function DiscoverCard({
         .dis-card:hover {
           transform: translateY(-6px) scale(1.015);
           border-color: rgba(255, 215, 0, 0.42) !important;
-          box-shadow: 0 28px 70px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 215, 0, 0.16);
+          box-shadow: 0 28px 70px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 215, 0, 0.16),
+            0 0 60px rgba(255, 215, 0, 0.08) !important;
         }
         .dis-card:hover :global(.dis-card-poster) {
           transform: scale(1.06);
+        }
+        .dis-card:hover :global(.dis-card-bar-fill) {
+          filter: brightness(1.12);
         }
       `}</style>
       <article
@@ -174,7 +123,8 @@ export default function DiscoverCard({
           WebkitBackdropFilter: "blur(20px) saturate(1.1)",
           boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
           animation: `disCardIn 0.45s cubic-bezier(0.16,1,0.3,1) ${staggerDelayMs}ms both`,
-          transition: "transform 0.35s cubic-bezier(0.16,1,0.3,1), border-color 0.25s ease, box-shadow 0.25s ease",
+          transition:
+            "transform 0.35s cubic-bezier(0.16,1,0.3,1), border-color 0.25s ease, box-shadow 0.25s ease",
           cursor: "pointer",
           overflow: "hidden",
         }}
@@ -308,10 +258,9 @@ export default function DiscoverCard({
             </div>
           )}
 
-          {/* Synopsis — 5-line clamp, non-italic body. v6.4.1 round-4 polish:
-              user found italic + 3-line clamp truncated mid-sentence on
-              cards like Schindler's List ("his Jewish workfor..."). Dropped
-              italic, raised clamp to 5, added ellipsis. */}
+          {/* Synopsis — 3-line clamp (was 5; tightened to make room for the
+              score block below). Non-italic body so longer synopses stay
+              legible at small sizes. */}
           {entry.overview && (
             <p
               style={{
@@ -322,7 +271,7 @@ export default function DiscoverCard({
                 color: "rgba(255,255,255,0.72)",
                 letterSpacing: 0.05,
                 display: "-webkit-box",
-                WebkitLineClamp: 5,
+                WebkitLineClamp: 3,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -332,30 +281,67 @@ export default function DiscoverCard({
             </p>
           )}
 
-          {/* Spacer pushes stats + pill to bottom */}
+          {/* Spacer pushes the score block to the bottom */}
           <div style={{ flex: 1, minHeight: 6 }} />
 
-          {/* 2-stat strip: Year · FG Score (clean — no smear) */}
+          {/* FG Score — focal headline number (mirrors the box-office gross
+              figure). Crisp solid Playfair gold, no gradient text smear, no
+              drop-shadow glow. Tight against the score bar below. */}
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              paddingTop: 10,
-              borderTop: "1px solid rgba(255,215,0,0.10)",
+              display: "flex",
+              alignItems: "baseline",
+              gap: 6,
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              lineHeight: 1,
+              color: scoreText ? "#FFD700" : "rgba(255,255,255,0.4)",
+              letterSpacing: -0.5,
+              paddingBottom: "0.06em",
             }}
           >
-            <StandardStat label="Year" value={entry.year ?? "—"} monoValue />
-            <StandardStat
-              label="FG Score"
-              value={score ?? "—"}
-              isScore
-              scoreLoaded={score != null}
-            />
+            <span style={{ fontSize: 30 }}>{scoreText ?? "—"}</span>
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: "rgba(255, 215, 0, 0.55)",
+                fontWeight: 600,
+              }}
+            >
+              /10 FG SCORE
+            </span>
           </div>
 
-          {/* Release pill removed v6.4.1 round 4 — was redundant with the
-              In Theaters / At Home filter the user already chose. */}
+          {/* Score bar — visualizes score/10 × 100%, mirroring the
+              box-office gross-share bar. */}
+          {scorePct != null && (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                height: 6,
+                borderRadius: 999,
+                background: "rgba(255,215,0,0.10)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                className="dis-card-bar-fill"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: `${scorePct}%`,
+                  background:
+                    "linear-gradient(90deg, rgba(255,215,0,0.45) 0%, #FFD700 60%, #FFE27A 100%)",
+                  borderRadius: 999,
+                  boxShadow: "0 0 12px rgba(255,215,0,0.32)",
+                  transition: "filter 0.25s ease, width 0.6s cubic-bezier(0.16,1,0.3,1)",
+                }}
+              />
+            </div>
+          )}
         </div>
       </article>
     </Link>
