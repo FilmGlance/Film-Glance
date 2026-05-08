@@ -1,5 +1,25 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (continued) — v6.5.2 Reel Gems pill + section title alignment
+
+User flagged 3 follow-ups:
+1. Movie Reel Roulette title and Reel Gems title weren't aligned — Roulette sat in a 24px-padded pill, Reel Gems sat at the page-content edge.
+2. Wanted Reel Gems wrapped in the same kind of pill box as Movie Reel Roulette so the section reads as one unit.
+3. Italic still on the "Movie Reel Roulette" h2 — drop it (matches the de-italic pass on hero subtitles in v6.5.1).
+
+### Fixes
+
+- **`components/discover/DiscoverPage.jsx`** — replaced the bare Reel Gems `<header>` + DiscoverFilterBar with a single `<section>` that has the same dark-glass treatment as the RouletteSpinner card (padding 24, rgba(8,6,2,0.62) background, gold-tinted border, soft drop-shadow). Header h2 + subtitle paragraph + DiscoverFilterBar all live inside that one pill. Both section titles now sit at exactly the same horizontal offset.
+- **`components/discover/DiscoverFilterBar.jsx`** — dropped the component's own pill styling (background, border, padding, backdrop-filter). Now it's a bare flex row that adopts whatever container styles its parent provides. Avoids nested-pill visual noise.
+- **`components/discover/RouletteSpinner.jsx`** — removed `fontStyle: "italic"` from the "Movie Reel Roulette" h2. Now matches the v6.5.1 hero subtitle treatment (upright Playfair gold).
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings
+
+---
+
 ## Session: May 7, 2026 (post-merge) — v6.5.1 hero de-glow + "Reel Gems" section + decade rail removal
 
 User merged PR #64 to production. Five focused fixes:

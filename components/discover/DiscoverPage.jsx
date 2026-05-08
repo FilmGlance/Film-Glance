@@ -166,8 +166,21 @@ export default function DiscoverPage() {
           availableGenres={data?.available_genres || []}
         />
 
-        {/* Reel Gems section header (above the filter bar). */}
-        <header style={{ margin: "8px 0 18px" }}>
+        {/* Reel Gems pill — header + subtitle + filter bar in one card,
+            matching the Movie Reel Roulette section geometry so the two
+            section titles align (same 24px inner padding). */}
+        <section
+          style={{
+            marginBottom: 28,
+            padding: 24,
+            borderRadius: 18,
+            background: "rgba(8,6,2,0.62)",
+            border: "1px solid rgba(255,215,0,0.10)",
+            backdropFilter: "blur(20px) saturate(1.1)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.1)",
+            boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
+          }}
+        >
           <h2
             style={{
               margin: 0,
@@ -184,7 +197,7 @@ export default function DiscoverPage() {
           </h2>
           <p
             style={{
-              margin: "8px 0 0",
+              margin: "8px 0 18px",
               maxWidth: 720,
               fontFamily: "'Syne', sans-serif",
               fontSize: 14,
@@ -197,17 +210,17 @@ export default function DiscoverPage() {
             Choose At Home, your desired genre and year and we&apos;ll show you a
             selection of only top shelf Film Glance verified cinema!
           </p>
-        </header>
 
-        <DiscoverFilterBar
-          releaseWindow={releaseWindow}
-          genre={genre}
-          year={year}
-          hiddenGems={hiddenGems}
-          availableGenres={data?.available_genres || []}
-          availableYears={data?.available_years || []}
-          onChange={onFilterChange}
-        />
+          <DiscoverFilterBar
+            releaseWindow={releaseWindow}
+            genre={genre}
+            year={year}
+            hiddenGems={hiddenGems}
+            availableGenres={data?.available_genres || []}
+            availableYears={data?.available_years || []}
+            onChange={onFilterChange}
+          />
+        </section>
 
         {/* Result count line — adaptive wording per user spec:
             "The Top 100 Film Glance [Genre] Films from [Year]" with
