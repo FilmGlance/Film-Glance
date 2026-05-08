@@ -1,5 +1,90 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (image-forward redesign, /boxoffice) — v6.6.0 cinematic Box Office hero + gross-share bar + card hover
+
+User feedback after merging PR #66 (v6.5.3 /discover cinematic redesign): "Much better. Merged PR #66. I want you to use that same amount of focus and apply the same rigor and review to the Box Office page. You elevated the Discover page, now apply that same level of review rigor to improve the UI of the Box Office page. Take a very long time and extreme high effort. I want to see a polished UI and user experience."
+
+Took the same approach: hard critical audit, identified the same image-forward-vs-text-forward problem class plus box-office-specific issues, then made three high-impact moves.
+
+### Critical audit — what was wrong
+
+1. **Text-only `PageHero`** ("Box Office. / The Movies Topping The Charts.") — same problem the v6.5.3 cinematic hero solved on /discover. Visitor sees typography first, not film stills.
+2. **Gold-gradient text smear on the featured #1 card's gross figure** — heavy `WebkitTextFillColor: transparent` clip + `drop-shadow(0 0 22px rgba(255,215,0,0.55))` glow. The user has historically pushed back on this exact "yellow smear" treatment.
+3. **No visual encoding of the ranking gap.** Box office is fundamentally a chart — #1 might be $24M while #10 is $1.2M. Every #2-#10 card looked identical in weight; the drama of the chart was invisible.
+4. **Period info ("which week am I looking at?") was buried in dropdowns**, not surfaced in the visual hierarchy.
+5. **JS-mutation `onMouseEnter`/`onMouseLeave` hover** on every card — same pattern v6.5.3 replaced on DiscoverCard with styled-jsx :hover.
+6. **`SkeletonRows` rendered hero+9 stacked rows but the page rendered hero+3×3 grid** — layout flash on first paint.
+7. **`FilterBar` floated mid-page with its own dark-glass pill** — disconnected from the rest of the page hierarchy. /Discover solved the same problem by wrapping its filter bar inside a "Reel Gems" section pill.
+
+### Three high-impact moves
+
+#### 1. `CinematicBoxOfficeHero.jsx` (NEW)
+
+Full-bleed top section, 64vh tall (max 600px, min 440px). The #1 film's `backdrop_path` fills the first viewport at w1280 with a multi-stop vignette gradient (dark under sticky nav / clear middle / heavy black at bottom) for legibility. Hero text "Box Office." + dynamic subtitle pinned to bottom over the still.
+
+The subtitle is **dynamic and period-aware**:
+- weekly → "The Top 10 of Oct 6 — 12."
+- monthly → "The Top 10 of October 2025."
+- yearly → "The Top 10 of 2025."
+
+A small **period chip** sits above the headline: `WEEKLY · OCT 6 — 12, 2025` (Crown icon + uppercase mono). Surfaces the chart's identity in the visual hierarchy instead of hiding it in dropdowns.
+
+A glass **"#1 [TITLE] · $XX.XM · 1,234 theaters · 8.5/10"** strip sits below the headline. Crisp italic Playfair title + crisp solid-gold Playfair gross + uppercase mono theaters/score. **No gold-gradient text smear.** The whole strip is a Link to the film. Heart button positioned at top-right of the hero so the #1 can be favorited from the hero itself.
+
+When the featured film changes (filter swap), the entire hero re-animates — backdrop fades+scales 1.10→1.05, chip+headline+pill stagger in over 0.34s. Page feels alive on every period change.
+
+Replaces both `PageHero.jsx` (text-only) AND the `featured` variant of `PosterCard.jsx` (horizontal hero card) — same architectural pattern as the v6.5.3 CinematicHero on /discover. Both old files orphaned in tree, harmless.
+
+#### 2. Gross-share bar on every #2-#10 card
+
+The chart's drama, made visible. Each card now carries a 6px gold-gradient horizontal bar below its gross figure, scaled to `(entry.gross / #1.gross) * 100%` clamped to [4%, 100%]. At a glance you see #2 at ~80% bar, #3 at ~60%, #10 at ~10% — the at-a-glance ranking gap that was previously invisible.
+
+Combined with a subtle "Bar shows gross relative to #1" caption above the grid, this turns a uniform tile grid into a chart.
+
+Plus the same anti-smear treatment applied to the gross figure: dropped `WebkitTextFillColor: transparent` gradient clip + heavy drop-shadow glow → crisp solid `#FFD700` Playfair italic.
+
+#### 3. `PosterCard.jsx` hover polish + section pill for filters
+
+- Replaced inline JS `onMouseEnter/onMouseLeave` style mutations with styled-jsx `:hover` rules (lets browser optimize, lets poster transform inside card bounds).
+- Card on hover: `translateY(-6px) scale(1.012)` + brighter gold border + sharper shadow + subtle gold ambient glow.
+- Poster on hover: `transform: scale(1.06)` inside `overflow: hidden` — Ken-Burns-style zoom over 0.55s with `cubic-bezier(0.16, 1, 0.3, 1)`.
+- Gross-share bar on hover: `filter: brightness(1.12)` — bar pulses brighter as the card lifts.
+
+`FilterBar` dropped its own dark-glass pill styling and now lives inside a **"Browse the Chart"** section pill in `BoxOfficePage` (h2 Playfair gold + subtitle + filters). Same architectural move as the Reel Gems pill on /discover. Filter strip now reads as a deliberate slice of the page rather than a floating strip.
+
+`SkeletonRows` rebuilt to match the new layout (period-stamp row + 3×3 grid) — eliminates the prior hero+9-stacked-rows layout flash on first paint.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `components/box-office/CinematicBoxOfficeHero.jsx` | NEW — full-bleed cinematic top hero, period-aware dynamic subtitle |
+| `components/box-office/PosterCard.jsx` | Dropped `featured` variant. Crisp solid-gold gross (no gradient smear). Gross-share bar. Ken-Burns hover |
+| `components/box-office/BoxOfficePage.jsx` | Wires CinematicBoxOfficeHero. Drops PageHero + featured-card render. Wraps FilterBar in "Browse the Chart" section pill. Passes `maxGross` to grid cards |
+| `components/box-office/FilterBar.jsx` | Dropped own dark-glass pill (now inherits parent section styling) |
+| `components/box-office/SkeletonRows.jsx` | Rebuilt to match new hero+grid layout |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+Files orphaned (kept in tree, harmless):
+- `components/box-office/PageHero.jsx`
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 229 warnings (same baseline)
+- Mobile parity verified in code review: hero clamps via `min(64vh, 600px)` / `minHeight: 440`; glass strip uses `flexWrap: wrap` + media-query border-radius shift; section pill scales gracefully; grid drops 3→2→1 column at 960px / 640px breakpoints; FilterBar dropdowns wrap onto narrow viewports
+- Favorites + folder picker integration unchanged — heart button on hero pushes through `handleHeartClick` exactly as before
+
+### Why this matters
+
+Before: visitors saw text-only typography for "Box Office." and a horizontal #1 card with a heavy gold-gradient gross smear. Cards #2-#10 in the grid were uniform — you couldn't tell at a glance whether #1 was $24M dominant or just narrowly leading. Period info hid in dropdowns.
+
+After: the actual top film's still dominates the first viewport. The chart's drama is visible — gross-share bars give the eye an instant sense of "how big was the gap?" Period info is announced in the hero. Cards breathe under the cursor. Filters feel deliberate, not floating.
+
+This is the level of visual treatment Variety, IndieWire, and Box Office Mojo reach for. Now /boxoffice does too.
+
+---
+
 ## Session: May 7, 2026 (image-forward redesign) — v6.5.3 cinematic hero + card hover refinement
 
 User feedback: "Not feeling the polish or the wow… really make some graphical UI changes that will WOW users." Took a step back and identified the structural issue: the page was text-forward when it needed to be image-forward. Films are visual; treating them like data feels utilitarian. The fix is to let backdrop imagery dominate the page, the way Letterboxd, A24, Mubi, and Apple TV+ all do.

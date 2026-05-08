@@ -1,11 +1,18 @@
 "use client";
 
-// PosterCard — two visual variants:
-//   • featured (#1): horizontal hero, full-width row, 🏆 trophy on rank,
-//     larger gross figure, brighter glow + gold ring
-//   • standard (#2-#10): vertical poster card, all same size, big italic
-//     Playfair rank number overlaid on poster top-left, count-up gross,
-//     3-stat strip
+// PosterCard — single Box Office grid card (#2-#10). The #1 film is now
+// rendered by CinematicBoxOfficeHero (full-bleed top hero) so this file
+// only needs the standard variant.
+//
+// v6.6.0 redesign:
+//   • Drop the gold-gradient text smear on the gross figure → crisp solid
+//     Playfair gold (mirrors the v6.5.3 anti-smear treatment on /discover).
+//   • Add a gross-share bar visualizing gross / maxGross — gives the chart
+//     visual drama (#2 might be ~80% bar, #10 might be ~10%, "you can see
+//     the gap" at a glance).
+//   • Ken-Burns poster zoom on hover via styled-jsx :hover (replaces the
+//     prior JS-mutation onMouseEnter/onMouseLeave) — same pattern that
+//     polished DiscoverCard in v6.5.3.
 //
 // Whole card is a <Link> to /?q=<title> — clicking navigates to the Film
 // Glance landing page with the URL-param hook auto-firing doSearch on
@@ -13,12 +20,31 @@
 
 import React from "react";
 import Link from "next/link";
-import { Crown, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useCountUp } from "@/lib/use-count-up";
 
-// Reusable heart button used by both card variants. Stop-propagates the click
-// so the card's <Link> doesn't fire alongside the heart toggle.
-function FavoriteButton({ favorited, onToggle, size = 36, ariaLabel }) {
+const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500";
+
+function formatDollars(d) {
+  if (d == null) return "—";
+  if (d >= 1_000_000_000) return `$${(d / 1_000_000_000).toFixed(2)}B`;
+  if (d >= 1_000_000) return `$${(d / 1_000_000).toFixed(1)}M`;
+  if (d >= 1_000) return `$${(d / 1_000).toFixed(1)}K`;
+  return `$${Math.round(d).toLocaleString("en-US")}`;
+}
+
+function formatNumber(n) {
+  if (n == null) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
+
+function buildHref(entry) {
+  const params = new URLSearchParams();
+  params.set("q", entry.title);
+  return `/?${params.toString()}`;
+}
+
+function FavoriteButton({ favorited, onToggle, ariaLabel }) {
   return (
     <button
       type="button"
@@ -32,8 +58,8 @@ function FavoriteButton({ favorited, onToggle, size = 36, ariaLabel }) {
         position: "absolute",
         top: 10,
         right: 10,
-        width: size,
-        height: size,
+        width: 36,
+        height: 36,
         borderRadius: 999,
         background: favorited ? "rgba(255, 215, 0, 0.18)" : "rgba(8, 6, 2, 0.78)",
         border: `1px solid ${favorited ? "rgba(255, 215, 0, 0.62)" : "rgba(255, 215, 0, 0.32)"}`,
@@ -57,7 +83,7 @@ function FavoriteButton({ favorited, onToggle, size = 36, ariaLabel }) {
       }}
     >
       <Heart
-        size={size * 0.5}
+        size={18}
         strokeWidth={2.2}
         fill={favorited ? "#FFD700" : "none"}
         color={favorited ? "#FFD700" : "rgba(255, 215, 0, 0.88)"}
@@ -67,256 +93,14 @@ function FavoriteButton({ favorited, onToggle, size = 36, ariaLabel }) {
   );
 }
 
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500";
-
-function formatDollars(d) {
-  if (d == null) return "—";
-  if (d >= 1_000_000_000) return `$${(d / 1_000_000_000).toFixed(2)}B`;
-  if (d >= 1_000_000) return `$${(d / 1_000_000).toFixed(1)}M`;
-  if (d >= 1_000) return `$${(d / 1_000).toFixed(1)}K`;
-  return `$${Math.round(d).toLocaleString("en-US")}`;
-}
-
-function formatExactDollars(d) {
-  if (d == null) return "—";
-  return `$${Math.round(d).toLocaleString("en-US")}`;
-}
-
-function formatNumber(n) {
-  if (n == null) return "—";
-  return Math.round(n).toLocaleString("en-US");
-}
-
-function buildHref(entry) {
-  const params = new URLSearchParams();
-  params.set("q", entry.title);
-  return `/?${params.toString()}`;
-}
-
-// ── Featured variant — #1 hero, horizontal layout ───────────────────────────
-
-function FeaturedCard({ entry, favorited, onToggleFavorite }) {
-  const grossAnimated = useCountUp(entry.gross || 0, 800);
-  const theatersAnimated = useCountUp(entry.theaters || 0, 800);
-  const ptaAnimated = useCountUp(entry.pta || 0, 800);
-
-  const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
-
-  return (
-    <Link
-      href={buildHref(entry)}
-      aria-label={`View ${entry.title} on Film Glance`}
-      style={{ textDecoration: "none", color: "inherit", display: "block" }}
-    >
-      <article
-        className="bom-pcard bom-pcard-featured"
-        style={{
-          position: "relative",
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 280px) minmax(0, 1fr)",
-          gap: 28,
-          padding: 24,
-          background:
-            "linear-gradient(180deg, rgba(20,15,4,0.86) 0%, rgba(8,6,2,0.92) 100%)",
-          border: "1.5px solid rgba(255,215,0,0.40)",
-          borderRadius: 22,
-          backdropFilter: "blur(28px) saturate(1.1)",
-          WebkitBackdropFilter: "blur(28px) saturate(1.1)",
-          boxShadow:
-            "0 32px 96px rgba(0,0,0,0.65), 0 0 120px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.14)",
-          animation: "bomCardIn 0.55s cubic-bezier(0.16,1,0.3,1) both",
-          transition: "transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
-          cursor: "pointer",
-          overflow: "hidden",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "translateY(-4px)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.62)";
-          e.currentTarget.style.boxShadow =
-            "0 40px 120px rgba(0,0,0,0.75), 0 0 160px rgba(255,215,0,0.20), inset 0 1px 0 rgba(255,215,0,0.20)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.40)";
-          e.currentTarget.style.boxShadow =
-            "0 32px 96px rgba(0,0,0,0.65), 0 0 120px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.14)";
-        }}
-      >
-        {/* Poster */}
-        <div
-          style={{
-            position: "relative",
-            aspectRatio: "2 / 3",
-            width: "100%",
-            borderRadius: 14,
-            overflow: "hidden",
-            background: "rgba(0,0,0,0.5)",
-            boxShadow: "0 18px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,215,0,0.22)",
-          }}
-        >
-          {posterUrl ? (
-            <img
-              src={posterUrl}
-              alt={entry.title}
-              loading="eager"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            />
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                fontFamily: "'Playfair Display', serif",
-                fontStyle: "italic",
-                color: "rgba(255,215,0,0.32)",
-                fontSize: 56,
-              }}
-            >
-              {entry.title.charAt(0)}
-            </div>
-          )}
-          {onToggleFavorite && (
-            <FavoriteButton
-              favorited={!!favorited}
-              onToggle={() => onToggleFavorite(entry)}
-              size={42}
-              ariaLabel={
-                favorited
-                  ? `Remove ${entry.title} from favorites`
-                  : `Save ${entry.title} to favorites`
-              }
-            />
-          )}
-        </div>
-
-        {/* Right column */}
-        <div
-          className="bom-feat-right"
-          style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0, gap: 16 }}
-        >
-          {/* Rank badge — crown + #1, restrained */}
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 9,
-              alignSelf: "flex-start",
-              padding: "6px 16px",
-              borderRadius: 999,
-              background: "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              border: "1px solid rgba(0,0,0,0.18)",
-              boxShadow: "0 5px 18px rgba(255,215,0,0.40)",
-            }}
-          >
-            <Crown size={16} style={{ color: "#0a0805" }} aria-hidden="true" strokeWidth={2.4} />
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 14,
-                fontWeight: 800,
-                letterSpacing: 1.4,
-                color: "#0a0805",
-              }}
-            >
-              #1
-            </span>
-          </div>
-
-          {/* Title + meta */}
-          <div style={{ minWidth: 0 }}>
-            <h2
-              style={{
-                margin: 0,
-                fontFamily: "'Playfair Display', serif",
-                fontStyle: "italic",
-                fontWeight: 700,
-                fontSize: "clamp(34px, 4vw, 54px)",
-                lineHeight: 1.05,
-                color: "#fff",
-                letterSpacing: -0.5,
-                wordBreak: "break-word",
-              }}
-            >
-              {entry.title}
-            </h2>
-            {(entry.director || entry.year) && (
-              <div
-                style={{
-                  marginTop: 10,
-                  fontFamily: "'Syne', sans-serif",
-                  fontSize: 17,
-                  color: "rgba(255,255,255,0.78)",
-                  letterSpacing: 0.2,
-                }}
-              >
-                {entry.director ? <span>Director: {entry.director}</span> : null}
-                {entry.director && entry.year ? <span> · </span> : null}
-                {entry.year ? <span>{entry.year}</span> : null}
-              </div>
-            )}
-          </div>
-
-          {/* Gross — huge gold-gradient count-up */}
-          <div
-            style={{
-              fontFamily: "'Playfair Display', serif",
-              fontWeight: 700,
-              fontSize: "clamp(48px, 5.8vw, 88px)",
-              lineHeight: 1,
-              background:
-                "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              color: "transparent",
-              filter:
-                "drop-shadow(0 0 22px rgba(255,215,0,0.55)) drop-shadow(0 0 80px rgba(255,215,0,0.25))",
-              letterSpacing: -0.8,
-              paddingBottom: "0.06em",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {formatExactDollars(grossAnimated)}
-          </div>
-
-          {/* Stat strip */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 18,
-              paddingTop: 14,
-              borderTop: "1px solid rgba(255,215,0,0.16)",
-            }}
-          >
-            <FeaturedStat label="Theaters" value={formatNumber(theatersAnimated)} />
-            <FeaturedStat label="Per-theater" value={formatDollars(ptaAnimated)} />
-            <FeaturedStat
-              label="FG Score"
-              value={entry.fg_score != null ? entry.fg_score.toFixed(1) : "—"}
-              sub={entry.fg_score == null ? "score pending" : null}
-              isScore
-              scoreLoaded={entry.fg_score != null}
-            />
-          </div>
-        </div>
-      </article>
-    </Link>
-  );
-}
-
-function FeaturedStat({ label, value, sub, isScore, scoreLoaded }) {
+function StandardStat({ label, value, isScore, scoreLoaded }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div
         style={{
           fontFamily: isScore ? "'Playfair Display', serif" : "'Syne', sans-serif",
           fontWeight: 700,
-          fontSize: "clamp(20px, 1.8vw, 26px)",
+          fontSize: 16,
           lineHeight: 1,
           color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
           letterSpacing: -0.2,
@@ -329,38 +113,43 @@ function FeaturedStat({ label, value, sub, isScore, scoreLoaded }) {
       </div>
       <div
         style={{
-          marginTop: 5,
+          marginTop: 4,
           fontFamily: "'Syne', sans-serif",
-          fontSize: 11,
-          letterSpacing: 1.4,
+          fontSize: 10.5,
+          letterSpacing: 1.2,
           textTransform: "uppercase",
-          color: "rgba(255,255,255,0.5)",
+          color: "rgba(255,255,255,0.55)",
+          fontWeight: 600,
         }}
       >
         {label}
       </div>
-      {sub && (
-        <div
-          style={{
-            marginTop: 1,
-            fontFamily: "'Syne', sans-serif",
-            fontSize: 10,
-            color: "rgba(255,255,255,0.36)",
-            fontStyle: "italic",
-          }}
-        >
-          {sub}
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Standard variant — #2..#10 uniform vertical card ────────────────────────
+export default function PosterCard({
+  entry,
+  staggerDelayMs = 0,
+  favorited = false,
+  onToggleFavorite, // (entry) => void; if omitted, the heart button is hidden
+  maxGross = null,  // #1 film's gross (from CinematicBoxOfficeHero), used to
+                     //  scale the gross-share bar; null hides the bar.
+}) {
+  const grossAnimated = useCountUp(entry?.gross || 0, 800);
 
-function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }) {
-  const grossAnimated = useCountUp(entry.gross || 0, 800);
+  if (!entry) return null;
+
   const posterUrl = entry.poster_path ? `${TMDB_POSTER_BASE}${entry.poster_path}` : null;
+
+  // Gross-share bar — clamp to [4%, 100%] so the smallest entry still has a
+  // visible nub (4% of card width is ~12px, enough to read as "very small"
+  // without disappearing). #2 might land at ~80%, #10 at ~10% on a typical
+  // weekly chart — the gap is the storytelling.
+  const sharePct =
+    maxGross && maxGross > 0
+      ? Math.min(100, Math.max(4, Math.round((entry.gross / maxGross) * 100)))
+      : null;
 
   return (
     <Link
@@ -368,16 +157,23 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
       aria-label={`View ${entry.title} on Film Glance`}
       style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}
     >
+      <style jsx>{`
+        .bo-pcard:hover {
+          transform: translateY(-6px) scale(1.012);
+          border-color: rgba(255, 215, 0, 0.42) !important;
+          box-shadow: 0 26px 64px rgba(0, 0, 0, 0.66), 0 0 0 1px rgba(255, 215, 0, 0.16),
+            0 0 60px rgba(255, 215, 0, 0.08) !important;
+        }
+        .bo-pcard:hover :global(.bo-pcard-poster) {
+          transform: scale(1.06);
+        }
+        .bo-pcard:hover :global(.bo-pcard-bar-fill) {
+          filter: brightness(1.12);
+        }
+      `}</style>
       <article
-        className="bom-pcard"
+        className="bo-pcard"
         style={{
-          // Fixed structural shape so all cards align identically.
-          // - Poster: aspect-ratio 2:3, top of card
-          // - Title block: fixed 2-line height (line-clamped)
-          // - Meta: fixed line height
-          // - Gross: 1 line
-          // - Stats: fixed grid
-          // - flex with consistent padding/gap, all cards same height in grid
           position: "relative",
           display: "flex",
           flexDirection: "column",
@@ -389,20 +185,10 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
           WebkitBackdropFilter: "blur(20px) saturate(1.1)",
           boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
           animation: `bomCardIn 0.45s cubic-bezier(0.16,1,0.3,1) ${staggerDelayMs}ms both`,
-          transition: "transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
+          transition:
+            "transform 0.35s cubic-bezier(0.16,1,0.3,1), border-color 0.25s ease, box-shadow 0.25s ease",
           cursor: "pointer",
           overflow: "hidden",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "translateY(-4px)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.32)";
-          e.currentTarget.style.boxShadow =
-            "0 22px 60px rgba(0,0,0,0.6), 0 0 80px rgba(255,215,0,0.06)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.borderColor = "rgba(255,215,0,0.10)";
-          e.currentTarget.style.boxShadow = "0 6px 22px rgba(0,0,0,0.4)";
         }}
       >
         {/* Poster with rank overlay */}
@@ -418,10 +204,18 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
         >
           {posterUrl ? (
             <img
+              className="bo-pcard-poster"
               src={posterUrl}
               alt={entry.title}
               loading="lazy"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+                transition: "transform 0.55s cubic-bezier(0.16,1,0.3,1)",
+                transform: "scale(1)",
+              }}
             />
           ) : (
             <div
@@ -440,9 +234,9 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
             </div>
           )}
 
-          {/* Rank — compact dark pill so the poster art breathes. Gold-
-              gradient italic Playfair number stays readable on any poster
-              background (yellow, dark, gradient) thanks to the dark backdrop. */}
+          {/* Rank pill — dark glass + crisp solid-gold italic Playfair so
+              it reads at a distance against any poster art. v6.6.0: dropped
+              the gold-gradient text-clip so it doesn't smear. */}
           <div
             style={{
               position: "absolute",
@@ -454,7 +248,7 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
               backdropFilter: "blur(12px) saturate(1.1)",
               WebkitBackdropFilter: "blur(12px) saturate(1.1)",
               border: "1px solid rgba(255, 215, 0, 0.38)",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,215,0,0.14)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.5)",
               userSelect: "none",
               pointerEvents: "none",
               lineHeight: 0.9,
@@ -467,13 +261,7 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
                 fontWeight: 700,
                 fontSize: 28,
                 lineHeight: 0.95,
-                background:
-                  "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                color: "transparent",
-                filter: "drop-shadow(0 0 8px rgba(255,215,0,0.38))",
+                color: "#FFD700",
                 letterSpacing: -0.8,
                 display: "inline-block",
                 paddingBottom: "0.06em",
@@ -487,7 +275,9 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
           <div
             style={{
               position: "absolute",
-              left: 0, right: 0, bottom: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               height: 64,
               background: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)",
               pointerEvents: "none",
@@ -498,7 +288,6 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
             <FavoriteButton
               favorited={!!favorited}
               onToggle={() => onToggleFavorite(entry)}
-              size={36}
               ariaLabel={
                 favorited
                   ? `Remove ${entry.title} from favorites`
@@ -559,23 +348,18 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
             {entry.year ? <span>{entry.year}</span> : null}
           </div>
 
-          {/* Spacer pushes gross + stats to bottom */}
+          {/* Spacer pushes gross + bar + stats to bottom */}
           <div style={{ flex: 1, minHeight: 4 }} />
 
-          {/* Gross */}
+          {/* Gross — crisp solid-gold Playfair, no gradient text smear, no
+              heavy drop-shadow glow. v6.6.0 anti-smear treatment. */}
           <div
             style={{
               fontFamily: "'Playfair Display', serif",
               fontWeight: 700,
-              fontSize: 34,
+              fontSize: 30,
               lineHeight: 1,
-              background:
-                "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              color: "transparent",
-              filter: "drop-shadow(0 0 12px rgba(255,215,0,0.38))",
+              color: "#FFD700",
               letterSpacing: -0.5,
               paddingBottom: "0.06em",
               whiteSpace: "nowrap",
@@ -586,7 +370,37 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
             {formatDollars(grossAnimated)}
           </div>
 
-          {/* Stat row */}
+          {/* Gross-share bar — visualizes gross/maxGross. The chart's drama
+              made visible: a tall bar means "close to #1," a stub means
+              "long way back." */}
+          {sharePct != null && (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                height: 6,
+                borderRadius: 999,
+                background: "rgba(255,215,0,0.10)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                className="bo-pcard-bar-fill"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: `${sharePct}%`,
+                  background:
+                    "linear-gradient(90deg, rgba(255,215,0,0.45) 0%, #FFD700 60%, #FFE27A 100%)",
+                  borderRadius: 999,
+                  boxShadow: "0 0 12px rgba(255,215,0,0.32)",
+                  transition: "filter 0.25s ease, width 0.6s cubic-bezier(0.16,1,0.3,1)",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Stat row — Theaters · Per-theater · FG Score */}
           <div
             style={{
               display: "grid",
@@ -611,70 +425,7 @@ function StandardCard({ entry, staggerDelayMs = 0, favorited, onToggleFavorite }
   );
 }
 
-function StandardStat({ label, value, isScore, scoreLoaded }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div
-        style={{
-          fontFamily: isScore ? "'Playfair Display', serif" : "'Syne', sans-serif",
-          fontWeight: 700,
-          fontSize: 18,
-          lineHeight: 1,
-          color: isScore && scoreLoaded ? "#FFD700" : isScore ? "rgba(255,255,255,0.4)" : "#fff",
-          letterSpacing: -0.2,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          marginTop: 5,
-          fontFamily: "'Syne', sans-serif",
-          fontSize: 11,
-          letterSpacing: 1.2,
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.55)",
-          fontWeight: 600,
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
-// ── Default export — chooses variant based on featured prop ────────────────
-
-export default function PosterCard({
-  entry,
-  featured = false,
-  staggerDelayMs = 0,
-  favorited = false,
-  onToggleFavorite, // (entry) => void; if omitted, the heart button is hidden
-}) {
-  if (!entry) return null;
-  if (featured)
-    return (
-      <FeaturedCard
-        entry={entry}
-        favorited={favorited}
-        onToggleFavorite={onToggleFavorite}
-      />
-    );
-  return (
-    <StandardCard
-      entry={entry}
-      staggerDelayMs={staggerDelayMs}
-      favorited={favorited}
-      onToggleFavorite={onToggleFavorite}
-    />
-  );
-}
-
-// Global keyframes (used by both variants)
+// Global keyframes
 if (typeof document !== "undefined" && !document.getElementById("bom-pcard-keyframes")) {
   const style = document.createElement("style");
   style.id = "bom-pcard-keyframes";

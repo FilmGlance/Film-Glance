@@ -2,11 +2,12 @@
 
 // components/box-office/BoxOfficePage.jsx
 //
-// Main client component for /boxoffice. v5.12.0 round 9 reworked the filter
-// model from a single period_type chip strip + period-navigator dropdown to
-// THREE independent dropdowns: Year, Month, Week.
+// v6.6.0 — image-forward redesign. CinematicBoxOfficeHero replaces both
+// PageHero (text-only) and the horizontal #1 PosterCard (featured variant).
+// FilterBar wrapped in a "Browse the Chart" section pill for context. Grid
+// renders #2-#10 with a gross-share bar scaled to #1's gross.
 //
-// Filter logic:
+// Filter logic (unchanged from v5.12.0 round 9):
 //   • Year only       → yearly Top 10 (period_type=yearly)
 //   • Year + Month    → monthly Top 10 (period_type=monthly)
 //   • Year + Month + Week → weekly Top 10 (period_type=weekly)
@@ -22,7 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import SiteHeader from "../SiteHeader";
 import GoldScrollbar from "../GoldScrollbar";
 import BackdropLayer from "./BackdropLayer";
-import PageHero from "./PageHero";
+import CinematicBoxOfficeHero from "./CinematicBoxOfficeHero";
 import FilterBar from "./FilterBar";
 import PosterCard from "./PosterCard";
 import EmptyState from "./EmptyState";
@@ -154,6 +155,8 @@ export default function BoxOfficePage() {
 
   const allEntries = (data?.entries || []).slice(0, 10);
   const heroEntry = allEntries[0] || null;
+  const restEntries = allEntries.slice(1);
+  const maxGross = heroEntry?.gross || null;
 
   // Favorites — heart button on each card.
   //   • Signed-out heart click → requestSignIn (persists intent + bounces to
@@ -202,11 +205,21 @@ export default function BoxOfficePage() {
       <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
 
       {/* SiteHeader is rendered as a direct child of the page wrapper so its
-          `position: sticky` actually sticks against the body's scroll context.
-          Wrapping it in a fixed-height parent (as we did pre-round-10) makes
-          the sticky element only "stick" within that ~64px parent, which means
-          it scrolls away as soon as the user gets past 64px of scroll. */}
+          `position: sticky` actually sticks against the body's scroll context. */}
       <SiteHeader active="boxoffice" />
+
+      {/* Cinematic hero — full-bleed, dominates first viewport. The #1 film
+          IS the page's headline; no separate horizontal hero card below.
+          Same architectural move as v6.5.3 on /discover. */}
+      <CinematicBoxOfficeHero
+        entry={heroEntry}
+        periodType={data?.period_type || apiQuery.period}
+        periodStart={data?.period_start || null}
+        periodEnd={data?.period_end || null}
+        loading={loading}
+        favorited={heroEntry ? isFavorited(heroEntry) : false}
+        onToggleFavorite={handleHeartClick}
+      />
 
       <main
         style={{
@@ -214,22 +227,65 @@ export default function BoxOfficePage() {
           zIndex: 2,
           maxWidth: 1200,
           margin: "0 auto",
-          padding: "44px 24px 96px",
+          padding: "0 24px 96px",
           fontFamily: "'Syne', sans-serif",
         }}
       >
-        <PageHero />
+        {/* "Browse the Chart" section pill — wraps the period selectors so
+            the filter bar reads as a deliberate slice of the page rather
+            than a floating strip. Mirrors the Reel Gems pill on /discover. */}
+        <section
+          style={{
+            marginBottom: 28,
+            padding: 24,
+            borderRadius: 18,
+            background: "rgba(8,6,2,0.62)",
+            border: "1px solid rgba(255,215,0,0.10)",
+            backdropFilter: "blur(20px) saturate(1.1)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.1)",
+            boxShadow: "0 6px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              fontSize: "clamp(28px, 3.4vw, 38px)",
+              lineHeight: 1.05,
+              letterSpacing: -0.4,
+              color: "#FFD700",
+              paddingBottom: "0.06em",
+            }}
+          >
+            Browse the Chart
+          </h2>
+          <p
+            style={{
+              margin: "8px 0 18px",
+              maxWidth: 720,
+              fontFamily: "'Syne', sans-serif",
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: "rgba(255, 255, 255, 0.7)",
+              letterSpacing: 0.2,
+            }}
+          >
+            Pick a year. Narrow to a month. Drill into a single week. The Top 10
+            updates instantly — every chart back to 1977.
+          </p>
 
-        <FilterBar
-          year={year}
-          month={month}
-          week={week}
-          region={region}
-          availableYearly={data?.available_yearly || []}
-          availableMonthly={data?.available_monthly || []}
-          availableWeekly={data?.available_weekly || []}
-          onChange={onFilterChange}
-        />
+          <FilterBar
+            year={year}
+            month={month}
+            week={week}
+            region={region}
+            availableYearly={data?.available_yearly || []}
+            availableMonthly={data?.available_monthly || []}
+            availableWeekly={data?.available_weekly || []}
+            onChange={onFilterChange}
+          />
+        </section>
 
         {loading && !data && <SkeletonRows />}
         {error && (
@@ -246,19 +302,45 @@ export default function BoxOfficePage() {
         )}
         {data && data.entries?.length > 0 && (
           <>
-            {/* Row 1 — featured #1, full width, horizontal hero */}
-            {heroEntry && (
-              <div style={{ marginBottom: 28 }}>
-                <PosterCard
-                  key={`hero-${heroEntry.search_key}-${data.period_start}`}
-                  entry={heroEntry}
-                  featured
-                  favorited={isFavorited(heroEntry)}
-                  onToggleFavorite={handleHeartClick}
-                />
+            {/* "The Rest of the Top 10" anchor — small uppercase mono label
+                so the chart-grid below has a clear identity (the cinematic
+                hero already announced #1; this names #2..#10). */}
+            {restEntries.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: 18,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    color: "rgba(255,215,0,0.62)",
+                    fontWeight: 600,
+                  }}
+                >
+                  The Rest of the Top 10
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'Syne', sans-serif",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.45)",
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  Bar shows gross relative to #1
+                </div>
               </div>
             )}
-            {/* Rows 2-4 — symmetric 3×3 grid of #2..#10, all uniform */}
+            {/* Symmetric 3×3 grid of #2..#10, all uniform */}
             <div
               className="bom-grid"
               style={{
@@ -269,13 +351,14 @@ export default function BoxOfficePage() {
                 gridAutoRows: "1fr",
               }}
             >
-              {allEntries.slice(1).map((entry, i) => (
+              {restEntries.map((entry, i) => (
                 <PosterCard
                   key={`card-${entry.search_key}-${data.period_start}`}
                   entry={entry}
                   staggerDelayMs={i * 60}
                   favorited={isFavorited(entry)}
                   onToggleFavorite={handleHeartClick}
+                  maxGross={maxGross}
                 />
               ))}
             </div>
@@ -293,16 +376,6 @@ export default function BoxOfficePage() {
             .bom-grid {
               grid-template-columns: minmax(0, 360px) !important;
               gap: 16px !important;
-            }
-          }
-          @media (max-width: 720px) {
-            .bom-pcard-featured {
-              grid-template-columns: 1fr !important;
-              padding: 18px !important;
-              gap: 18px !important;
-            }
-            .bom-pcard-featured .bom-feat-right h2 {
-              font-size: 32px !important;
             }
           }
         `}</style>

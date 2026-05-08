@@ -111,22 +111,9 @@ export default function FilterBar({
   }, [year, month, availableWeekly]);
 
   return (
-    <section
-      style={{
-        // No backdrop-filter here — moved the visual dark-glass treatment to
-        // a child wrapper so the parent doesn't create a containing block for
-        // any portal-rendered children. (Technically irrelevant since the
-        // dropdowns now use portals — but cleaner separation.)
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-        padding: "18px 20px",
-        marginBottom: 32,
-        background: "rgba(8,6,2,0.62)",
-        border: "1px solid rgba(255,215,0,0.10)",
-        borderRadius: 16,
-      }}
-    >
+    // v6.6.0: dropped own dark-glass pill — FilterBar now lives inside the
+    // "Browse the Chart" section pill in BoxOfficePage. Bare flex row.
+    <>
       <div
         className="bom-filterbar-row"
         style={{
@@ -186,6 +173,6 @@ export default function FilterBar({
           }
         }
       `}</style>
-    </section>
+    </>
   );
 }
