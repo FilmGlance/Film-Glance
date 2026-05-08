@@ -22,10 +22,9 @@ import { useFavorites } from "@/lib/use-favorites";
 import FolderPickerModal from "@/components/box-office/FolderPickerModal";
 import BackdropLayer from "@/components/box-office/BackdropLayer";
 
-import DiscoverHero from "./DiscoverHero";
+import CinematicHero from "./CinematicHero";
 import DiscoverFilterBar from "./DiscoverFilterBar";
 import DiscoverGrid from "./DiscoverGrid";
-import DiscoverFeatured from "./DiscoverFeatured";
 import RouletteSpinner from "./RouletteSpinner";
 
 const VALID_RELEASE_WINDOWS = ["in_theaters", "at_home"];
@@ -142,12 +141,20 @@ export default function DiscoverPage() {
 
   const entries = data?.entries || [];
   const heroEntry = entries[0] || null;
-  const restEntries = entries.slice(1);
 
   return (
     <div style={{ position: "relative", minHeight: "100vh", color: "#f0f0f0" }}>
       <BackdropLayer backdropPath={heroEntry?.backdrop_path || null} />
       <SiteHeader active="discover" />
+
+      {/* Cinematic hero — full-bleed, dominates first viewport. The #1 film
+          IS the page's headline; no separate TOP PICK card below. */}
+      <CinematicHero
+        entry={heroEntry}
+        loading={loading}
+        favorited={heroEntry ? isFavorited(heroEntry) : false}
+        onToggleFavorite={handleHeartClick}
+      />
 
       <main
         style={{
@@ -155,12 +162,10 @@ export default function DiscoverPage() {
           zIndex: 2,
           maxWidth: 1200,
           margin: "0 auto",
-          padding: "44px 24px 96px",
+          padding: "0 24px 96px",
           fontFamily: "'Syne', sans-serif",
         }}
       >
-        <DiscoverHero />
-
         <RouletteSpinner
           posterPool={posterPool}
           availableGenres={data?.available_genres || []}
@@ -250,20 +255,11 @@ export default function DiscoverPage() {
                   })()}
         </div>
 
-        {heroEntry && (
-          <div style={{ marginBottom: 28 }}>
-            <DiscoverFeatured
-              entry={heroEntry}
-              releaseWindow={releaseWindow}
-              favorited={isFavorited(heroEntry)}
-              onToggleFavorite={handleHeartClick}
-            />
-          </div>
-        )}
-
-        {restEntries.length > 0 && (
+        {/* Grid — full 100 entries (no separate TOP PICK card; hero shows
+            the #1 film as a cinematic banner instead). */}
+        {entries.length > 0 && (
           <DiscoverGrid
-            entries={restEntries}
+            entries={entries}
             releaseWindow={releaseWindow}
             isFavorited={isFavorited}
             onToggleFavorite={handleHeartClick}
