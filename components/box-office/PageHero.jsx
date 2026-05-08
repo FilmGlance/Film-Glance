@@ -16,23 +16,6 @@ export default function PageHero() {
         textAlign: "left",
       }}
     >
-      {/* Soft gold halo behind the title — same trick the landing page uses */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: -24,
-          top: -32,
-          right: -24,
-          bottom: -16,
-          pointerEvents: "none",
-          background:
-            "radial-gradient(ellipse at 24% 50%, rgba(255,215,0,0.10), transparent 62%)",
-          filter: "blur(4px)",
-          zIndex: -1,
-        }}
-      />
-
       <h1
         style={{
           fontFamily: "'Playfair Display', serif",
@@ -42,7 +25,6 @@ export default function PageHero() {
           lineHeight: 1.02,
           letterSpacing: -1.8,
           color: "#fff",
-          textShadow: "0 0 24px rgba(255,215,0,0.10)",
           animation: "bomHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) both",
         }}
       >
@@ -51,12 +33,12 @@ export default function PageHero() {
           className="hero-accent"
           style={{
             display: "block",
-            fontStyle: "italic",
             fontSize: "clamp(34px, 5vw, 70px)",
             lineHeight: 1.18,
             paddingBottom: "0.08em",
             letterSpacing: -0.8,
             marginTop: 4,
+            color: "#FFD700",
             animation: "bomHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) 0.12s both",
           }}
         >

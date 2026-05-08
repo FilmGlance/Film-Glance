@@ -17,22 +17,6 @@ export default function DiscoverHero() {
         textAlign: "left",
       }}
     >
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: -24,
-          top: -32,
-          right: -24,
-          bottom: -16,
-          pointerEvents: "none",
-          background:
-            "radial-gradient(ellipse at 24% 50%, rgba(255,215,0,0.10), transparent 62%)",
-          filter: "blur(4px)",
-          zIndex: -1,
-        }}
-      />
-
       <h1
         style={{
           fontFamily: "'Playfair Display', serif",
@@ -42,7 +26,6 @@ export default function DiscoverHero() {
           lineHeight: 1.02,
           letterSpacing: -1.8,
           color: "#fff",
-          textShadow: "0 0 24px rgba(255,215,0,0.10)",
           animation: "disHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) both",
         }}
       >
@@ -51,19 +34,12 @@ export default function DiscoverHero() {
           className="hero-accent"
           style={{
             display: "block",
-            fontStyle: "italic",
             fontSize: "clamp(34px, 5vw, 70px)",
             lineHeight: 1.18,
             paddingBottom: "0.08em",
             letterSpacing: -0.8,
             marginTop: 4,
-            background:
-              "linear-gradient(135deg, #FFE27A 0%, #FFD700 48%, #E8A000 100%)",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            color: "transparent",
-            filter: "drop-shadow(0 0 22px rgba(255,215,0,0.25))",
+            color: "#FFD700",
             animation: "disHeroLineIn 0.7s cubic-bezier(0.16,1,0.3,1) 0.12s both",
           }}
         >

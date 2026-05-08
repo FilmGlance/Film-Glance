@@ -1,5 +1,32 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (post-merge) — v6.5.1 hero de-glow + "Reel Gems" section + decade rail removal
+
+User merged PR #64 to production. Five focused fixes:
+
+| # | Fix |
+|---|---|
+| 1, 2 | **Yellow halo removed from both page heroes**. `DiscoverHero` and `box-office/PageHero` both had a `radial-gradient(ellipse, rgba(255,215,0,0.10), transparent 62%)` background div + a `textShadow: "0 0 24px rgba(255,215,0,0.10)"` on the H1 + a `drop-shadow(0 0 22px rgba(255,215,0,0.25))` filter on the gold subtitle. All three removed on both pages. |
+| 3 | **Italics removed from both hero subtitles**. "Films Worth Your Evening." and "The Movies Topping The Charts." were `fontStyle: "italic"`; both now upright Playfair gold (#FFD700). Also dropped the gold-gradient background-clip pattern on Discover's subtitle since solid #FFD700 reads cleaner without the clip artifacts. |
+| 4 | **"Reel Gems" section header** added between RouletteSpinner and DiscoverFilterBar. Italic Playfair-removed gold (matching the "Movie Reel Roulette" pattern). Subtitle text per user spec: "Select Theater to see what is currently showing on the big screens. Choose At Home, your desired genre and year and we'll show you a selection of only top shelf Film Glance verified cinema!" |
+| 5 | **DecadeBrowseRail removed**. Render dropped from `DiscoverPage`; import dropped; `onSelectDecade` callback dropped. Component file `DecadeBrowseRail.jsx` left in tree (orphaned, harmless). Layout comment in `DiscoverPage.jsx` header updated. |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverHero.jsx` | Halo div + textShadow + italic + drop-shadow filter all removed; subtitle now solid #FFD700 |
+| `components/box-office/PageHero.jsx` | Same treatment — halo + textShadow + italic on subtitle removed |
+| `components/discover/DiscoverPage.jsx` | "Reel Gems" h2 + subtitle paragraph added between RouletteSpinner and FilterBar; DecadeBrowseRail import + render + onSelectDecade callback removed |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (no regression)
+
+---
+
 ## Session: May 7, 2026 (later) — v6.5.0 cache growth Phase A — tmdb_id schema + scripts shipped (seed not yet run)
 
 User asked to grow `movie_cache` from 5,532 → 30,000 with the absolute guarantee of zero duplicates. Per planning Q&A: full pipeline, video reviews pre-cached, run as a one-shot Node script on VPS after the forum import wraps. Plan file: `~/.claude/plans/project-will-be-the-ticklish-corbato.md`.

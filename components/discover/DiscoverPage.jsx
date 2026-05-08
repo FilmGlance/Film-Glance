@@ -5,11 +5,13 @@
 // Main client component for /discover. Owns:
 //   • Filter state (release_window, genre, year, hidden_gems) + URL sync
 //   • Data fetching from /api/discover
-//   • Layout: SiteHeader → DiscoverHero → RecentlyAddedRail → RouletteSpinner
-//             → DiscoverFilterBar → DiscoverGrid → DecadeBrowseRail
+//   • Layout: SiteHeader → DiscoverHero → RouletteSpinner
+//             → "Reel Gems" header → DiscoverFilterBar → count line
+//             → DiscoverFeatured → DiscoverGrid
 //   • Favorites integration (heart on each card → folder picker modal)
 //
-// v6.4.0.
+// v6.4.0; v6.5.x dropped the legacy Recently Added rail + Decade Browse rail
+// per user feedback.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,7 +27,6 @@ import DiscoverFilterBar from "./DiscoverFilterBar";
 import DiscoverGrid from "./DiscoverGrid";
 import DiscoverFeatured from "./DiscoverFeatured";
 import RouletteSpinner from "./RouletteSpinner";
-import DecadeBrowseRail from "./DecadeBrowseRail";
 
 const VALID_RELEASE_WINDOWS = ["in_theaters", "at_home"];
 
@@ -110,17 +111,6 @@ export default function DiscoverPage() {
     [releaseWindow, genre, year, hiddenGems, syncURL],
   );
 
-  const onSelectDecade = useCallback(
-    (d) => {
-      // Filtering by decade isn't a single year — set the most recent year in
-      // the decade to land the user roughly there. The decade rail's primary
-      // role is wayfinding; for finer control they use the year dropdown.
-      setYear(d.end);
-      syncURL({ release_window: releaseWindow, genre, year: d.end, hidden_gems: hiddenGems });
-    },
-    [releaseWindow, genre, hiddenGems, syncURL],
-  );
-
   // Favorites — same pattern as box-office.
   const { signedIn, folders, isFavorited, addFavorite, removeFavorite, createFolder, requestSignIn } = useFavorites();
   const [pickerEntry, setPickerEntry] = useState(null);
@@ -175,6 +165,39 @@ export default function DiscoverPage() {
           posterPool={posterPool}
           availableGenres={data?.available_genres || []}
         />
+
+        {/* Reel Gems section header (above the filter bar). */}
+        <header style={{ margin: "8px 0 18px" }}>
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              fontSize: "clamp(28px, 3.4vw, 38px)",
+              lineHeight: 1.05,
+              letterSpacing: -0.4,
+              color: "#FFD700",
+              paddingBottom: "0.06em",
+            }}
+          >
+            Reel Gems
+          </h2>
+          <p
+            style={{
+              margin: "8px 0 0",
+              maxWidth: 720,
+              fontFamily: "'Syne', sans-serif",
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: "rgba(255, 255, 255, 0.7)",
+              letterSpacing: 0.2,
+            }}
+          >
+            Select Theater to see what is currently showing on the big screens.
+            Choose At Home, your desired genre and year and we&apos;ll show you a
+            selection of only top shelf Film Glance verified cinema!
+          </p>
+        </header>
 
         <DiscoverFilterBar
           releaseWindow={releaseWindow}
@@ -233,11 +256,6 @@ export default function DiscoverPage() {
             onToggleFavorite={handleHeartClick}
           />
         )}
-
-        <DecadeBrowseRail
-          availableYears={data?.available_years || []}
-          onSelectDecade={onSelectDecade}
-        />
       </main>
 
       <GoldScrollbar />
