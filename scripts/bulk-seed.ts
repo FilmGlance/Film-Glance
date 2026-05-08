@@ -53,8 +53,10 @@ for (const k of REQUIRED) {
   }
 }
 
-// Lib imports run AFTER env is loaded.
-const { runFullPipeline, writeCacheEntries } = await import("../lib/search-pipeline.js");
+// Lib imports run AFTER env is loaded — assigned inside main() so we don't
+// rely on top-level await (tsx defaults to CJS where TLA is a parse error).
+let runFullPipeline!: typeof import("../lib/search-pipeline.js")["runFullPipeline"];
+let writeCacheEntries!: typeof import("../lib/search-pipeline.js")["writeCacheEntries"];
 
 // ─── CLI flags ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -237,6 +239,11 @@ async function processBatchConcurrent(candidates: DiscoverHit[]): Promise<{ adde
 // ─── Main ──────────────────────────────────────────────────────────────
 async function main() {
   console.log(`[bulk-seed] DRY_RUN=${DRY_RUN} LIMIT=${LIMIT === Infinity ? "∞" : LIMIT} TARGET_TOTAL=${TARGET_TOTAL} CONCURRENCY=${CONCURRENCY}`);
+
+  // Load lib AFTER env is loaded. Inside main() so tsx CJS doesn't choke.
+  const pipeline = await import("../lib/search-pipeline.js");
+  runFullPipeline = pipeline.runFullPipeline;
+  writeCacheEntries = pipeline.writeCacheEntries;
 
   console.log("[bulk-seed] loading existing tmdb_ids from cache…");
   const seen = await loadExistingTmdbIds();
