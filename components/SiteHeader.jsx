@@ -15,7 +15,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Film, MessageSquare, ArrowRight, TrendingUp, Heart, LogIn } from "lucide-react";
+import { Film, MessageSquare, ArrowRight, TrendingUp, Heart, LogIn, Compass } from "lucide-react";
 
 export default function SiteHeader({ active = null }) {
   const [scrolled, setScrolled] = useState(false);
@@ -120,6 +120,17 @@ export default function SiteHeader({ active = null }) {
           <MessageSquare size={13} />
           <span className="nav-forum-label">Discussion Forum</span>
           <ArrowRight size={11} className="arrow" style={{ marginLeft: 1 }} />
+        </Link>
+
+        <Link
+          href="/discover"
+          className="nav-btn nav-discover-btn"
+          aria-label="Discover films on Film Glance"
+          aria-current={active === "discover" ? "page" : undefined}
+          style={{ ...navBtnBase, background: active === "discover" ? activeBg : navBtnBase.background }}
+        >
+          <Compass size={13} />
+          <span className="nav-forum-label">Discover</span>
         </Link>
 
         <Link

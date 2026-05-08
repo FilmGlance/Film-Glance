@@ -1,5 +1,403 @@
 # Film Glance — Conversation Summary
 
+## Session: May 7, 2026 (later) — v6.5.0 cache growth Phase A — tmdb_id schema + scripts shipped (seed not yet run)
+
+User asked to grow `movie_cache` from 5,532 → 30,000 with the absolute guarantee of zero duplicates. Per planning Q&A: full pipeline, video reviews pre-cached, run as a one-shot Node script on VPS after the forum import wraps. Plan file: `~/.claude/plans/project-will-be-the-ticklish-corbato.md`.
+
+This session ships **Phase A** — the dedup infrastructure and operator scripts. Phase B (the actual ~10-12h seed run) is the user's job to kick off on VPS once the forum import completes.
+
+### Migration 021 (applied to prod)
+
+`sql/migrations/021_movie_cache_tmdb_id.sql`:
+- `ALTER TABLE movie_cache ADD COLUMN tmdb_id INTEGER`
+- `CREATE UNIQUE INDEX movie_cache_tmdb_id_uidx ON movie_cache(tmdb_id) WHERE tmdb_id IS NOT NULL` — partial-unique pattern allows multiple NULL legacy rows but enforces uniqueness on every non-NULL value.
+
+This is the bulletproof dedup primary defense going forward. Title-based dedup (search_key) will continue to fail on variations like "Pride and Prejudice" vs "Pride & Prejudice"; tmdb_id is stable, integer, one per real film.
+
+### `lib/search-pipeline.ts` patched
+
+- `runFullPipeline` now sets `mv.tmdb_id = releaseInfo.tmdbId` before returning, surfacing the value the pipeline already had mid-flight.
+- `writeCacheEntries` writes `tmdb_id` as a top-level column on the upsert (when present). Redundant with the JSONB copy intentionally — keeps legacy code paths that read from JSONB working, while the partial-UNIQUE index protects writes.
+- Net effect: every new cache row from /api/search going forward carries tmdb_id. Combined with the bulk-seed script (Phase B) and the legacy backfill (also Phase B), every row in the cache will have it.
+
+### Operator scripts (in repo, not yet run)
+
+**`scripts/backfill-tmdb-id.ts`** — one-shot backfill of legacy 5,532 rows. For each row missing tmdb_id, TMDB `/search/movie` lookup by title+year, write tmdb_id back. 250ms throttle (~4 req/s, 23min total). Logs unmatched titles to `scratch/tmdb-backfill-unmatched.txt` for review. If two rows resolve to the same tmdb_id (residual mig-019 dup), keeps the highest-fg_score / highest-hit_count row and DELETEs the rest.
+
+**`scripts/bulk-seed.ts`** — main 24,500-movie seed:
+- Imports `runFullPipeline` + `writeCacheEntries` from `lib/search-pipeline` directly via tsx (no porting; data shape matches every other cache row).
+- Stratification grid: 6 vote-count buckets × 9 year ranges = 54 buckets, paged through TMDB Discover. Higher-quality films (high vote_count) seeded first.
+- Two-step dedup: in-memory `Set<number>` of existing tmdb_ids loaded at startup; partial-UNIQUE index is the safety net against races.
+- Concurrency: 5 parallel pipelines (Anthropic tier-1 cap).
+- Resumable via `~/.bulk-seed-state.json` — re-running picks up where it left off.
+- Failures logged to `~/.bulk-seed-failures.log`; per-movie try/catch never stops the run.
+- Cost tracking with running total in console.
+
+### Operator playbook (Phase B — user runs on VPS)
+
+1. Wait for forum import to wrap (currently 96.6%, ~few hours to go).
+2. SSH to VPS, clone staging branch, `npm ci`.
+3. Copy `.env.local` (or set env vars manually).
+4. Dry run: `npx tsx scripts/bulk-seed.ts --dry-run --limit 10` to verify pipeline.
+5. Backfill first: `npx tsx scripts/backfill-tmdb-id.ts` (~23 min).
+6. Real seed: `nohup npx tsx scripts/bulk-seed.ts > ~/bulk-seed.log 2>&1 &` (~10-12h, ~$300-400 in API spend).
+7. Monitor with `tail -f ~/bulk-seed.log`.
+
+### Validation (this session)
+
+- Migration 021 applied + verified live (`tmdb_id` column exists, partial-unique index in place)
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (no regression)
+
+### What's NOT done this session
+
+- Backfill not run yet (waiting for user/VPS post-import)
+- Bulk seed not run yet (same)
+- Bible-doc-style verification of post-seed cache size (user runs Phase C after Phase B completes)
+- Pool-size impact on /discover not yet visible (will be after seed completes)
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/021_movie_cache_tmdb_id.sql` | NEW (applied to prod) |
+| `lib/search-pipeline.ts` | runFullPipeline surfaces tmdb_id; writeCacheEntries writes tmdb_id column |
+| `scripts/backfill-tmdb-id.ts` | NEW operator script |
+| `scripts/bulk-seed.ts` | NEW operator script |
+| `tech-specs.md`, `conversation-summary.md` | This session entry |
+
+---
+
+## Session: May 7, 2026 (round 5) — v6.4.1 polish: count-line wording + roulette-card de-yellowing
+
+User flagged 4 issues:
+- **#1** asked whether the roulette pool can extend beyond the cache. Architectural question (no code change this round) — answered in chat: yes it's possible via TMDB Discover API, but matching our fg_score (which aggregates 9 sources via `calcScore`) requires the full Claude+TMDB+ratings pipeline per movie (~5-10s + ~$0.01 per call). Not feasible inline during a 4.2s spin animation. Two practical paths offered: (a) trust TMDB `vote_average` as a proxy for un-cached movies (different scoring model, fast/free, but mixed semantics), or (b) keep cache-only roulette but grow the cache via background `seed/discover` cron — pool widens passively over time. User can pick a path next round if they want.
+- **#2 yellow overuse on RouletteCard**: dialed back. `border` `0.40` → `0.16`, dropped the `0 0 100px rgba(255,215,0,0.16)` halo box-shadow, simpler `rgba(8,6,2,0.62)` background matching DiscoverCard, score number lost its gold-gradient drop-shadow filter (now solid `#FFD700` Playfair without italic).
+- **#3 count-line wording**: "100 FILMS · RANKED BY FILM GLANCE SCORE" → adaptive "The Top 100 Film Glance [Genre] Films from [Year]". Either or both filters fall out gracefully when set to "Any" (e.g. `genre=null` & `year=null` → "The Top 100 Film Glance Films"; `genre="Action"` & `year=2024` → "The Top 100 Film Glance Action Films from 2024"). Format also switched from mono caps to Syne 14px so it reads as a sentence, not a label.
+- **#4 italics still excessive on RouletteCard**: dropped `fontStyle: "italic"` from both the title and the score number (the two prominent italics in image 25). DiscoverCard titles still italic to match /boxoffice convention; if the user wants those non-italic too, easy follow-up.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverPage.jsx` | Count line restyled — Syne 14px sentence-case, adaptive Genre/Year wording |
+| `components/discover/RouletteCard.jsx` | Toned down border + box-shadow; simpler bg; score lost italic + drop-shadow; title lost italic |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings
+
+---
+
+## Session: May 7, 2026 (round 4) — v6.4.1 polish: header style + truncation + redundant pill
+
+User reviewed staging preview and reported:
+- **Issue 1**: roulette pool size confusion ("spinning from 98 films") — yes, the roulette pool is the cached movie set with `fg_score >= 8.0` after applying decade + genre filters. With Decade=Any+Genre=Any the pool is ~965; narrower filters drop it. This is **cache-only** (5,532 rows post-dedup), not the universe of films — Film Glance only has fg_scores for movies that have been searched at least once.
+- **Issues 2 + 6**: section headers should match the "True Movie Rating Score" style (italic Playfair solid gold) shown on the result page; italic was overused on body text.
+- **Issue 3**: DiscoverFeatured (TOP PICK card) was missing the synopsis paragraph — added inline within the same card, non-italic.
+- **Issue 4**: Card synopses were truncating mid-sentence at 3-line clamp + italic looked off. Fixed: dropped italic, raised clamp to 5 lines, ensured `text-overflow: ellipsis`, slightly bigger font (12.5 → 13px) and lighter color for readability.
+- **Issue 5**: Release-window pill ("At Home") on every card was redundant when the user is already filtering to At Home. Removed pill from both `DiscoverCard` and `DiscoverFeatured`.
+- **Issue 7**: VPS forum import — **3,195/3,308 boards (96.6%)**, ~8.3h remaining per script ETA, completes mid-day May 8 UTC.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `components/discover/DiscoverCard.jsx` | Synopsis: drop italic, 5-line clamp + ellipsis, 13px size, slightly higher contrast (rgba 0.72). Release pill removed. |
+| `components/discover/DiscoverFeatured.jsx` | Synopsis paragraph added below genre, non-italic 15px Syne. Release pill removed. |
+| `components/discover/RouletteSpinner.jsx` | Section heading "Movie Reel Roulette" — color `#fff` → `#FFD700` to match image-21 reference; trailing period dropped (cleaner, matches image). |
+
+### Italics audit (per user issue 6)
+
+Section headers and stylized titles still use italic Playfair (intentional — that's the brand pattern shown in image 21 and across `/boxoffice`):
+- Hero h1 subtitle "Films Worth Your Evening." — italic gold-gradient (mirrors /boxoffice)
+- Card titles — italic Playfair (mirrors /boxoffice)
+- "Movie Reel Roulette" h2 — italic Playfair gold (image-21 pattern)
+- FG Score numbers — italic Playfair gold (mirrors /boxoffice StandardStat)
+
+Body text and meta lines are now all upright:
+- Card synopsis — non-italic
+- Featured synopsis — non-italic
+- Director · Year line — non-italic
+- Genre rows — non-italic (mono caps)
+- Stats labels — non-italic
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 228 warnings (4 added warnings are JSX no-img-element warnings on the new synopsis area; benign)
+
+---
+
+## Session: May 7, 2026 (round 3) — v6.4.1 polish round (8 more user fixes + sophistication pass)
+
+PR #65 (v6.3.2 logo hotfix) merged to production. User reviewed staging preview for PR #64 (v6.4.0 + v6.4.1) and reported 8 more issues + a general "make it sophisticated/upscale" mandate.
+
+### Discovery: cache uses `description` not `overview`
+Probed cache schema and found `0 of 5,530 rows` had `data->>'overview'` populated — the field doesn't exist. The actual cached field is `data->>'description'` (Claude's prompt asks for "description", not "overview"). My migration 019 was reading the wrong key, so every Roulette result + every card synopsis came back null. **Migration 020** fixes this by mapping `data->>'description'` AS overview in all four discover RPCs (kept the API field name as `overview` so route + UI code didn't have to change). Verified live — anon roulette spin now returns Poor Things with full synopsis text.
+
+### Roulette spinner polish (issues 1, 3, 4)
+- Copy: "Spin for a random film with Film Glance score 8/10 or higher." → **"Spin the Movie Roulette Wheel to find a high-ranking Film Glance movie."**
+- Removed the gold-radial halo behind the section header (user called it a "yellow smear")
+- Section background switched to the same dark glass treatment used by box-office cards (`rgba(8,6,2,0.62)` + thin gold border + soft drop shadow)
+- New `SpinButton` component: bigger (`14px 30px` padding vs `11px 22px`), uppercase 800-weight tracking, embedded inset gold ring, animated **pulsing radial halo** behind the button (`disSpinPulse` keyframe, 2.4s gentle scale+opacity), translateY(-2) + scale(1.02) + brightness boost on hover. Reads exciting now, not boring.
+
+### Card layout overhaul (issues 6, 7, 8)
+The big gold-gradient italic FG score "headline" was the source of the "yellow smear" the user disliked. Removed entirely. New `DiscoverCard` body:
+1. Title (italic Playfair, 2-line clamp)
+2. "Director: NAME · YEAR" line
+3. **Genre row** — full-width JetBrains Mono caps (was column 2 of the 3-stat strip, where it truncated to "Biograp..." / "Animati...")
+4. **Synopsis snippet** — 3-line clamp italic Syne gray, fills the visual middle of the card so the layout doesn't feel hollow without the headline
+5. 2-stat strip: **Year · FG Score** — clean Playfair italic gold (#FFD700), no drop-shadow, no gradient. Matches box-office StandardCard's StandardStat treatment exactly. **Sources count removed.**
+6. Release-window pill at the very bottom
+
+### Filter bar buttons (issue 5)
+`ToggleButton` restyled — the active "In Theaters" / "At Home" / "Hidden Gems" pills now use the **full gold gradient** (matching the Spin button + the brand CTAs across the rest of the site) with embedded inset ring + drop shadow. Inactive state has a subtle hover lift + border/color transition. "Hidden Gems off" relabeled to just "Hidden Gems" (less noisy).
+
+### Issue 2 — Synopsis on roulette result
+Was in code already; was rendering blank because of the wrong cache field. Fixed by migration 020. Roulette result card now reliably shows a 1-2 paragraph synopsis below the title.
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/020_discover_rpcs_use_description.sql` | NEW (applied to prod) — discover RPCs read `data->>'description'` AS overview |
+| `components/discover/RouletteSpinner.jsx` | Removed halo; updated copy; new SpinButton with pulse glow |
+| `components/discover/DiscoverCard.jsx` | Dropped FG-score headline; full-width genre row; synopsis 3-line clamp; 2-stat strip (Year · FG Score); no Sources |
+| `components/discover/DiscoverFilterBar.jsx` | ToggleButton restyled with gold-gradient active state + hover lift |
+| `tech-specs.md` + `conversation-summary.md` | This round logged |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings
+- Migration 020 verified live — anon roulette returns synopsis text
+
+---
+
+## Session: May 7, 2026 (round 2) — v6.3.2 production hotfix + v6.4.1 fix-forward
+
+User reviewed the v6.4.0 Vercel preview and reported 9 issues, including a critical production bug. Two PRs ship from this session:
+
+### v6.3.2 hotfix (PR #65, off main, NOT staging)
+
+User issue #9 — clicking the Film Glance logo on filmglance.com from any non-landing page (e.g. /boxoffice) routed to `/preview-landing` instead of `/`. Production was on v6.3.1 (pre-fix-forward), so this bug was live. Fixed `href="/preview-landing"` → `href="/"` in three places: `SiteHeader.jsx:81`, `film-glance.jsx:3059`, `preview-landing.jsx:702`. Branched off main (skipping staging, per user approval) so v6.4.0 work continues uninterrupted on staging while prod gets a same-day fix.
+
+### v6.4.1 fix-forward (rides PR #64 on staging)
+
+Eight issues addressed; bundled into one commit on top of v6.4.0.
+
+#### Migration 019 — cache dedup + RPC v2 (applied to prod)
+
+Pre-flight diagnostic: `movie_cache` had **165 (title, year) groups with 338 total dup rows**. Examples — "The Matrix" 1999 had 4 keys (`matrix`/`matrx`/`the matrix`/`the matrx`), "Casino" 1995 had 3 (typo'd test queries cached as separate rows). Same-title rows triggered the search route's ambiguity-picker on click → DYM page never resolved (issue 5).
+
+Hard-deleted 173 dup rows. Tiebreak: most rating sources, then highest hit_count, then earliest cached_at. Cache now: **5,532 rows, 0 dup groups**. (Some "dup groups" had >2 rows; total deleted = 338 - 165 = 173.)
+
+Same migration: dropped + recreated discover_movies, discover_random, discover_random_pool_size, discover_recent with new return shape (added `overview` field), made discover_random / discover_random_pool_size accept a `p_genre TEXT` parameter (issue 3 — Roulette genre filter). Initial DISTINCT ON attempt broke the fg_score sort (forced alphabetical title order); reverted since cache is now clean.
+
+#### Issue 1 — Title style matches /boxoffice
+`DiscoverHero.jsx` rewritten: two-line italic Playfair, white "Discover." + gold-gradient italic "Films Worth Your Evening." subtitle, left-aligned, soft gold halo. Mirrors `components/box-office/PageHero.jsx` exactly.
+
+#### Issue 2 — Recently Added rail removed
+Dropped the import + render in `DiscoverPage.jsx`. The `RecentlyAddedRail.jsx` component file stays in tree (orphaned, harmless); `/api/discover/recent` endpoint also stays since it's behind a route.
+
+#### Issue 3 — Roulette: Genre dropdown alongside Decade
+Added Genre dropdown to `RouletteSpinner.jsx` (default "Any genre"). Passes `genre` query param to `/api/discover/random`. Both `discover_random` and `discover_random_pool_size` RPCs accept `p_genre TEXT DEFAULT NULL` and apply `data->>'genre' ILIKE '%' || p_genre || '%'` filter. Verified live: `discover_random(2020, 2029, 8.0, 'Romance')` returns "The Worst Person in the World" 2021 (pool size 7).
+
+#### Issue 4 — Roulette font/colour + result polish
+- Section header now italic Playfair gold-gradient with soft halo behind it (was white)
+- Section background upgraded to gradient + warmer border + inset highlight (matches box-office featured-card styling)
+- `RouletteCard.jsx`: explicit "Director:" label before the director name; new synopsis paragraph below genre using `entry.overview` from the RPC; "/10 FILM GLANCE SCORE" label moved beside the score number; Spin Again button restyled with gold border
+
+#### Issue 5 + 7 — Click-to-DYM bug + duplicate cards
+Both resolved by migration 019's cache dedup. With one row per (title, year), search route's ambiguity-picker no longer fires on click; cards in grid no longer duplicate.
+
+#### Issue 6 — Drop count suffix from dropdowns
+`DiscoverFilterBar.jsx`: changed `${g.genre} · ${g.n}` → `g.genre`, same for years.
+
+#### Issue 8 — Card formatting matches /boxoffice
+`DiscoverCard.jsx` rewritten to mirror `components/box-office/PosterCard.jsx`'s StandardCard structure:
+- Same poster aspect ratio + heart top-right + bottom legibility gradient
+- Same italic Playfair 2-line clamped title
+- Same "Director: NAME · YEAR" line
+- **Big gold-gradient italic Playfair FG score** (where box-office had gross), with "/10 FILM GLANCE SCORE" label
+- 3-stat strip: Year · Genre (primary genre) · Sources (count)
+- Release-window pill (In Theaters / At Home) at the bottom
+- No rank badge (rank shifts per filter combo, doesn't apply here)
+
+#### Files modified this slice
+
+| File | Change |
+|---|---|
+| `sql/migrations/019_dedup_cache_and_discover_v2.sql` | NEW (applied via Mgmt API) |
+| `lib/schemas.ts` | DiscoverRandomQuerySchema + `genre` |
+| `app/api/discover/random/route.ts` | Pass genre to RPC; include in response |
+| `components/discover/DiscoverHero.jsx` | Rewrite to mirror PageHero |
+| `components/discover/DiscoverPage.jsx` | Drop RecentlyAddedRail; pass availableGenres to RouletteSpinner |
+| `components/discover/DiscoverFilterBar.jsx` | Drop count suffix from genre + year labels |
+| `components/discover/DiscoverCard.jsx` | Rewrite to mirror box-office StandardCard |
+| `components/discover/RouletteSpinner.jsx` | Genre dropdown + visual polish (gold-gradient header, halo) |
+| `components/discover/RouletteCard.jsx` | Director: label + synopsis paragraph |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings (no regression)
+- Migration 019 verified live: anon `discover_movies('at_home')` returns 100 rows top by fg_score (Avatar Fire and Ash 10.0, Godfather 9.2, 12 Angry Men 9.2…)
+- `discover_random(2020, 2029, 8.0, 'Romance')` returns valid 2020s romance ≥8.0
+- 0 duplicate (title, year) groups remain
+
+---
+
+## Session: May 7, 2026 (early AM) — v6.4.0 fix-forward (still pre-merge)
+
+User pulled up the v6.4.0 Vercel preview and reported three serious issues, suspected something had been pushed to production. **Production safety verified live**: `origin/main` is at `591e4e1` = PR #63 = v6.3.1 (audit Phase C complete). PR #64 (v6.4.0) is OPEN on `staging`, never merged. The URL the user saw — `film-glance-gm3yqthmc-rs-projects-c0025ef0.vercel.app/preview-landing` — was a Vercel preview deployment auto-generated for PR #64 (note `vercel.app` host, not `filmglance.com`). **filmglance.com production is unaffected.** No revert needed; the fix-forward goes onto the same `staging` branch which feeds PR #64.
+
+### Bug 1 — Showstopper: anon could not read movie_cache, all RPCs returned `[]`
+
+Diagnostic via `SET ROLE anon; SELECT COUNT(*) FROM discover_movies('at_home', NULL, NULL, FALSE, 5);` → returned **0**. Same for every discover_* RPC. Root cause: `movie_cache` has exactly one RLS policy — `auth.role() = 'authenticated'` — and the discover RPCs were `LANGUAGE sql STABLE` (SECURITY INVOKER by default). When called by anon, the inner `SELECT FROM movie_cache` was RLS-blocked. Same reason `/api/suggest` uses `supabaseAdmin` to call `fuzzy_movie_suggestions`.
+
+**Fix — migration 018**: `ALTER FUNCTION ... SECURITY DEFINER` on the six read-side RPCs (discover_movies, discover_genres, discover_years, discover_random, discover_random_pool_size, discover_recent). They now run as the postgres owner which has BYPASSRLS in Supabase. Same pattern that `discover_refresh_heuristic` already uses. Applied via Management API; verified live: anon now gets `count=100` from discover_movies, `62` from discover_genres, `107` from discover_years, and a real movie title from discover_random(2020, 2029, 8.0) ("My Octopus Teacher", 2020, 8.3).
+
+### Bug 2 — Brand mark from `/boxoffice` went to `/preview-landing` instead of `/`
+
+`components/SiteHeader.jsx:81` had `href="/preview-landing"` for the brand mark. Same bug existed in `components/film-glance.jsx:3059` and `components/preview-landing.jsx:702`. All three changed to `href="/"`.
+
+### Bug 3 — Discover link missing on the two custom-nav landing pages
+
+There are two distinct surfaces with their own inline custom nav (not using `SiteHeader.jsx`):
+
+- `components/film-glance.jsx:3068+` — the `/` landing (search interface). Had Discussion Forum + Box Office, missing Discover.
+- `components/preview-landing.jsx:719+` — the marketing-style preview surface. Had only Discussion Forum, missing both Discover AND Box Office.
+
+Added Discover link with Compass icon to both, and added Box Office to preview-landing as a side fix. Imported `Compass` from lucide-react in film-glance.jsx, imported `TrendingUp + Compass` in preview-landing.jsx.
+
+### Bonus polish — Discover page visual richness
+
+Two genuine gaps closed to bring Discover up to box-office's polish level:
+
+1. **`BackdropLayer`** added to `DiscoverPage.jsx`: pulls the #1 movie's backdrop image, renders it blurred behind page chrome with crossfade on filter change. Same component reused from box-office (`components/box-office/BackdropLayer.jsx`).
+2. **`DiscoverFeatured` hero card** (new file): horizontal hero variant for `entries[0]`. Crown badge "TOP PICK" + release pill, italic Playfair title, director · year, genre, gold-gradient FG score with "/10 FILM GLANCE SCORE" subtitle, heart button overlaid on poster. Mirrors box-office's `FeaturedCard` rhythm. Grid below renders `entries.slice(1)` (99 cards instead of 100).
+
+Most of the user's "atrocious" perception was downstream of Bug 1 — empty data showing only the filter bar + empty decade rail. Now: backdrop layer + featured hero + populated 99-card grid + working dropdowns + real roulette. Same visual identity as `/boxoffice`.
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 224 warnings
+- Mobile-parity grep clean (only label-target `display:none` rules)
+- Migration 018 verified live for anon role on all 6 RPCs
+
+### Process learnings (added to memory of how this user works)
+
+- The user wants three navs (SiteHeader.jsx + film-glance.jsx inline + preview-landing.jsx inline) kept in sync. Architectural cleanup (replacing the inline navs with the shared SiteHeader) is a separate refactor.
+- Vercel preview URLs (`*.vercel.app`) look enough like production that they can be misread as filmglance.com — be explicit when surfacing a preview-only result.
+
+---
+
+## Session: May 6, 2026 (post-audit, new feature) — v6.4.0 /discover page
+
+User asked for a Discover page so visitors can browse what's worth watching by where it's available (In Theaters / At Home), genre, and year — plus a "Movie Reel Roulette" slot-machine that spins to a random ≥8/10 film. Per the agreed plan (`~/.claude/plans/clever-riding-alpaca.md`): single bundled v6.4.0 PR including data layer + cron + APIs + UI + nav.
+
+### Decisions baked from plan-mode questions
+- 60-day theatrical window (matches modern US averages)
+- All three "in the spirit" features: Hidden Gems toggle, Recently Added rail, Decade Browse rail
+- Bundled into one PR
+
+### Data layer — three migrations
+
+- **015_movie_release_window.sql**: adds `release_window` (in_theaters/at_home/unreleased/unknown), `release_window_source`, `release_window_updated_at`. Initial backfill via 60-day date heuristic. **Pre-flight surprise**: only 33 of 5,702 cached movies have `release_date` populated (it's a v5.13.x-era field), so the heuristic falls back to `at_home` for everything without one. Distribution after backfill: 5,688 at_home / 14 in_theaters / 2 unreleased.
+- **016_fg_score_column.sql**: adds `fg_score numeric(3,1)` column maintained by a BEFORE-INSERT/UPDATE trigger. New `compute_fg_score(jsonb)` PL/pgSQL function is a pure-SQL mirror of `calcScore()` from `lib/score.ts` — score normalization, auto-correct rules, rounding all duplicated. ⚠ Sync requirement: changes to `calcScore()` must update the SQL function in lockstep. Cross-reference comment added to `lib/score.ts`. Backfill: all 5,702 rows now have fg_score (range 2.5-10.0, avg 6.96). Indexes: standalone fg_score DESC + composite (release_window, fg_score DESC) for the discover hot path.
+- **017_discover_rpcs.sql**: six RPCs.
+  - `discover_movies(release_window, genre?, year?, hidden_gems?, limit)` — list of up to 100 ranked films.
+  - `discover_genres()` — splits `data->>'genre'` on " · " for the dropdown (top genre: Drama with 3,016 films).
+  - `discover_random(decade_start?, decade_end?, min_score)` — Movie Reel Roulette pick.
+  - `discover_random_pool_size(...)` — fast count for the "spinning from N films" ticker.
+  - `discover_recent(limit)` — last N cached for the Recently Added rail.
+  - `discover_years(release_window, genre?)` — distinct years per filter combo.
+  - `discover_refresh_heuristic(protect_days)` — service-role-only, called by cron.
+  - All anon-grants execute through SECURITY DEFINER + locked search_path. Decade pool sizes verified for ≥8/10 threshold: any=965, 2020s=118, 2010s=240, 2000s=150, 1990s=133, 1980s=86, 1970s=82, pre-1970=156 — every decade has plenty for the slot machine.
+
+### Daily cron `/api/cron/discover/refresh-release-window`
+
+`vercel.json` adds `15 4 * * *` schedule. Two-pass logic:
+1. Bulk pass via `discover_refresh_heuristic(7)` RPC — re-classifies via 60-day rule, but skips rows whose release_window was set by `tmdb_providers` within the last 7 days (preserves the more-accurate signal).
+2. TMDB augmentation pass — top 500 by fg_score over the last 24 months, fetch `/movie/{id}/watch/providers` for region US. Has `flatrate|buy|rent`? → `at_home`. Otherwise (and within 60 days of release) → `in_theaters`. 250ms throttle = ~4 req/s, well under TMDB's 40/10s burst. Total runtime ~2.5min on 500 calls; fits in `maxDuration=300`.
+3. Failure logging via existing `cron_failures` + `sendAlertEmail` patterns from `lib/alert.ts`.
+
+### API endpoints
+
+- **GET /api/discover** — query: release_window (required), genre, year, hidden_gems, limit. Validated via `DiscoverQuerySchema` (Zod). Returns `{entries[100], available_genres, available_years, count, ...}`. Cache: `s-maxage=600, stale-while-revalidate=3600`.
+- **GET /api/discover/random** — query: decade (`any|2020s|...|pre-1970`), min_score. `Cache-Control: no-store` (every spin fresh). Returns `{entry, pool_size, decade, spun_at}` or 404 if empty.
+- **GET /api/discover/recent** — last 10 cached for the rail.
+- All three use the new `lib/supabase-anon.ts` (anon-key client) — RPCs are GRANTED to anon, no service-role needed. Service-role import guard in CI stays untouched.
+- Rate-limit: added `/api/discover` to ROUTE_LIMITS at `30/min` and to PUBLIC_ROUTES.
+
+### UI — `app/discover/page.tsx` + 9 components in `components/discover/*`
+
+- **DiscoverPage** (main) — URL sync (rw/genre/year/hg query params), data fetch, layout.
+- **DiscoverHero** — "Discover." italic Playfair gold, soft halo, `disHeroLineIn` keyframe.
+- **RecentlyAddedRail** — horizontal-scroll mini-cards from `/api/discover/recent`.
+- **RouletteSpinner** — slot-machine. Three vertically-scrolling poster reels (240×360 desktop, 1 reel <520px), staggered 3.6s/3.9s/4.2s decel cubic-bezier, top/bottom gradient masks for the "window" feel. Pool-size ticker. After third reel stops: RouletteCard fades in.
+- **RouletteCard** — hero variant of DiscoverCard with "🎬 Roulette pick" badge + 80px gold-gradient score + "Watch it" CTA + "Spin again" button.
+- **DiscoverFilterBar** — release-window toggle (pill row) + Genre + Year dropdowns (reusing the box-office `FilterDropdown` portal component) + Hidden Gems toggle. Stacks vertically <720px.
+- **DiscoverGrid** — IntersectionObserver-batched (initial 30, +30 per scroll). 3-col >960, 2-col 640-960, 1-col <640.
+- **DiscoverCard** — fork of box-office StandardCard. 2:3 poster, FG score badge bottom-left, heart top-right, italic Playfair title, director · year, genre chip, release-window pill at bottom. Click → `/?q=<title>` (existing landing-page hook auto-fires search).
+- **DecadeBrowseRail** — six tiles (2020s/2010s/2000s/1990s/1980s/1970s) below grid, each shows count from `available_years` + clicks to set year filter to most recent year of that decade.
+- **SiteHeader.jsx** — added Discover link with Compass icon between Discussion Forum and Box Office. Reuses existing `nav-forum-label` icon-only collapse at ≤520px.
+- **Mobile parity check** (CLAUDE.md mandate): nav `display:none` grep returns only label-target rules, never `.nav-X-btn`. ✅
+
+### Hook noise dismissed
+
+- "Move polling to Vercel Workflow" on cron (250ms TMDB throttle, fits in 300s budget — same false-positive class as prior crons)
+- "Use Vercel Firewall/WAF" on middleware (alternative architecture; agreed plan specified Upstash)
+- "Rename middleware.ts → proxy.ts" (deferred Next 16 cosmetic since v6.0.0)
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 223 warnings (one inline error caught + fixed: RouletteSpinner read `ref.current` during render — converted to state)
+- Service-role import guard passes locally with current allowlist (no new `supabaseAdmin` imports — anon client used instead)
+- Migrations 015/016/017 verified live: distribution + pool sizes + RPC outputs all sane
+
+### What needs user action at merge
+
+- **Vercel preview verification**: visit `/discover`, walk through filter combos, spin roulette across decades, click into a card to confirm `?q=<title>` triggers search auto-fire
+- **Watch the daily cron's first run** at 04:15 UTC the morning after merge to confirm TMDB augmentation lands cleanly
+- **Spot-check classification** on a few known recent films
+
+### What's left (not Discover-related)
+
+- News page (next planning session — user said "we will then move to the News page" after this lands)
+- CSP enforcement flip after 7-day report-only window
+- Upstash provisioning when ready
+- Forum post-import checklist
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `sql/migrations/015_movie_release_window.sql` | NEW (applied to prod) |
+| `sql/migrations/016_fg_score_column.sql` | NEW (applied to prod) |
+| `sql/migrations/017_discover_rpcs.sql` | NEW (applied to prod) — 6 RPCs |
+| `lib/score.ts` | Cross-reference comment to compute_fg_score |
+| `lib/schemas.ts` | DiscoverQuerySchema + DiscoverRandomQuerySchema + decadeRange |
+| `lib/supabase-anon.ts` | NEW — anon-key client |
+| `middleware.ts` | /api/discover added to PUBLIC_ROUTES + ROUTE_LIMITS |
+| `vercel.json` | +1 cron entry |
+| `app/api/discover/route.ts` | NEW — list endpoint |
+| `app/api/discover/random/route.ts` | NEW — roulette endpoint |
+| `app/api/discover/recent/route.ts` | NEW — recently-added rail |
+| `app/api/cron/discover/refresh-release-window/route.ts` | NEW |
+| `app/discover/page.tsx` | NEW — Suspense shell |
+| `components/discover/*` | NEW — 9 components |
+| `components/SiteHeader.jsx` | Added Discover nav link |
+| `tech-specs.md` | Change Log v6.4.0 + Version History |
+| `conversation-summary.md` | This entry |
+
+---
+
 ## Session: May 6, 2026 (Phase C, part 2 of 2 — audit COMPLETE) — v6.3.1 user-scoped Supabase client refactor
 
 User merged PR #62 + said "continue." Last actionable Phase C item per the agreed plan: migrate `/api/favorites`, `/api/folders`, `/api/enrich-favorites` off `supabaseAdmin` (service-role) onto a user-scoped client so RLS becomes the primary auth boundary.

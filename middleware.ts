@@ -21,7 +21,7 @@ function getIP(req: NextRequest): string {
 const PROTECTED_ROUTES = ["/api/favorites"];
 
 // Routes that skip auth (webhooks, auth callbacks, lightweight lookups)
-const PUBLIC_ROUTES = ["/api/webhooks", "/api/auth", "/api/enrich", "/api/suggest", "/api/health"];
+const PUBLIC_ROUTES = ["/api/webhooks", "/api/auth", "/api/enrich", "/api/suggest", "/api/health", "/api/discover"];
 
 // Per-route rate limits: [maxTokens, refillPerSecond]
 const ROUTE_LIMITS: Record<string, [number, number]> = {
@@ -29,6 +29,7 @@ const ROUTE_LIMITS: Record<string, [number, number]> = {
   "/api/enrich":    [30, 30 / 60],    // 30 req/min  — moderate (TMDB)
   "/api/suggest":   [30, 30 / 60],    // 30 req/min  — moderate (TMDB)
   "/api/favorites": [30, 30 / 60],    // 30 req/min  — lightweight (Supabase)
+  "/api/discover":  [30, 30 / 60],    // 30 req/min  — cache-tier; anonymous OK
   "/api/auth":      [5, 5 / 60],      // 5 req/min   — brute-force protection
 };
 
