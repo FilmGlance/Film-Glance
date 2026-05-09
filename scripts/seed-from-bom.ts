@@ -200,11 +200,31 @@ async function processCandidate(c: Candidate): Promise<{ ok: boolean; cost: numb
       return { ok: true, cost: 0, reason: "dry-run" };
     }
     const mv = await runFullPipeline(queryForClaude, queryForRatings, c.release_year ?? undefined);
-    if (!mv || (mv as any).error === "not_a_movie" || !mv.title) {
-      return { ok: false, cost: 0.005, reason: "claude not_a_movie" };
+    // BOM-sourced candidates: BOM presence is proof of real-movie status.
+    // We deliberately DO NOT reject when Claude says "not_a_movie" — its
+    // training cutoff (Jan 2026) misses recent niche releases that BOM has
+    // already verified by charting them. runFullPipeline runs Claude / TMDB
+    // / RapidAPI in parallel; even when Claude returns not_a_movie, TMDB
+    // and ratings calls already returned real data, so mv.title (TMDB-
+    // sourced) and mv.sources (RapidAPI) are still populated.
+    //
+    // Reject only when:
+    //   1. The pipeline returned nothing usable (no title at all).
+    //   2. Verified ratings sources are below the data-quality floor.
+    //      The ≥5-sources gate stays — it's a signal that the film is
+    //      well-known enough to score reliably. BOM long-tail films
+    //      below this floor would produce a fragile fg_score.
+    if (!mv || !mv.title) {
+      return { ok: false, cost: 0.005, reason: "no title from pipeline" };
     }
     if (!Array.isArray((mv as any).sources) || (mv as any).sources.length < 5) {
       return { ok: false, cost: 0.012, reason: `low source_count=${(mv as any).sources?.length ?? 0}` };
+    }
+    // If Claude flagged not_a_movie but TMDB/ratings provided enough data
+    // to pass the gates, clear the error flag so it doesn't poison the
+    // cached row's data shape.
+    if ((mv as any).error === "not_a_movie") {
+      delete (mv as any).error;
     }
     // Defense — runFullPipeline should already set tmdb_id from TMDB lookup,
     // but if BOM had it pre-resolved, prefer that.
