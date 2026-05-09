@@ -199,7 +199,28 @@ async function processCandidate(c: Candidate): Promise<{ ok: boolean; cost: numb
     if (DRY_RUN) {
       return { ok: true, cost: 0, reason: "dry-run" };
     }
-    const mv = await runFullPipeline(queryForClaude, queryForRatings, c.release_year ?? undefined);
+    // BOM has tmdb_id pre-resolved for every charted film. Pass it as
+    // releaseInfo so runFullPipeline skips TMDB's title-search (which
+    // fails for niche films with generic titles like "David", "Obex",
+    // "Young Mothers") and uses the canonical TMDB ID directly. The
+    // pipeline's existing fallback path then uses fetchComingSoonDetails
+    // (tmdbId) to fetch genre/director/runtime/tagline/overview by ID,
+    // builds a fallback mv from those + verified ratings, and returns it.
+    // Without this, ~95% of BOM long-tail films were rejected as
+    // "no title from pipeline".
+    const releaseInfo = c.tmdb_id != null ? {
+      tmdbId: c.tmdb_id,
+      officialTitle: c.title,
+      releaseDate: c.release_year ? `${c.release_year}-01-01` : null,
+      overview: "",
+      posterPath: null,
+    } : null;
+    const mv = await runFullPipeline(
+      queryForClaude,
+      queryForRatings,
+      c.release_year ?? undefined,
+      releaseInfo,
+    );
     // BOM-sourced candidates: BOM presence is proof of real-movie status.
     // We deliberately DO NOT reject when Claude says "not_a_movie" — its
     // training cutoff (Jan 2026) misses recent niche releases that BOM has
