@@ -1,5 +1,92 @@
 # Film Glance — Conversation Summary
 
+## Session: May 9, 2026 (continued) — Phase C-4 + C-5 operator scripts shipped (cache-growth bridge to 30k)
+
+### Where we entered this session
+
+Phase C-3 (BOM-deep `seed-from-bom`) running on VPS since 17:33 (PID 147472). Latest live state at session midpoint: **2,777 added / $83.07 spent / 4m18s CPU / ~21 films/min**. BOM-rescrape rolled topN 10→100 successfully (3,256/3,256 periods, +163,993 new BOM rows). Cache row count: 9,180 (was 8,390 at Phase B end). The loosened gate (per `94e38f9` `not_a_movie` drop + `d16ce8f` `releaseInfo` bypass) is paying off — success rate climbing as the run gets deeper into mid-tail BOM titles.
+
+### What "phases 3-7" actually meant
+
+User asked to "start rolling from phase 3 to phase 7" with one constraint: increase movies closer to 30k first. Two competing phase-numbering schemes existed in the repo (cache-growth A/B/C and GEO 1-7); the GEO interpretation won — `~/.claude/plans/project-will-be-the-ticklish-corbato.md` documents Phases 1-6 + a hypothetical Phase 7 (per-genre/per-decade index pages). The 30k target ties to GEO Phase 3 per the plan: *"With 8,390 cached films today + ~30,000 post-BOM-seed, single sitemap is fine."* Bigger cache when GEO Phase 3 ships → more indexable `/movie/[id]/[slug]` URLs created in one shot → more SEO surface area.
+
+### Honest correction to earlier estimates
+
+| | Originally claimed | Refined / observed |
+|---|---|---|
+| BOM-deep gap | 30,000-40,000 | **11,861** unique films |
+| C-3 success rate | 70-80% | **~57-65%** |
+| C-3 net adds | 8,000-9,000 | **~7,500** |
+| Cache after C-3 alone | 17,000-18,000 | **~15,500-16,500** |
+
+The 30k gap is real — C-3 alone closes ~half of it. Hence C-4 and C-5.
+
+### Files shipped
+
+| File | Lines | Purpose |
+|---|---|---|
+| `scripts/tmdb-popularity-deep.ts` | ~340 | **C-4**: extends Phase B's grid with `vote_count` tiers `[100, 50]` sorted by `popularity.desc`. 18 buckets (2 vote tiers × 9 year-ranges from Phase B). Est. +6,000-12,000 / ~$170-250 / ~3h. |
+| `scripts/genre-decade-fill.ts` | ~370 | **C-5**: 19 TMDB genres × 9 decade ranges = 171 cells, `vote_count >= 30`, `popularity.desc`. Optional `--min-cell-size=N` pre-flight (default 0) prioritizes thin cells. Est. +2,000-5,000 / ~$50-85 / ~1.5h. |
+
+Both mirror the proven Phase B/C pattern exactly: env loader (CJS-safe, lib import deferred into `main()`), hard dedup against `movie_cache.tmdb_id`, `releaseInfo` bypass per `d16ce8f`, no `not_a_movie` gate per `94e38f9`, `<5 sources` floor, concurrency=5, 3-consecutive-all-cached-pages early-exit, resumable state files, failure logs. Source tags `tmdb-popularity-deep` and `genre-decade-fill` so the `cache_source` column tells us which phase added each row.
+
+### Combined trajectory + headroom for 30k
+
+| Phase | Cumulative cache | Confidence |
+|---|---|---|
+| Now | 9,180 | observed |
+| After C-3 (running) | 14,000-15,500 | medium-high |
+| After C-4 | 20,000-27,500 | medium |
+| After C-5 | 22,000-32,500 | low-medium |
+| **Realistic center** | **25,000-28,000** | |
+
+To definitively clear 30k, **C-6** (TMDB collections expansion via `belongs_to_collection` + IMDb Top 1000 + Letterboxd Top 250 scrapes) is the headroom layer. Est. +1,500-3,500 / ~$20-50 / clean canonical sources, near-zero quality risk. NOT yet written — user opted to ship C-4 + C-5 first and decide on C-6 after seeing C-3 final numbers.
+
+### Validation
+
+- `npx tsc --noEmit` clean for both new scripts
+- No changes to `lib/`, `app/`, `components/` — pure additive `scripts/` files
+
+### Footgun called out
+
+Like `bulk-seed.ts`, dry-run still adds candidates to the in-memory `seen` set and persists state. **Always pair `--dry-run` with `--limit=N`** (e.g. `--dry-run --limit=10`). Running `--dry-run` alone would chew through the entire grid in pretend mode and poison the state file for the subsequent real run. Documented at the top of each script.
+
+### Stale failed task observed
+
+Mid-session, a `task-notification` reported a background `seed-from-bom` kickoff (PID 145493) failed with exit 255. Investigation: the script's `nohup` child detached fine (logged its first lines), but the SSH session itself dropped (`Connection reset by peer`). PID 145493 was a prior attempt; the current healthy run is **PID 147472**. The failed task carried a `$170 / 6-7h` cost label that matches the **C-4** projection, not seed-from-bom — looks like cost copy-paste from this session's plan was tagged onto an unrelated re-attempt. Non-event for the running C-3.
+
+### Operator playbook (when C-3 finishes)
+
+```bash
+ssh filmglance@147.93.113.39
+cd ~/film-glance-bulk-seed
+git pull origin staging         # pulls C-4 + C-5 scripts
+
+# Smoke test C-4 (no spend; --limit=10 prevents state-file poisoning)
+npx tsx scripts/tmdb-popularity-deep.ts --dry-run --limit=10
+
+# Real C-4 run (~3h, ~$170-250)
+nohup npx tsx scripts/tmdb-popularity-deep.ts > ~/tmdb-pop-deep.log 2>&1 &
+tail -f ~/tmdb-pop-deep.log
+
+# After C-4 completes:
+npx tsx scripts/genre-decade-fill.ts --dry-run --limit=10
+nohup npx tsx scripts/genre-decade-fill.ts > ~/genre-decade-fill.log 2>&1 &
+```
+
+User authorized the C-4 + C-5 ship; explicit go-ahead awaits after C-3 settles.
+
+### Next steps (for next chat)
+
+1. Wait for C-3 to complete (~30-60 min from session end) and verify final added/cost figures.
+2. SSH + dry-run smoke test of C-4 → real run.
+3. After C-4 finishes, dry-run smoke + real C-5.
+4. Decide on C-6 (collections + curated lists) based on actual cache count after C-5.
+5. Once cache settles ≥28k, GEO Phase 3 engineering work can begin (per `~/.claude/plans/project-will-be-the-ticklish-corbato.md`): per-movie SSR route at `app/movie/[id]/[slug]/page.tsx`, slug helper in `lib/slug.ts`, expanded `lib/structured-data.ts`, sitemap dynamic enumeration in `app/sitemap.ts`, internal link updates across DiscoverCard/PosterCard/film-glance.jsx.
+6. Standing-queue items unchanged.
+
+---
+
 ## Session: May 9, 2026 — Phase B retrospective + BOM-deep-rescrape plan (Phase C)
 
 ### Phase B (bulk-seed) — completed earlier today
