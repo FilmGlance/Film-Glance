@@ -12,6 +12,7 @@
 // Filter changes still re-fetch client-side via /api/discover (DiscoverPage
 // behavior unchanged). The server fetch only seeds the FIRST paint.
 
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import DiscoverPage from "@/components/discover/DiscoverPage";
 import { supabaseAnon } from "@/lib/supabase-anon";
@@ -151,16 +152,15 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: PAGE_JSON_LD }}
       />
-      {/* DiscoverPage receives initialData so its SSR pass renders the
-          films in the initial HTML — non-JS crawlers (OAI-SearchBot,
-          GPTBot, ClaudeBot) see the full list. Wiring DiscoverPage to
-          consume initialData lands in the same Phase 3 commit; until
-          then this prop is ignored client-side and the ItemList JSON-LD
-          above carries the structured signal. */}
-      {/* initialData prop wired in next commit when DiscoverPage.jsx is
-          updated to consume it. The .jsx file lacks PropTypes so the
-          spread-cast pattern keeps TypeScript happy until then. */}
-      <DiscoverPage {...({ initialData } as Record<string, unknown>)} />
+      {/* DiscoverPage uses useSearchParams() which Next.js requires to
+          live inside a Suspense boundary for static generation to work.
+          Wrapping here is identical to the pre-Phase-3 page.tsx pattern.
+          initialData prop is wired in the next commit when DiscoverPage
+          .jsx accepts it; until then the ItemList JSON-LD above carries
+          the structured signal for crawlers. */}
+      <Suspense fallback={null}>
+        <DiscoverPage {...({ initialData } as Record<string, unknown>)} />
+      </Suspense>
     </>
   );
 }
