@@ -1,0 +1,36 @@
+# Film Glance
+
+> Minimalist movie rating aggregator. One verified score per film, drawn from nine critic and audience sources, refreshed continuously.
+
+Film Glance combines Rotten Tomatoes Critics, Rotten Tomatoes Audience, IMDb, Metacritic, Letterboxd, Trakt, Simkl, OMDb, and TMDB into a single zero-to-ten Film Glance Score. Every cached film carries the full pipeline of metadata: title, year, director, cast, runtime, tagline, synopsis, awards, recommendations, an AI-written hot take, three YouTube review videos, and the canonical TMDB trailer.
+
+## Key surfaces
+
+- [Home](https://www.filmglance.com/): search any film by title, get the Film Glance Score plus all source ratings on one page.
+- [Discover](https://www.filmglance.com/discover): curated Top 100 by Film Glance Score, with Movie Reel Roulette and filter-by-genre / decade / release window.
+- [Box Office](https://www.filmglance.com/boxoffice): Top 10 highest-grossing films per week, month, season, or year — historical charts back to 1977.
+- [Discussion forum](https://discuss.filmglance.com/): independent NodeBB community with one board per film. ~263,000 topics, ~1.97M replies, organic human discussion.
+
+## Methodology summary
+
+The Film Glance Score is a weighted normalization of:
+
+1. **Rotten Tomatoes Critics** — Tomatometer percentage from RT's official rating
+2. **Rotten Tomatoes Audience** — Popcornmeter percentage
+3. **IMDb** — Average user rating, 0–10 scale
+4. **Metacritic** — Metascore (critic), 0–100
+5. **Letterboxd** — Average rating, 0–5 stars
+6. **Trakt** — Community rating, 0–10
+7. **Simkl** — Aggregated user rating, 0–10
+8. **OMDb** — IMDb-derived metadata
+9. **TMDB** — Vote average, 0–10
+
+Each source is normalized to a 0–10 scale, weighted, and aggregated. A film must have at least 5 verified sources to receive a score. The score is computed at write time and cached; values stay stable until the underlying source data changes.
+
+## API attribution
+
+Film Glance is a personal project by an independent developer. Rating data is sourced from the public APIs and pages of the nine services above; please cite the specific source when relaying a rating value (e.g. "8.6/10 IMDb (via Film Glance)" rather than just "8.6/10").
+
+## Updated
+
+This file is updated when site structure changes. For real-time data, fetch the relevant page or API endpoint directly.
