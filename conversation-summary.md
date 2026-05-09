@@ -1,5 +1,99 @@
 # Film Glance — Conversation Summary
 
+## Session: May 9, 2026 — Phase B retrospective + BOM-deep-rescrape plan (Phase C)
+
+### Phase B (bulk-seed) — completed earlier today
+
+The TMDB-Discover-stratified bulk-seed finished in 2h19m. Final stats:
+
+```
+[bulk-seed] DONE. added=2864, cost~$42.02, final cache size ~8390
+```
+
+- Cache: 5,526 → 8,390 (+2,864 rows, +52% growth)
+- Spend: $42.02 (way under $300-400 budget)
+- 441 movies rejected by quality gates (Claude `not_a_movie` or <5 ratings sources)
+- All 54 stratification buckets processed
+
+**Why it didn't reach 30,000**: TMDB Discover at `vote_count >= 200` across every year range only contains ~8,400 unique films total. The plan's 30,000 estimate assumed deeper TMDB coverage than actually exists at that threshold.
+
+**Backfill side note**: backfill-tmdb-id.ts crashed at ~85% complete (4,688/5,526 rows backfilled) with a UNIQUE constraint conflict (`tmdb_id=155` for "The Dark Knight" — race with bulk-seed running in parallel). The partial UNIQUE index did its job; the script just lacks a try/catch on 23505. 838 legacy NULL-tmdb_id rows remain unfilled. Not blocking.
+
+### Phase C — BOM-deep-rescrape plan (this session)
+
+User reaction to the 8,390 result: "what do you mean vote count? let's instead of vote count cache by popularity. propose some logical ways that we can determine popularity that makes sense. forget vote count."
+
+Proposed five popularity signals (TMDB `popularity` field, BOM Top-N depths, TMDB `/trending`, genre×decade thin-spot targeting, streaming-current). User's follow-up question: "does box office mojo have top 200 for every year going back to 1977?"
+
+**Honest answer surfaced**: BOM (the site) does have deeper charts (~1,000+ titles for recent annual lists). But our scraper at `lib/bom-scraper.ts` and `app/api/cron/box-office/refresh/route.ts` was hard-coded to `topN: number = 10` / `const TOP_N = 10`. We have ~33,000 rows in `box_office_metrics` but they're heavily duplicated (popular films appear week after week after month after year); unique films is only ~5,000-6,000, most already in cache.
+
+User approved the BOM-deep workflow with one explicit constraint: "you need to understand which movies we already have and remove them from your scrape. I do not want you scraping duplicates."
+
+### What shipped this session
+
+#### 1. `topN` cap bumped from 10 → 100
+
+- `lib/bom-scraper.ts` — `topN: number = 10` → `100` in 4 places (scrapeYearChart, scrapeMonthChart, scrapeSeasonChart, scrapeWeekChart). The default cap; existing callers that pass an explicit value are unchanged.
+- `app/api/cron/box-office/refresh/route.ts` — `const TOP_N = 10` → `100`. Weekly cron now ingests Top 100 of each new period instead of Top 10. Cost impact on the cron is negligible (~$1.40/week extra at most, since most films are already cached).
+
+#### 2. `scripts/bom-deep-rescrape.ts` (new) — historical rescrape, no API spend
+
+- Iterates every (period_type, period_start) tuple currently in `box_office_metrics` (~3,300 periods)
+- Calls the appropriate scrape{Year,Month,Season,Week}Chart with topN=100
+- Upserts via `upsertBoxOfficeRow` — UNIQUE on `(search_key, period_type, period_start, period_end, region)`, so existing rank-1-10 rows are idempotently re-upserted and rank-11-100 rows are inserted
+- 1500ms politeness delay between BOM HTTP fetches
+- State file at `~/.bom-rescrape-state.json` for resume; failures append to `~/.bom-rescrape-failures.log` and don't stop the run
+- Wall clock: ~2-3 hours. Cost: $0.
+
+#### 3. `scripts/seed-from-bom.ts` (new) — gap-only pipeline run
+
+The dedup guarantee, hard-coded:
+
+1. Load all `search_key` + `tmdb_id` values from `movie_cache` into Sets
+2. Load all distinct films from `box_office_metrics` (one row per `search_key`, taking the most recent period's title spelling)
+3. **`computeGap()`**: skip any film where `cacheKeys.has(search_key)` OR `tmdb_id != null && cacheTmdbIds.has(tmdb_id)`
+4. Only the gap reaches `runFullPipeline` + `writeCacheEntries`
+
+Same pattern as v6.5.0 `bulk-seed.ts`: env loader → defer dynamic lib imports into main() (CJS-safe) → concurrency=5 → state file `~/.seed-from-bom-state.json` → cost tracking → failure log. Supports `--dry-run` to print the gap without spending and `--limit=N` for testing. Quality gates unchanged from bulk-seed (Claude `not_a_movie` reject, `<5 ratings sources` reject).
+
+Estimated: gap of ~30,000-40,000 films post-dedup → ~$420-560 spend, ~7-10h wall clock at concurrency=5.
+
+### Files changed this session
+
+| File | Change |
+|---|---|
+| `lib/bom-scraper.ts` | Default `topN` 10 → 100 (4 places) |
+| `app/api/cron/box-office/refresh/route.ts` | `TOP_N` 10 → 100 |
+| `scripts/bom-deep-rescrape.ts` | NEW — historical re-scrape orchestrator |
+| `scripts/seed-from-bom.ts` | NEW — gap-only pipeline runner with hard dedup |
+| `tech-specs.md`, `conversation-summary.md` | This entry |
+
+### Validation
+
+- `npx tsc --noEmit` clean
+- `npm run lint` 0 errors / 229 warnings (same baseline)
+
+### Operator playbook (Phase C kickoff)
+
+```bash
+ssh filmglance@147.93.113.39
+cd ~/film-glance-bulk-seed
+git pull origin main           # pull topN=100 + new scripts
+
+# Stage 1 — rescrape (free, ~2-3h)
+nohup npx tsx scripts/bom-deep-rescrape.ts > ~/bom-rescrape.log 2>&1 &
+tail -f ~/bom-rescrape.log
+
+# Stage 2 — gap-only seed (~$420-560, ~7-10h)
+# After Stage 1 completes:
+nohup npx tsx scripts/seed-from-bom.ts > ~/seed-from-bom.log 2>&1 &
+tail -f ~/seed-from-bom.log
+```
+
+User authorized this whole flow; the dedup is enforced in code.
+
+---
+
 ## Session: May 8, 2026 — v6.6.1 design fixes (rides on PR #67) + Phase B kickoff prep
 
 User feedback after merging PR #66 and reviewing the v6.6.0 Box Office preview, four items:
