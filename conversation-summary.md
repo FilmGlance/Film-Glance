@@ -1,5 +1,101 @@
 # Film Glance — Conversation Summary
 
+## Session: May 10, 2026 — Phase C-3 complete + C-4 launched + C-6 (`collections-and-curated`) shipped
+
+### Phase C-3 (BOM-deep) — DONE
+
+Final numbers from `~/seed-from-bom.log` `DONE` line:
+
+```
+[seed-from-bom] DONE in 4.07h. added=8245, cost~$183.03, failures=3616
+```
+
+- Cache: 9,180 → **15,578** (+6,398 actual rows; script counter shows +8,245 because `writeCacheEntries` upserts multiple `search_keys` per film and some collide with existing rows)
+- Spend: $183.03 (vs $170-250 estimate — landed mid-band)
+- Failures: 3,616 (mostly `low_source_count` on BOM mid-tail; expected)
+
+### Phase C-4 (TMDB popularity-deep) — LAUNCHED
+
+VPS state during this session: PID 147472 (C-3) cleanly exited; pulled `c255b3d` to VPS via `git pull origin staging`; cleared dry-run-poisoned state file (`rm ~/.tmdb-popularity-deep-state.json`); launched real C-4 at 18:15 UTC. PIDs **160660 / 160673** confirmed alive.
+
+Initial pace: ~18-22 films/min (matches C-3). After ~30 min: **+557 added / $8.01**. ETA revised from earlier 3h estimate to **5-9h** based on observed pace — the lower-popularity bucket tier has more candidates than the math predicted.
+
+Smoke-test verification (pre-launch):
+- `--dry-run --limit=10` returned 14 plausible fresh hits across buckets 1 (Swapped 2026, Vengeance 2026, Mortal Kombat 2021, Money Shot: The Pornhub Story 2023, etc.) — exactly the popularity-tail slice that Phase B+C-3 missed
+- Cache size confirmed 15,578 rows / 15,233 known tmdb_ids
+- Footgun avoided by clearing state file before real run
+
+### Phase C-6 (`collections-and-curated.ts`) — SHIPPED, awaiting kickoff
+
+Final headroom layer designed to definitively clear the 30k target if C-3+C-4+C-5 land short. Four TMDB-native source pools, all FREE TMDB calls (Anthropic + ratings APIs only fire on candidates that survive dedup):
+
+1. `/movie/top_rated` paginated — TMDB's globally top-rated films
+2. `/movie/popular` paginated — TMDB's globally most-popular films
+3. `/discover/movie?with_companies=N` for **17 major studios** (Pixar, Studio Ghibli, Marvel Studios, Lucasfilm, DC, Walt Disney Pictures, Warner Bros, Universal, Paramount, 20th Century Fox, Columbia, DreamWorks, MGM, A24, Working Title, Focus Features, Lionsgate)
+4. `/collection/{id}` for **30 curated franchises** (Star Wars, Avengers, Bond, LOTR, Hobbit, Harry Potter, Mission: Impossible, Fast & Furious, Bourne, Terminator, Indiana Jones, Jurassic Park, Avatar, Pirates of the Caribbean, X-Men, Toy Story, Die Hard, Mad Max, Mummy, Beverly Hills Cop, Ghostbusters, Halloween, Rocky, Rambo, Ocean's, Predator, Godfather, Transformers, etc.)
+
+**Estimated +1,500-3,500 net adds / ~$20-50 / ~1h.** Heavy overlap with prior phases expected — the 5-consecutive-all-cached-pages early-exit will trigger quickly on top_rated/popular tails. Collections + most company filmographies have low absolute counts (most franchises ≤ 30 films) so they finish fast.
+
+Same proven pattern as C-4/C-5: env loader (CJS-safe), hard dedup against `movie_cache.tmdb_id`, `releaseInfo` bypass per `d16ce8f`, no `not_a_movie` gate per `94e38f9`, `<5 sources` floor, concurrency=5, resumable state file, failure log. State at `~/.collections-and-curated-state.json`. Source tag `collections-and-curated`.
+
+New architectural element vs C-4/C-5: **per-source pagination iterator with sourceIdx + pageIdx state**. The `Source` type wraps each source's `fetchPage` function and an optional `singlePage: true` flag for endpoints (collections) that return all members in one shot. Main loop iterates sources, with mid-source resume support so a kill-and-restart picks up exactly where it left off.
+
+### Trajectory after C-6 ships (assuming all 4 phases run to completion)
+
+| Phase | Cumulative cache | Confidence |
+|---|---|---|
+| Now (mid-C-4) | ~16,135 | observed |
+| After C-4 | 22,000-27,500 | medium |
+| After C-5 | 24,000-32,500 | low-medium |
+| After C-6 | **25,500-36,000** | medium-high |
+| **Realistic center** | **~28,000-31,000** | clears 30k with ~1k margin |
+
+### Standing-rule update (memory)
+
+User directed at session start: *"let's just create one big pr once all of it is cached, not a pr for each phase."* Saved as feedback memory `feedback_bundle_phases_one_pr.md`. Current cache-growth push: each phase commits to staging incrementally; **single staging→main PR opens at the end** (after C-6 completes and cache settles). Hotfixes during the push, if any, would still ship as separate fast-track PRs.
+
+### Operator playbook (post-C-4)
+
+```bash
+ssh filmglance@147.93.113.39
+cd ~/film-glance-bulk-seed
+git pull origin staging         # pulls c255b3d + the C-6 commit
+
+# When C-4 completes, smoke + run C-5
+npx tsx scripts/genre-decade-fill.ts --dry-run --limit=10
+rm -f ~/.genre-decade-fill-state.json   # clear dry-run state poisoning
+nohup npx tsx scripts/genre-decade-fill.ts > ~/c5.log 2>&1 &
+
+# When C-5 completes, smoke + run C-6
+npx tsx scripts/collections-and-curated.ts --dry-run --limit=10
+rm -f ~/.collections-and-curated-state.json
+nohup npx tsx scripts/collections-and-curated.ts > ~/c6.log 2>&1 &
+```
+
+### Stale failed task observed (cleared)
+
+Mid-conversation, two `task-notification` events surfaced for completed-but-stale background tasks: `bvgehih69` (a prior `seed-from-bom` SSH-drop, exit 255, PID 145493 from before this session) and `bquivy2gd` (the historical `d16ce8f` commit + restart that produced PID 147434/147472). Both were delayed harness notifications for work that already completed cleanly. No action needed.
+
+### Files shipped this session
+
+| File | Change |
+|---|---|
+| `scripts/collections-and-curated.ts` | NEW — C-6 (~410 lines) |
+| `tech-specs.md` | Change Log: new ✅ row, prior row marked 🚧 SUPERSEDED |
+| `conversation-summary.md` | This entry |
+| `~/.claude/projects/.../memory/feedback_bundle_phases_one_pr.md` | NEW — standing rule for multi-phase PR strategy |
+| `~/.claude/projects/.../memory/MEMORY.md` | + index line for new feedback memory |
+
+### Next steps (for next chat)
+
+1. **Wait for C-4 to complete** (ETA 5-9h from 18:15 UTC May 10). Verify final added/cost.
+2. **Smoke + nohup C-5** (`genre-decade-fill`). Est. ~1.5h, ~$50-85.
+3. **Smoke + nohup C-6** (`collections-and-curated`). Est. ~1h, ~$20-50.
+4. **Open ONE PR** `staging → main` covering C-3 (live), C-4, C-5, C-6 ship + bible-doc updates. Title: `cache-growth Phase C — BOM-deep + popularity-deep + genre×decade + collections (~30k cache)`. Body enumerates per-phase stats + final cache size.
+5. Once cache settles ≥28k, kick off **GEO Phase 3 engineering** per `~/.claude/plans/project-will-be-the-ticklish-corbato.md`: per-movie SSR route, slug helper, structured-data helper, sitemap dynamic enumeration, internal link updates.
+
+---
+
 ## Session: May 9, 2026 (continued) — Phase C-4 + C-5 operator scripts shipped (cache-growth bridge to 30k)
 
 ### Where we entered this session
