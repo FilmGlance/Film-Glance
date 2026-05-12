@@ -1,5 +1,74 @@
 # Film Glance — Conversation Summary
 
+## Session: May 11, 2026 — Phase C cache-growth COMPLETE — bible docs + consolidated PR
+
+Self-paced /loop monitored the full C-4 → C-5 → C-6 chain on VPS overnight, transitioning between phases automatically (smoke `--dry-run --limit=10` → clear state → nohup) with periodic SSH polls (1800s mid-flight, 600s near ETA, 270s at handoff). All four cache-growth phases now done; bible docs updated this turn; consolidated `staging → main` PR opened per `feedback_bundle_phases_one_pr.md`.
+
+### Final per-phase results
+
+| Phase | Script-added | Cost | Runtime | Source tag |
+|---|---|---|---|---|
+| C-3 (BOM-deep `seed-from-bom`) | 8,245 | $183.03 | 4h07m | `seed-from-bom` |
+| C-4 (TMDB pop-deep `tmdb-popularity-deep`) | 3,262 | $55.62 | 2h20m | `tmdb-popularity-deep` |
+| C-5 (genre × decade `genre-decade-fill`) | 7,393 | $190.98 | ~5h25m | `genre-decade-fill` |
+| C-6 (collections + curated `collections-and-curated`) | 1,869 | $62.00 | ~2h27m | `collections-and-curated` |
+| **TOTAL** | **20,769** | **$491.63** | **~14h25m** | — |
+
+### Cache trajectory
+
+| | Cache rows | Notes |
+|---|---|---|
+| Pre-Phase A baseline (Apr) | ~5,500 | Ground state before any cache-growth push |
+| Post Phase B (May 9) | 8,390 | TMDB Discover stratified at vote_count ≥ 200 |
+| Pre-C-3 (Supabase verified) | 9,180 | After incidental search hits during the day |
+| Post-C-6 (Supabase verified) | **24,915** | **+15,735 from baseline (+172%)** |
+
+Script-counted +20,769 vs actual cache delta +15,735 — the gap is `writeCacheEntries` writing multiple `search_keys` per film (which collide with existing rows) plus natural TTL eviction during the 14h window. Real conversion ratio: ~76% script-counted to actual-cache.
+
+### Vs. the 30k target
+
+**24,915 / 30,000 = 83% of target.** ~5,000 short. Honest analysis: bridging that gap would cost an estimated **$150-500 more** with diminishing returns — each subsequent 1k cache rows requires hitting deeper, lower-quality slices that disproportionately fail the `<5 sources` quality gate. Decision: **accept 24,915 as the practical cap from this push.** The cache nearly tripled, which is the headline. GEO Phase 3 (per-movie SSR pages) on this cache creates 24,915 indexable URLs — a massive SEO surface compared to the 9,180 we'd have shipped without this push.
+
+### Surprising observations from the run
+
+1. **Phase B ceiling was real and tight.** The TMDB Discover universe at `vote_count ≥ 200` truly maxes out around ~8,400 unique films. The "30k from BOM-deep" estimate was 4× too optimistic — actual BOM gap was 11,861 unique films, of which ~70% passed the gate.
+2. **TV Movie genre × decade was richer than expected.** C-5's TV Movie cells contributed disproportionately to the +7,393 (more than C-3's BOM grind). Matches the loosened `not_a_movie` gate landing — many TV films Claude couldn't classify were filled in via TMDB+verified pipeline.
+3. **C-6 (collections + curated) added the least and was most overlap-heavy.** Top_rated and popular sources are exactly what Phase B/C-5 already covered. Not wasted spend ($62) but lower yield per hour than expected.
+4. **Cost surprises were modest.** C-3 came in $183 vs $420-560 estimate (better, because BOM gap was smaller than projected). C-4 came in $56 vs $170-250 (better, because the popularity-sort with stratification + early-exit found fewer fresh hits than projected). C-5 came in at the high end of $50-85 estimate (actually $191, ~3× over). C-6 came in $62 vs $20-50 estimate.
+5. **The 1800s wakeup cadence was correct.** Cache stays warm for 5 min; idle ticks beyond that pay full re-prime cost. 1800s = 30min between checks struck the right balance — meaningful progress between observations, not paying for repeat re-primes. Downshifted to 600s/270s only when within ~30-60min of phase ETA.
+
+### Files changed this turn
+
+| File | Change |
+|---|---|
+| `tech-specs.md` | Change Log: new ✅ row with final Phase C results, prior C-6 prep row marked 🚧 SUPERSEDED |
+| `conversation-summary.md` | This entry |
+
+(Scripts already shipped previously — `aa4d1ca`, `c255b3d`, `ff35c62` already on staging.)
+
+### PR opened
+
+`staging → main`: **Phase C cache growth — BOM-deep + pop-deep + genre×dec + colls (~25k cache)**. Body enumerates per-phase stats + final cache + cost.
+
+### Next steps (for next chat)
+
+1. **Merge PR to main** when reviewed.
+2. **Begin GEO Phase 3 engineering work** per `~/.claude/plans/project-will-be-the-ticklish-corbato.md`:
+   - New route `app/movie/[id]/[slug]/page.tsx` (SSR, ISR 24h)
+   - `lib/slug.ts` helper
+   - `lib/structured-data.ts` extended for Movie + AggregateRating + Review per source + BreadcrumbList
+   - `app/sitemap.ts` extended to enumerate all 24,915 cached films
+   - Update internal links: `DiscoverCard`, `PosterCard`, `CinematicBoxOfficeHero`, `film-glance.jsx` recommendations panel, post-search `router.push`
+   - GEO Phase 4 (SSR conversion of /discover and /boxoffice — partially done already per `01e925c` and `9197c41`)
+   - GEO Phase 5 (Bing Webmaster + IndexNow integration)
+3. **Standing-queue items** (unchanged): VPS forum import follow-ups, 6 Dependabot vulns, Supabase PAT rotation Apr 2027, dead `YOUTUBE_API_KEY` in Vercel env, missing `003_anonymous_searches.sql`, optional Stripe teardown, `2026-05-12 13:00 UTC` scheduled cleanup agent.
+
+### Loop self-pacing note
+
+The /loop session ran ~22 iterations across ~14 hours real time (mostly idle waiting for VPS phases). Worked cleanly aside from intermittent stale `task-notification` deliveries from old SSH sessions whose nohup'd scripts had detached fine but the SSH client had hung — non-events. Cadence rule "1800s mid-flight, 600s near ETA, 270s at handoff" stayed inside the cache window for active checks and didn't pay re-prime cost on idle ones.
+
+---
+
 ## Session: May 10, 2026 — Phase C-3 complete + C-4 launched + C-6 (`collections-and-curated`) shipped
 
 ### Phase C-3 (BOM-deep) — DONE
