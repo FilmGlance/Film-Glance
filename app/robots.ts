@@ -15,11 +15,15 @@
 import type { MetadataRoute } from "next";
 
 const SITE = "https://www.filmglance.com";
-// NodeBB's configured canonical URL is the apex `https://filmglance.com/discuss`
-// (verified via Phase 9.1 — sitemap entries use this base). The
-// `discuss.filmglance.com` subdomain is a vanity alias; the canonical URL
-// is what crawlers should index.
-const FORUM_SITEMAP = "https://filmglance.com/discuss/sitemap.xml";
+// NodeBB's configured canonical URL is `https://filmglance.com/discuss`
+// (verified via Phase 9.1 — sitemap entries use this base), but the apex
+// 307-redirects to www, and Google's sitemap fetcher does not follow that
+// redirect — it reports "Couldn't fetch" on submission. Reference the no-
+// redirect www URL so crawlers fetch the sitemap in one hop. The
+// `discuss.filmglance.com` subdomain is a vanity alias; we keep using the
+// canonical www host both for consistency with the main sitemap and to
+// avoid duplicating the index of forum URLs across two hostnames.
+const FORUM_SITEMAP = "https://www.filmglance.com/discuss/sitemap.xml";
 
 const DISALLOW = ["/api/", "/_next/", "/preview-landing"];
 
