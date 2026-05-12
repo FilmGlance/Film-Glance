@@ -1,5 +1,82 @@
 # Film Glance — Conversation Summary
 
+## Session: May 12, 2026 — v6.7.0 post-Phase-C audit (D1+D4+D5+D6) + bundled PR
+
+Entered the session with the v6.7.0 hotfix `9b305e7` already on staging (edge→nodejs + 30s + Promise.allSettled for /discover after the Phase-C cache pushed `discover_movies` RPC to ~4.2s) and D2+D3 done (`dc7e4b7` — ID-keyed TMDB enrichment + fallback-row backfill). Four D-stages remained queued from the prior session's handoff: D1 (`/boxoffice` unlock), D4 (RPC perf migration), D5 (SWR refresh hardening), D6 (JustWatch shim). All four shipped this turn, bundled into one v6.7.0 staging→main PR per `feedback_bundle_phases_one_pr.md`.
+
+### D1 — /boxoffice unlock (cap lift + Season filter + dynamic copy)
+
+- `app/api/boxoffice/route.ts` — lifted the hard-coded `.limit(10)` → caller-driven `?limit=1..100` (default 100); added `fetchAvail("seasonal")` to the parallel availability fetch + surfaced `available_seasonal` in every response shape.
+- `components/box-office/BoxOfficePage.jsx` — dropped `.slice(0, 10)` from `allEntries`; added `season` state + URL param synced via `syncURL`; `onFilterChange` makes Season and Month mutually exclusive (choosing one nulls the other and the Week below).
+- `components/box-office/FilterBar.jsx` — added a 4th dropdown (Winter Jan-Mar / Spring Apr-Jun / Summer Jul-Sep / Fall Oct-Dec) keyed off BOM's SEASON_BOUNDS month convention (01/04/07/10).
+- `components/box-office/CinematicBoxOfficeHero.jsx` — `formatPeriodSubline` now takes a `count` arg and renders `The Top {N} of {period}` with a new `seasonal` branch that maps period_start month → "Winter/Spring/Summer/Fall {year}".
+- `app/boxoffice/page.tsx` — metadata title/description + JSON-LD `CollectionPage.name` dropped the literal "Top 10" since N is now dynamic.
+
+The "Browse the Chart" subtitle in BoxOfficePage also de-Top-10'd ("up to 100 deep" instead).
+
+### D4 — discover RPC perf migration (the real fix for /discover)
+
+`sql/migrations/022_discover_perf.sql` (new, FILE ONLY pending Supabase SQL Editor apply):
+
+- **Columns**: `popularity NUMERIC`, `source_count INT NOT NULL DEFAULT 0`, `release_year INT` added to `movie_cache`.
+- **Trigger**: `movie_cache_set_denorm` BEFORE INSERT OR UPDATE OF data — casting-safe with EXCEPTION blocks so a malformed `data->>'year'` string doesn't abort the write. Mirrors the v6.4.0 `movie_cache_fg_score_trg` pattern.
+- **Backfill**: one UPDATE statement with regex-guarded casts (`~'^-?\d+$'` for int year, `~'^-?\d+(\.\d+)?$'` for numeric popularity) — ~10s at 25k rows.
+- **Indexes**: three partial composites, the hot one being `idx_movie_cache_discover_v2 ON (release_window, fg_score DESC NULLS LAST) WHERE fg_score IS NOT NULL AND source_count >= 5 AND release_year BETWEEN 1888 AND 2100`. Plus a year-filter variant and a discover_recent variant.
+- **RPCs rewritten**: `discover_movies`, `discover_random`, `discover_random_pool_size`, `discover_recent`, `discover_years`, `discover_genres` — all 6 now read `mc.source_count` / `mc.release_year` / `mc.popularity` directly instead of `jsonb_array_length(mc.data->'sources')` / `NULLIF(mc.data->>'year','')::int` / `NULLIF(mc.data->>'popularity','')::numeric`. Function signatures + return shapes unchanged → `app/api/discover/route.ts` doesn't need to ship in lockstep with the migration.
+- Updated the comment on `app/api/discover/route.ts` to reflect that `nodejs` + `maxDuration=30` + `Promise.allSettled` are now belt-and-suspenders, not a band-aid.
+
+Expected drop: ~4.2s → ~200ms on the entries RPC at 24,915-row cache. Cushion for further growth too. Migration must be applied to production BEFORE merging the PR for the perf win to land immediately; app code is cross-deployment-safe either way.
+
+### D5 — SWR refresh hardening (pass cached.tmdb_id)
+
+- `lib/tmdb.ts` — new `getMovieReleaseInfoById(tmdbId)` exporting the same shape as the title-based `getMovieReleaseInfo`, but via direct `/movie/{id}` (6s AbortSignal timeout).
+- `lib/search-pipeline.ts` — `runFullPipeline` gains optional 5th param `tmdbIdHint?: number | null`. When set AND no `releaseInfoArg` was passed, the existing v5.13.3 releaseInfo backfill short-circuits the title search and uses `getMovieReleaseInfoById` directly.
+- `app/api/search/route.ts` — both cache-hit SELECTs (primary at line 261, sequel-resolution at line 409) now request `tmdb_id` from the cache; both `runFullPipeline` SWR-refresh call sites pass it through. The sequel-resolution branch correctly reads from `data.tmdb_id` (the resolved row), not the outer `cached.tmdb_id` (which could be a different film).
+
+Two wins: (1) saves a TMDB search round-trip on every SWR background refresh; (2) pins the refresh to the same canonical film instead of risking title-search drift (Michael 1996 vs 2026 was the original bug class this defends against).
+
+### D6 — JustWatch shim for cache hits
+
+- `lib/tmdb.ts` — internal `fetchWatchProviders` gained a `timeoutMs` param (default 5000 preserved for existing callers). New public `freshenWatchProviders(tmdbId, title, region="CA", deadlineMs=1200)` wrapper returns `StreamingOption[] | null` (null on empty/error/timeout).
+- `app/api/search/route.ts` — both cache-hit return paths overlay fresh `streaming` onto the response when `cached.tmdb_id` is set AND `movieData.coming_soon` isn't set. Inline await with 1200ms hard cap, fail-soft to cached streaming.
+
+Trade: +80-300ms typical per cache hit, in exchange for "the streaming pills aren't stale" UX accuracy. The cached `streaming` array goes stale fast as films rotate platforms monthly; the SWR refresh path still updates the cache row in background for the next read.
+
+### Files changed this turn
+
+| File | Stage | Change |
+|---|---|---|
+| `app/api/boxoffice/route.ts` | D1 | `?limit=N` (1..100, default 100), `fetchAvail("seasonal")`, response includes `available_seasonal` |
+| `app/api/discover/route.ts` | D4 | Comment refresh — nodejs/30s/allSettled is now belt-and-suspenders |
+| `app/api/search/route.ts` | D5 + D6 | Cache SELECTs now request `tmdb_id`; both SWR refresh sites pass it; both return paths overlay fresh streaming |
+| `app/boxoffice/page.tsx` | D1 | Drop "Top 10" from title/description/JSON-LD |
+| `components/box-office/BoxOfficePage.jsx` | D1 | Season state + URL, drop `.slice(0, 10)`, dynamic "Rest of Top N" label |
+| `components/box-office/CinematicBoxOfficeHero.jsx` | D1 | `formatPeriodSubline` takes count + has seasonal branch |
+| `components/box-office/FilterBar.jsx` | D1 | New Season dropdown |
+| `lib/search-pipeline.ts` | D5 | `runFullPipeline` accepts `tmdbIdHint` 5th arg |
+| `lib/tmdb.ts` | D5 + D6 | New `getMovieReleaseInfoById` + `freshenWatchProviders` + `timeoutMs` param on internal `fetchWatchProviders` |
+| `sql/migrations/022_discover_perf.sql` | D4 | NEW — popularity/source_count/release_year + trigger + indexes + 6 RPC rewrites |
+| `tech-specs.md` | docs | New v6.7.0 row in §9; new ✅ row + demoted prior row to 🚧 in §10 |
+| `conversation-summary.md` | docs | This entry |
+
+### Operator playbook for the v6.7.0 PR
+
+1. Apply `sql/migrations/022_discover_perf.sql` via Supabase SQL Editor (idempotent; ~10s at 25k rows).
+2. Verify perf: `EXPLAIN ANALYZE SELECT * FROM discover_movies('at_home', NULL, NULL, false, 100);` — expect <250ms.
+3. Merge the v6.7.0 PR (`staging → main`) — Vercel deploys → /discover hits the new fast path automatically; /boxoffice surfaces up to 100 ranks per period; cache hits get fresh streaming.
+
+### Validation
+
+`npx tsc --noEmit` clean after each D-stage and after the docs update. No app code touches the new columns directly — only via the unchanged RPC surface — so the migration can be applied either before or after the merge without breaking deploys (just slower if applied after).
+
+### Next steps (for next chat)
+
+1. **Merge PR + apply migration 022** per operator playbook above.
+2. **Begin GEO Phase 3 engineering** per `~/.claude/plans/project-will-be-the-ticklish-corbato.md` — per-movie SSR route `app/movie/[id]/[slug]/page.tsx`, `lib/slug.ts`, structured-data Movie + AggregateRating + Review per source + BreadcrumbList, `app/sitemap.ts` dynamic enumeration of the 24,915 cached films, internal link updates across DiscoverCard/PosterCard/film-glance.jsx recommendations panel.
+3. Standing-queue items (unchanged): VPS forum import follow-ups, 6 Dependabot vulns, Supabase PAT rotation Apr 2027, dead `YOUTUBE_API_KEY` in Vercel env, missing `003_anonymous_searches.sql`, optional Stripe teardown.
+
+---
+
 ## Session: May 11, 2026 — Phase C cache-growth COMPLETE — bible docs + consolidated PR
 
 Self-paced /loop monitored the full C-4 → C-5 → C-6 chain on VPS overnight, transitioning between phases automatically (smoke `--dry-run --limit=10` → clear state → nohup) with periodic SSH polls (1800s mid-flight, 600s near ETA, 270s at handoff). All four cache-growth phases now done; bible docs updated this turn; consolidated `staging → main` PR opened per `feedback_bundle_phases_one_pr.md`.
