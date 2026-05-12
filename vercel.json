@@ -9,6 +9,17 @@
       "destination": "https://discuss.filmglance.com/discuss/"
     }
   ],
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=600, stale-while-revalidate=3600"
+        }
+      ]
+    }
+  ],
   "crons": [
     {
       "path": "/api/seed/refresh",

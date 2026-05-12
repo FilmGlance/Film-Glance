@@ -19,12 +19,12 @@ import { supabaseAnon } from "@/lib/supabase-anon";
 import {
   collectionPageSchema,
   breadcrumbSchema,
-  itemListSchema,
+  movieSchema,
   serializeJsonLd,
-  type ItemListEntry,
 } from "@/lib/structured-data";
 
-const URL_DISCOVER = "https://www.filmglance.com/discover";
+const SITE_URL = "https://www.filmglance.com";
+const URL_DISCOVER = `${SITE_URL}/discover`;
 const TITLE = "Discover — Top 100 Films Worth Your Evening | Film Glance";
 const DESCRIPTION =
   "100 hand-picked films per filter, ranked by Film Glance Score — an aggregated rating drawn from Rotten Tomatoes, IMDb, Metacritic, Letterboxd, and five more verified sources. Filter by genre, decade, theater or at-home. Spin the Movie Reel Roulette for a random pick.";
@@ -52,11 +52,21 @@ export const metadata: Metadata = {
 // loopback latency tolerable.
 export const revalidate = 600;
 
+// Widened in v6.7.0 Move A — the discover_movies RPC already returns all
+// these fields (see migration 020); previously we only consumed a 4-field
+// subset for the JSON-LD shell. Now we feed the full row into movieSchema()
+// so each ItemList entry embeds a Movie + AggregateRating block.
 interface DiscoverEntry {
   title: string;
   year: number | null;
   poster_path: string | null;
   fg_score: number | null;
+  director?: string | null;
+  genre?: string | null;
+  release_date?: string | null;
+  runtime?: string | null;
+  overview?: string | null;
+  source_count?: number | null;
 }
 
 async function fetchInitialDiscover(): Promise<{
@@ -112,16 +122,37 @@ export default async function Page() {
 
   // Build the structured-data blocks. Falls back to just CollectionPage +
   // BreadcrumbList when SSR fetch fails (rare; client retries on mount).
-  const itemListEntries: ItemListEntry[] = (initialData?.entries || []).map(
-    (e, i) => ({
+  //
+  // v6.7.0 Move A — two upgrades over the prior pattern:
+  //   1. The per-item `url` points at `${SITE_URL}/?q=<title>` (the homepage
+  //      search route that actually serves the film), not the broken
+  //      `${URL_DISCOVER}?q=<title>` (a dead-end — /discover ignores ?q).
+  //   2. Each ListItem now embeds a full Movie + AggregateRating via
+  //      movieSchema() under `item`, replacing the bare {name, url, image}.
+  //      Crawlers see each entry as a citable film, not a thin link.
+  const movieItems = (initialData?.entries || []).map((e, i) => {
+    const filmUrl = `${SITE_URL}/?q=${encodeURIComponent(e.title)}`;
+    return {
+      "@type": "ListItem",
       position: i + 1,
-      name: e.year ? `${e.title} (${e.year})` : e.title,
-      url: `${URL_DISCOVER}?q=${encodeURIComponent(e.title)}`,
-      image: e.poster_path
-        ? `https://image.tmdb.org/t/p/w500${e.poster_path}`
-        : undefined,
-    }),
-  );
+      url: filmUrl,
+      item: movieSchema({
+        url: filmUrl,
+        title: e.title,
+        year: e.year,
+        releaseDate: e.release_date ?? null,
+        director: e.director ?? null,
+        genre: e.genre ?? null,
+        description: e.overview ?? null,
+        posterPath: e.poster_path,
+        runtime: e.runtime ?? null,
+        fgScore: e.fg_score,
+        // sources aren't pulled by discover_movies RPC; the per-film
+        // /?q=<title> route emits the full Review[] tail.
+        sources: null,
+      }),
+    } as Record<string, unknown>;
+  });
 
   const schemas: Record<string, unknown>[] = [
     collectionPageSchema({
@@ -130,19 +161,20 @@ export default async function Page() {
       description: DESCRIPTION,
     }),
     breadcrumbSchema([
-      { name: "Home", url: "https://www.filmglance.com/" },
+      { name: "Home", url: `${SITE_URL}/` },
       { name: "Discover", url: URL_DISCOVER },
     ]),
   ];
-  if (itemListEntries.length > 0) {
-    schemas.push(
-      itemListSchema({
-        name: "Top 100 Films Worth Your Evening",
-        description: DESCRIPTION,
-        numberOfItems: itemListEntries.length,
-        items: itemListEntries,
-      }),
-    );
+  if (movieItems.length > 0) {
+    schemas.push({
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "Top 100 Films Worth Your Evening",
+      description: DESCRIPTION,
+      numberOfItems: movieItems.length,
+      itemListOrder: "https://schema.org/ItemListOrderDescending",
+      itemListElement: movieItems,
+    });
   }
   const PAGE_JSON_LD = serializeJsonLd(schemas);
 
