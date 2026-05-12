@@ -22,6 +22,13 @@ const TITLE = "Box Office — Highest-Grossing Films | Film Glance";
 const DESCRIPTION =
   "The highest-grossing films at the box office, refreshed weekly from Box Office Mojo. Filter by week, month, season, or year — historical charts back to 1977, up to 100 ranks deep.";
 
+// v6.7.0 D7 — match /discover page's edge-cache posture. The page is a thin
+// shell over the client-rendered BoxOfficePage, but Vercel's prerender cache
+// still serves the SSR HTML (metadata, JSON-LD, shell markup) from edge for
+// `revalidate` seconds — saves a Vercel function execution on every crawler
+// + cold-cache page hit.
+export const revalidate = 600;
+
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,

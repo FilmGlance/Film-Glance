@@ -299,7 +299,7 @@ export async function GET(req: NextRequest) {
   });
 
   const head = dbRows[0];
-  return NextResponse.json({
+  const res = NextResponse.json({
     period_type: period,
     region,
     period_label: head.period_label,
@@ -315,4 +315,10 @@ export async function GET(req: NextRequest) {
     available_seasonal,
     entries,
   });
+  // v6.7.0 D7 — edge-cache the box-office response. Data only changes daily
+  // after the 11:00 UTC cron, so 10-min s-maxage + 1h SWR is generous and
+  // still catches the post-cron refresh quickly. Mirrors the /api/discover
+  // posture. Cuts function executions by ~90% under crawler load.
+  res.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
+  return res;
 }
