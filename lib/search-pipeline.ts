@@ -15,6 +15,7 @@ import {
   fetchComingSoonDetails,
   fetchTMDBBoxOffice,
   getMovieReleaseInfo,
+  getMovieReleaseInfoById,
 } from "@/lib/tmdb";
 import {
   fetchVerifiedRatings,
@@ -126,7 +127,8 @@ export async function runFullPipeline(
     releaseDate: string | null;
     overview: string;
     posterPath: string | null;
-  } | null
+  } | null,
+  tmdbIdHint?: number | null
 ): Promise<any> {
   const start = Date.now();
 
@@ -136,9 +138,18 @@ export async function runFullPipeline(
   // that meant box-office augmentation (which needs `releaseInfo.tmdbId`)
   // would silently skip. Fetching here ensures augmentation fires for
   // every code path: fresh searches, SWR refreshes, BOM cron upserts.
+  //
+  // v6.7.0 D5 — when the caller knows the cached row's tmdb_id (the SWR
+  // refresh path post-migration 021 backfill), short-circuit the title
+  // search and look up by id directly. Two wins: (1) saves one TMDB
+  // search round-trip; (2) pins the refresh to the same movie — title
+  // search can drift to a different film if TMDB's popularity ranking
+  // shifts (e.g. "michael" → 1996 Travolta vs 2026 Fuqua biopic).
   let releaseInfo = releaseInfoArg;
   if (!releaseInfo) {
-    const fetched = await getMovieReleaseInfo(queryForClaude, yearHint).catch(() => null);
+    const fetched = tmdbIdHint
+      ? await getMovieReleaseInfoById(tmdbIdHint).catch(() => null)
+      : await getMovieReleaseInfo(queryForClaude, yearHint).catch(() => null);
     if (fetched) {
       releaseInfo = {
         tmdbId: fetched.tmdbId,

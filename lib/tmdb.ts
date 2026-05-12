@@ -613,13 +613,14 @@ function platformSearchUrl(providerName: string, movieTitle: string): string {
 async function fetchWatchProviders(
   movieId: number,
   movieTitle: string,
-  region: string = "CA"
+  region: string = "CA",
+  timeoutMs: number = 5000
 ): Promise<StreamingOption[]> {
   if (!TMDB_KEY) return [];
   try {
     const res = await fetch(
       `${TMDB_BASE}/movie/${movieId}/watch/providers?api_key=${TMDB_KEY}`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(timeoutMs) }
     );
     if (!res.ok) return [];
 
@@ -673,6 +674,36 @@ async function fetchWatchProviders(
     return streaming;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Public, latency-bounded JustWatch shim for the search route cache-hit
+ * path. Pulls fresh streaming availability from TMDB's `/movie/{id}/watch/
+ * providers` (the same endpoint JustWatch licenses to TMDB) and returns
+ * `StreamingOption[]` in the exact shape cached entries store.
+ *
+ * v6.7.0 D6: cached `streaming` arrays go stale fast (films rotate between
+ * platforms monthly). Cache hits without this shim could surface "On Hulu"
+ * pills for a movie that moved to Max yesterday. The SWR refresh path
+ * already updates streaming on its next pass, but that's a background
+ * refresh — by the time it runs, the user has already seen the stale
+ * answer. This shim fires inline on the cache-hit path with a tight
+ * deadline (default 1200ms): if TMDB responds in time, the response gets
+ * fresh streaming; if not, we fall back to the cached value. Fail-soft.
+ */
+export async function freshenWatchProviders(
+  tmdbId: number,
+  title: string,
+  region: string = "CA",
+  deadlineMs: number = 1200
+): Promise<StreamingOption[] | null> {
+  if (!TMDB_KEY || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
+  try {
+    const streaming = await fetchWatchProviders(tmdbId, title, region, deadlineMs);
+    return streaming.length > 0 ? streaming : null;
+  } catch {
+    return null;
   }
 }
 
@@ -1067,6 +1098,54 @@ export async function getMovieReleaseInfo(
     overview: (movie as any).overview || "",
     posterPath: movie.poster_path,
   };
+}
+
+/**
+ * Same shape as getMovieReleaseInfo, but keyed on a known TMDB id rather
+ * than a title search. Used by the SWR background-refresh path in
+ * app/api/search/route.ts: cached rows that already carry a `tmdb_id`
+ * shouldn't re-resolve via title search (slow + risks drifting to a
+ * different film if TMDB's popularity-ranked search shifts). Direct
+ * `/movie/{id}` is one round-trip and pins the refresh to the same movie.
+ *
+ * v6.7.0 D5.
+ */
+export async function getMovieReleaseInfoById(
+  tmdbId: number
+): Promise<{
+  isReleased: boolean;
+  releaseDate: string | null;
+  tmdbId: number;
+  officialTitle: string;
+  overview: string;
+  posterPath: string | null;
+} | null> {
+  if (!TMDB_KEY || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_KEY}&language=en-US`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    const movie = (await res.json()) as any;
+    if (!movie?.id) return null;
+
+    const releaseDate = movie.release_date || null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isReleased = releaseDate ? new Date(releaseDate) <= today : true;
+
+    return {
+      isReleased,
+      releaseDate,
+      tmdbId: movie.id,
+      officialTitle: movie.title || "",
+      overview: movie.overview || "",
+      posterPath: movie.poster_path || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

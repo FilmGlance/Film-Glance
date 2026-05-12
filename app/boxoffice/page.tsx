@@ -18,9 +18,9 @@ import {
 } from "@/lib/structured-data";
 
 const URL = "https://www.filmglance.com/boxoffice";
-const TITLE = "Box Office — Top 10 Highest-Grossing Films | Film Glance";
+const TITLE = "Box Office — Highest-Grossing Films | Film Glance";
 const DESCRIPTION =
-  "The Top 10 highest-grossing films, refreshed weekly from Box Office Mojo. Filter by week, month, season, or year — historical charts back to 1977.";
+  "The highest-grossing films at the box office, refreshed weekly from Box Office Mojo. Filter by week, month, season, or year — historical charts back to 1977, up to 100 ranks deep.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 const PAGE_JSON_LD = serializeJsonLd([
   collectionPageSchema({
     url: URL,
-    name: "Box Office — Top 10 Highest-Grossing Films",
+    name: "Box Office — Highest-Grossing Films",
     description: DESCRIPTION,
   }),
   breadcrumbSchema([

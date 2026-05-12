@@ -10,11 +10,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAnon } from "@/lib/supabase-anon";
 import { DiscoverQuerySchema } from "@/lib/schemas";
 
-// v6.7.0 hotfix: switched edge → nodejs + bumped to 30s after the Phase-C
-// cache growth pushed discover_movies RPC to ~4.2s; edge 25s limit was OK
-// but cold-start + 3 parallel RPCs occasionally tripped the gateway. Node
-// runtime is more reliable here and tolerates the longer query. Proper fix
-// (D4: denormalize popularity + source_count columns) coming next.
+// v6.7.0 — nodejs runtime + 30s deadline + Promise.allSettled below = belt
+// and suspenders. The Phase-C cache growth (9k → 25k rows) pushed the old
+// JSONB-extraction-heavy discover_movies RPC to ~4.2s; migration 022 fixes
+// the root cause by denormalizing popularity / source_count / release_year
+// onto movie_cache columns + adding a partial composite index, dropping the
+// RPC back to ~200ms. The nodejs + 30s settings stay as defense-in-depth so
+// any future cache growth (or a slow `discover_genres` LATERAL scan) can't
+// re-trip the gateway. Promise.allSettled keeps slow dropdown RPCs from
+// taking down the whole response.
 export const runtime = "nodejs";
 export const maxDuration = 30;
 

@@ -46,7 +46,7 @@ import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { calcScore } from "@/lib/score";
 import { rateLimit, SEARCH_LIMIT } from "@/lib/rate-limit";
-import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails, findExactTitleCandidates } from "@/lib/tmdb";
+import { enrichWithTMDB, fetchVideoReviews, getMovieReleaseInfo, fetchComingSoonDetails, findExactTitleCandidates, freshenWatchProviders } from "@/lib/tmdb";
 import { fetchVerifiedRatings, applyVerifiedRatings, resolveSequelTitle, RATINGS_DISCLAIMER } from "@/lib/ratings";
 import { sanitizeQuery } from "@/lib/sanitize";
 import {
@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error } = await supabaseAdmin
         .from("movie_cache")
-        .select("data, hit_count, expires_at, cached_at")
+        .select("data, hit_count, expires_at, cached_at, tmdb_id")
         .eq("search_key", query)
         .single();
       if (!error && data) cached = data;
@@ -362,10 +362,23 @@ export async function POST(req: NextRequest) {
           // v5.13.3 — pass cached year as yearHint so the runFullPipeline
           // releaseInfo backfill resolves the correct movie (Michael 1996
           // vs 2026 etc.) instead of TMDB's popularity-default pick.
+          // v6.7.0 D5 — additionally pass cached.tmdb_id when known so the
+          // backfill short-circuits the title search entirely (faster + can't
+          // drift to a different film than the cached row represents).
           const cachedYear = typeof (cached.data as any)?.year === "number"
             ? (cached.data as any).year
             : undefined;
-          const mv = await runFullPipeline(query, query, cachedYear);
+          const cachedTmdbId =
+            typeof cached.tmdb_id === "number" && cached.tmdb_id > 0
+              ? cached.tmdb_id
+              : null;
+          const mv = await runFullPipeline(
+            query,
+            query,
+            cachedYear,
+            undefined,
+            cachedTmdbId,
+          );
           if (mv) {
             await writeCacheEntries(query, null, mv.title, mv, user?.id || null, ip, "swr-refresh");
             console.log(`[bg-refresh] ✓ "${query}" refreshed in ${Date.now() - start}ms`);
@@ -381,8 +394,29 @@ export async function POST(req: NextRequest) {
         backfillVideoReviews(query, movieData);
       }
 
+      // v6.7.0 D6 — JustWatch shim. The cached `streaming` array goes stale
+      // fast (films rotate platforms monthly). Cache hits get a tight,
+      // fail-soft TMDB watch/providers lookup overlaid on the response.
+      // Skipped for coming_soon entries (no streaming meaningful) and for
+      // rows that pre-date the tmdb_id backfill. SWR refresh still writes
+      // fresh streaming back to the cache in the background.
+      const cachedTmdbIdForShim =
+        typeof cached.tmdb_id === "number" && cached.tmdb_id > 0
+          ? cached.tmdb_id
+          : null;
+      const freshStreaming =
+        cachedTmdbIdForShim && !(movieData as any).coming_soon
+          ? await freshenWatchProviders(
+              cachedTmdbIdForShim,
+              typeof (movieData as any).title === "string"
+                ? (movieData as any).title
+                : query,
+            )
+          : null;
+
       return NextResponse.json({
         ...movieData,
+        ...(freshStreaming ? { streaming: freshStreaming } : null),
         ...(!(movieData as any).coming_soon && {
           score: calcScore((movieData.sources as any[]) || []),
           disclaimer: RATINGS_DISCLAIMER,
@@ -406,7 +440,7 @@ export async function POST(req: NextRequest) {
         const resolvedKey = sanitizeQuery(resolvedTitle);
         const { data, error } = await supabaseAdmin
           .from("movie_cache")
-          .select("data, hit_count, expires_at, cached_at")
+          .select("data, hit_count, expires_at, cached_at, tmdb_id")
           .eq("search_key", resolvedKey)
           .single();
 
@@ -434,8 +468,22 @@ export async function POST(req: NextRequest) {
           }, "sequel-cache-hit-log");
 
           if (shouldRefresh && ANTHROPIC_API_KEY) {
+            // v6.7.0 D5 — same tmdb_id short-circuit as the primary cache-hit
+            // path. The sequel-resolved row may carry its own tmdb_id distinct
+            // from the original query's row, so we read from this branch's
+            // `data` (the resolved record), not the outer `cached`.
+            const sequelTmdbId =
+              typeof (data as any).tmdb_id === "number" && (data as any).tmdb_id > 0
+                ? (data as any).tmdb_id
+                : null;
             runInBackground(async () => {
-              const mv = await runFullPipeline(resolvedTitle, resolvedTitle, resolvedYear);
+              const mv = await runFullPipeline(
+                resolvedTitle,
+                resolvedTitle,
+                resolvedYear,
+                undefined,
+                sequelTmdbId,
+              );
               if (mv) await writeCacheEntries(resolvedKey, resolvedTitle, mv.title, mv, user?.id || null, ip, "swr-refresh");
             }, "sequel-bg-refresh");
           }
@@ -448,8 +496,26 @@ export async function POST(req: NextRequest) {
             backfillVideoReviews(resolvedKey, movieData);
           }
 
+          // v6.7.0 D6 — JustWatch shim, same pattern as the primary cache-hit
+          // branch above. Reads tmdb_id from the sequel-resolved row (not the
+          // outer cached, which may be a different film).
+          const sequelTmdbIdForShim =
+            typeof (data as any).tmdb_id === "number" && (data as any).tmdb_id > 0
+              ? (data as any).tmdb_id
+              : null;
+          const freshStreamingSequel =
+            sequelTmdbIdForShim && !(movieData as any).coming_soon
+              ? await freshenWatchProviders(
+                  sequelTmdbIdForShim,
+                  typeof (movieData as any).title === "string"
+                    ? (movieData as any).title
+                    : resolvedTitle,
+                )
+              : null;
+
           return NextResponse.json({
             ...movieData,
+            ...(freshStreamingSequel ? { streaming: freshStreamingSequel } : null),
             ...(!(movieData as any).coming_soon && {
               score: calcScore((movieData.sources as any[]) || []),
               disclaimer: RATINGS_DISCLAIMER,
