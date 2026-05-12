@@ -10,7 +10,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAnon } from "@/lib/supabase-anon";
 import { DiscoverQuerySchema } from "@/lib/schemas";
 
-export const runtime = "edge";
+// v6.7.0 hotfix: switched edge → nodejs + bumped to 30s after the Phase-C
+// cache growth pushed discover_movies RPC to ~4.2s; edge 25s limit was OK
+// but cold-start + 3 parallel RPCs occasionally tripped the gateway. Node
+// runtime is more reliable here and tolerates the longer query. Proper fix
+// (D4: denormalize popularity + source_count columns) coming next.
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -32,7 +38,9 @@ export async function GET(req: NextRequest) {
   // Three RPCs in parallel: entries (top N ranked), genres for the dropdown,
   // years for the dropdown. All grant-to-anon so we use the public client.
   const supa = supabaseAnon();
-  const [entriesRes, genresRes, yearsRes] = await Promise.all([
+  // v6.7.0 — allSettled so a slow dropdown RPC (genres/years) doesn't fail
+  // the whole response. The entries RPC is still required; only it returns 500.
+  const settled = await Promise.allSettled([
     supa.rpc("discover_movies", {
       p_release_window: release_window,
       p_genre: genre ?? null,
@@ -46,6 +54,9 @@ export async function GET(req: NextRequest) {
       p_genre: genre ?? null,
     }),
   ]);
+  const entriesRes = settled[0].status === "fulfilled" ? settled[0].value : { data: null, error: settled[0].reason };
+  const genresRes = settled[1].status === "fulfilled" ? settled[1].value : { data: null, error: settled[1].reason };
+  const yearsRes = settled[2].status === "fulfilled" ? settled[2].value : { data: null, error: settled[2].reason };
 
   if (entriesRes.error) {
     console.error("[discover] entries error:", entriesRes.error);
