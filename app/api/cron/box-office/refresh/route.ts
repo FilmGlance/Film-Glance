@@ -52,7 +52,7 @@ export const maxDuration = 300;
 const JOB = "box-office-refresh";
 const REGION: Region = "domestic";
 const SOURCE: Source = "bom-direct";
-const TOP_N = 10;
+const TOP_N = 100;
 const POLITE_DELAY_MS = 1500;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));

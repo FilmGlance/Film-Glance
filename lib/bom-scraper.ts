@@ -250,7 +250,7 @@ const SEASON_BOUNDS: Record<SeasonName, [number, number, number, number]> = {
 
 export async function scrapeYearChart(
   year: number,
-  topN: number = 10
+  topN: number = 100
 ): Promise<BomChartResult> {
   const url = `${BOM}/year/${year}/`;
   const html = await fetchHtml(url);
@@ -273,7 +273,7 @@ export async function scrapeYearChart(
 export async function scrapeMonthChart(
   year: number,
   month: MonthName,
-  topN: number = 10
+  topN: number = 100
 ): Promise<BomChartResult> {
   const url = `${BOM}/month/${month}/${year}/`;
   const html = await fetchHtml(url);
@@ -298,7 +298,7 @@ export async function scrapeMonthChart(
 export async function scrapeSeasonChart(
   year: number,
   season: SeasonName,
-  topN: number = 10
+  topN: number = 100
 ): Promise<BomChartResult> {
   const url = `${BOM}/season/${season}/${year}/`;
   const html = await fetchHtml(url);
@@ -322,7 +322,7 @@ export async function scrapeSeasonChart(
 export async function scrapeWeekChart(
   year: number,
   weekNumber: number,
-  topN: number = 10
+  topN: number = 100
 ): Promise<BomChartResult> {
   // BOM uses ISO-style week IDs in URLs: /weekly/2024W17/
   const wid = `${year}W${pad2(weekNumber)}`;

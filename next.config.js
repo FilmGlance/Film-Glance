@@ -49,6 +49,25 @@ const nextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
           // Audit Phase B High 6 — CSP in report-only mode for v1 rollout.
           { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
+          // GEO Phase 1.4 — explicit X-Robots-Tag allows search-engine + AI
+          // crawlers to index by default. Defense in depth alongside
+          // app/robots.ts. /api/* and /_next/* are noindex'd below.
+          { key: "X-Robots-Tag", value: "index, follow, max-image-preview:large" },
+        ],
+      },
+      {
+        // Block crawl indexing on API + Next internals. /api/ is also
+        // disallowed in robots.txt, but a header is the belt-and-suspenders
+        // version that takes effect even if a crawler ignores robots.txt.
+        source: "/api/(.*)",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
+        source: "/_next/(.*)",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
     ];

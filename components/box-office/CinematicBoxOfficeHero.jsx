@@ -1,18 +1,70 @@
 "use client";
 
-// CinematicHero — full-bleed top hero for /discover. The #1 film's
-// backdrop image dominates; hero text floats over a vignette. Replaces the
-// text-only DiscoverHero and the separate TOP PICK card with one
-// cinematic statement.
+// CinematicBoxOfficeHero — full-bleed top hero for /boxoffice. The #1 film's
+// backdrop image dominates the first viewport; period chip + Box Office
+// headline + a glass strip showing #1 / gross / theaters live underneath.
 //
-// v6.5.3 — image-forward redesign per user "really make some graphical
-// UI changes that will WOW users" feedback.
+// Replaces both the text-only PageHero and the horizontal FeaturedCard
+// variant of PosterCard. The hero IS the #1 film — no separate hero card
+// below — same architectural move as v6.5.3 on /discover.
+//
+// v6.6.0 — image-forward Box Office redesign per user "apply that same
+// review rigor to improve the UI of the Box Office page" feedback.
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Heart, Play } from "lucide-react";
+import { Heart } from "lucide-react";
+import { useCountUp } from "@/lib/use-count-up";
 
 const TMDB_BACKDROP_W1280 = "https://image.tmdb.org/t/p/w1280";
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// Format the headline subline based on period_type + dates.
+// v6.6.1: dropped the period chip — info was redundant with the subline.
+//
+//   weekly  Oct 6 — 12, 2025  → "The Top 10 of Oct 6 — 12, 2025."
+//   monthly Oct 2025          → "The Top 10 of October 2025."
+//   yearly  2025              → "The Top 10 of 2025."
+function formatPeriodSubline(periodType, periodStart, periodEnd) {
+  if (!periodStart) return "The Top 10.";
+  const start = new Date(`${periodStart}T00:00:00Z`);
+  const startMonthShort = MONTH_SHORT[start.getUTCMonth()];
+  const startMonthLong = MONTH_LONG[start.getUTCMonth()];
+  const startDay = start.getUTCDate();
+  const startYear = start.getUTCFullYear();
+
+  if (periodType === "yearly") {
+    return `The Top 10 of ${startYear}.`;
+  }
+  if (periodType === "monthly") {
+    return `The Top 10 of ${startMonthLong} ${startYear}.`;
+  }
+  // weekly — render "Oct 6 — 12, 2025" if start/end share a month, else
+  // "Sep 28 — Oct 4, 2025" if it crosses a boundary.
+  if (periodEnd) {
+    const end = new Date(`${periodEnd}T00:00:00Z`);
+    const endMonthShort = MONTH_SHORT[end.getUTCMonth()];
+    const endDay = end.getUTCDate();
+    const endYear = end.getUTCFullYear();
+    if (start.getUTCMonth() === end.getUTCMonth() && startYear === endYear) {
+      return `The Top 10 of ${startMonthShort} ${startDay} — ${endDay}, ${startYear}.`;
+    }
+    return `The Top 10 of ${startMonthShort} ${startDay} — ${endMonthShort} ${endDay}, ${endYear}.`;
+  }
+  return `The Top 10 of ${startMonthShort} ${startDay}, ${startYear}.`;
+}
+
+function formatExactDollars(d) {
+  if (d == null) return "—";
+  return `$${Math.round(d).toLocaleString("en-US")}`;
+}
+
+function formatNumber(n) {
+  if (n == null) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
 
 function HeartButton({ favorited, onToggle, ariaLabel }) {
   return (
@@ -55,18 +107,29 @@ function HeartButton({ favorited, onToggle, ariaLabel }) {
   );
 }
 
-export default function CinematicHero({ entry, loading, favorited, onToggleFavorite }) {
+export default function CinematicBoxOfficeHero({
+  entry,                  // the #1 film (or null while loading)
+  periodType,             // "weekly" | "monthly" | "yearly"
+  periodStart,            // YYYY-MM-DD
+  periodEnd,              // YYYY-MM-DD
+  loading,
+  favorited,
+  onToggleFavorite,
+}) {
   const [animKey, setAnimKey] = useState(0);
 
   // Bump animKey when the featured film changes so the entrance replays
   // for the new backdrop. Keeps the page feeling alive when filters change.
   useEffect(() => {
     if (entry?.search_key) setAnimKey((k) => k + 1);
-  }, [entry?.search_key]);
+  }, [entry?.search_key, periodStart]);
+
+  const grossAnimated = useCountUp(entry?.gross || 0, 900);
 
   const backdrop = entry?.backdrop_path ? `${TMDB_BACKDROP_W1280}${entry.backdrop_path}` : null;
   const score = entry?.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
   const buildHref = (e) => `/?q=${encodeURIComponent(e.title)}`;
+  const subline = formatPeriodSubline(periodType, periodStart, periodEnd);
 
   return (
     <header
@@ -74,16 +137,16 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
       style={{
         position: "relative",
         width: "100%",
-        height: "min(62vh, 580px)",
-        minHeight: 420,
+        height: "min(64vh, 600px)",
+        minHeight: 440,
         overflow: "hidden",
         marginBottom: 48,
       }}
     >
       {/* Backdrop layer — v6.6.1: moved from CSS background-image to a real
-          <img> with loading="eager" + fetchpriority="high" so the still
-          appears on first paint (was flashing in late). Same change applied
-          to the box-office hero for visual consistency. */}
+          <img> with loading="eager" + fetchpriority="high" so the browser
+          starts the fetch on parse instead of after first paint. Result:
+          the still appears on first paint instead of flashing in late. */}
       {backdrop ? (
         <img
           src={backdrop}
@@ -100,7 +163,7 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
             objectFit: "cover",
             objectPosition: "center 28%",
             transform: "scale(1.05)",
-            animation: "cinematicBackdropFade 1.2s cubic-bezier(0.16,1,0.3,1) both",
+            animation: "boCinematicBackdropFade 1.2s cubic-bezier(0.16,1,0.3,1) both",
           }}
         />
       ) : (
@@ -144,16 +207,16 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
           bottom: 0,
           maxWidth: 1200,
           margin: "0 auto",
-          padding: "0 24px 56px",
+          padding: "0 24px 44px",
         }}
       >
-        {/* Right-floating heart button for the featured film */}
+        {/* Right-floating heart button for the #1 film */}
         {entry && onToggleFavorite && (
           <div
             style={{
               position: "absolute",
               right: 24,
-              top: "calc(-1 * min(62vh, 580px) + 24px)",
+              top: "calc(-1 * min(64vh, 600px) + 24px)",
               zIndex: 2,
             }}
           >
@@ -165,6 +228,8 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
           </div>
         )}
 
+        {/* v6.6.1: period chip removed — the dynamic subline already says
+            "The Top 10 of [period]." Period info was duplicated. */}
         <h1
           style={{
             margin: 0,
@@ -174,36 +239,41 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
             lineHeight: 1.02,
             letterSpacing: -1.8,
             color: "#fff",
-            animation: "cinematicHeroLineIn 0.85s cubic-bezier(0.16,1,0.3,1) both",
+            animation: "boCinematicLineIn 0.85s cubic-bezier(0.16,1,0.3,1) 0.06s both",
           }}
         >
-          Discover.
+          Box Office.
         </h1>
         <p
           style={{
             margin: "6px 0 0",
             fontFamily: "'Playfair Display', serif",
+            fontStyle: "italic",
             fontWeight: 700,
             fontSize: "clamp(28px, 4.4vw, 56px)",
             lineHeight: 1.18,
             letterSpacing: -0.8,
             color: "#FFD700",
-            animation: "cinematicHeroLineIn 0.85s cubic-bezier(0.16,1,0.3,1) 0.14s both",
+            animation: "boCinematicLineIn 0.85s cubic-bezier(0.16,1,0.3,1) 0.18s both",
           }}
         >
-          Films Worth Your Evening.
+          {subline}
         </p>
 
-        {/* Now-featuring caption */}
+        {/* "Now leading" glass strip — surfaces the #1 film's identity +
+            gross + theaters in clean type. No gold-gradient text smear:
+            crisp italic Playfair title + crisp solid-gold mono numbers. */}
         {entry && !loading && (
           <Link
             href={buildHref(entry)}
+            className="bo-cin-pill"
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 14,
+              gap: 16,
+              flexWrap: "wrap",
               marginTop: 22,
-              padding: "10px 20px",
+              padding: "12px 22px",
               borderRadius: 999,
               background: "rgba(8,6,2,0.65)",
               border: "1px solid rgba(255,215,0,0.32)",
@@ -211,7 +281,7 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
               WebkitBackdropFilter: "blur(12px) saturate(1.1)",
               textDecoration: "none",
               color: "#fff",
-              animation: "cinematicHeroLineIn 0.85s cubic-bezier(0.16,1,0.3,1) 0.32s both",
+              animation: "boCinematicLineIn 0.85s cubic-bezier(0.16,1,0.3,1) 0.34s both",
               transition: "border-color 0.25s ease, background 0.25s ease",
             }}
             onMouseEnter={(e) => {
@@ -223,7 +293,6 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
               e.currentTarget.style.background = "rgba(8,6,2,0.65)";
             }}
           >
-            <Play size={14} fill="#FFD700" color="#FFD700" aria-hidden="true" />
             <span
               style={{
                 fontFamily: "'JetBrains Mono', monospace",
@@ -234,20 +303,52 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
                 fontWeight: 600,
               }}
             >
-              Now featuring
+              #1
             </span>
             <span
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontStyle: "italic",
-                fontSize: 18,
+                fontSize: 19,
                 fontWeight: 700,
                 color: "#fff",
                 letterSpacing: -0.2,
+                maxWidth: "min(56vw, 460px)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {entry.title}
             </span>
+            <span style={{ color: "rgba(255,255,255,0.32)", fontFamily: "'Syne', sans-serif" }}>·</span>
+            <span
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontWeight: 700,
+                fontSize: 19,
+                color: "#FFD700",
+                letterSpacing: -0.2,
+              }}
+            >
+              {formatExactDollars(grossAnimated)}
+            </span>
+            {entry.theaters != null && (
+              <>
+                <span style={{ color: "rgba(255,255,255,0.32)", fontFamily: "'Syne', sans-serif" }}>·</span>
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    letterSpacing: 0.8,
+                    color: "rgba(255,255,255,0.72)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatNumber(entry.theaters)} theaters
+                </span>
+              </>
+            )}
             {score && (
               <>
                 <span style={{ color: "rgba(255,255,255,0.32)", fontFamily: "'Syne', sans-serif" }}>·</span>
@@ -255,7 +356,7 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
                   style={{
                     fontFamily: "'Playfair Display', serif",
                     fontWeight: 700,
-                    fontSize: 18,
+                    fontSize: 16,
                     color: "#FFD700",
                     letterSpacing: -0.2,
                   }}
@@ -280,25 +381,20 @@ export default function CinematicHero({ entry, loading, favorited, onToggleFavor
       </div>
 
       <style jsx global>{`
-        @keyframes cinematicHeroLineIn {
+        @keyframes boCinematicLineIn {
           from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes cinematicBackdropFade {
+        @keyframes boCinematicBackdropFade {
           from { opacity: 0; transform: scale(1.10); }
           to   { opacity: 1; transform: scale(1.05); }
         }
-        @keyframes disCardIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes disSpinReel {
-          from { transform: translateY(0); }
-          to   { transform: var(--reel-final); }
-        }
-        @keyframes disResultIn {
-          from { opacity: 0; transform: scale(0.92); filter: drop-shadow(0 0 0 rgba(255,215,0,0)); }
-          to   { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 22px rgba(255,215,0,0.45)); }
+        @media (max-width: 600px) {
+          .bo-cin-pill {
+            border-radius: 18px !important;
+            padding: 14px 18px !important;
+            gap: 10px !important;
+          }
         }
       `}</style>
     </header>
