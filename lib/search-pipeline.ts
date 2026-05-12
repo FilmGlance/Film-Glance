@@ -26,6 +26,7 @@ import {
   formatCentsAsDollarString,
   formatDollarsAsDollarString,
 } from "@/lib/bom-augment";
+import { notifyIndexNow, movieUrl } from "@/lib/indexnow";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -487,4 +488,15 @@ export async function writeCacheEntries(
   );
 
   await Promise.all(writes);
+
+  // IndexNow notification — fire-and-forget, no throw, gated to VERCEL_ENV=production.
+  // Skip on SWR refresh: the URL itself hasn't changed, only the row's freshness,
+  // and IndexNow would dedup-with-quota-waste. CLI seed-script writes naturally
+  // skip because VERCEL_ENV is unset off-Vercel.
+  if (!source.includes("swr-refresh")) {
+    const canonicalTitle = (officialTitle || resolvedTitle || (typeof mv?.title === "string" ? mv.title : null))?.trim();
+    if (canonicalTitle) {
+      await notifyIndexNow(movieUrl(canonicalTitle));
+    }
+  }
 }

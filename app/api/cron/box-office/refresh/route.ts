@@ -45,6 +45,7 @@ import {
   markCronFailuresResolved,
 } from "@/lib/alert";
 import { requireCronSecret } from "@/lib/auth-admin";
+import { notifyIndexNow } from "@/lib/indexnow";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -228,6 +229,11 @@ export async function GET(req: NextRequest) {
     // Score backfill — fire searches for titles missing from movie_cache.
     // Runs as fire-and-forget via waitUntil so the cron's response is fast.
     await triggerScoreBackfill(seenTitles);
+
+    // IndexNow ping — the /boxoffice page reflects new data after this run.
+    // Individual film URLs are pinged inside writeCacheEntries during the
+    // backfill triggered above. Fire-and-forget; failure does not fail cron.
+    await notifyIndexNow("https://www.filmglance.com/boxoffice");
 
     console.log(`[${JOB}] ✓`, summary);
     return NextResponse.json({ ok: true, summary });
