@@ -11,9 +11,11 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
 import {
   enrichWithTMDB,
+  enrichByTmdbId,
   fetchComingSoonDetails,
   fetchTMDBBoxOffice,
   getMovieReleaseInfo,
+  getMovieReleaseInfoById,
 } from "@/lib/tmdb";
 import {
   fetchVerifiedRatings,
@@ -125,7 +127,8 @@ export async function runFullPipeline(
     releaseDate: string | null;
     overview: string;
     posterPath: string | null;
-  } | null
+  } | null,
+  tmdbIdHint?: number | null
 ): Promise<any> {
   const start = Date.now();
 
@@ -135,9 +138,18 @@ export async function runFullPipeline(
   // that meant box-office augmentation (which needs `releaseInfo.tmdbId`)
   // would silently skip. Fetching here ensures augmentation fires for
   // every code path: fresh searches, SWR refreshes, BOM cron upserts.
+  //
+  // v6.7.0 D5 — when the caller knows the cached row's tmdb_id (the SWR
+  // refresh path post-migration 021 backfill), short-circuit the title
+  // search and look up by id directly. Two wins: (1) saves one TMDB
+  // search round-trip; (2) pins the refresh to the same movie — title
+  // search can drift to a different film if TMDB's popularity ranking
+  // shifts (e.g. "michael" → 1996 Travolta vs 2026 Fuqua biopic).
   let releaseInfo = releaseInfoArg;
   if (!releaseInfo) {
-    const fetched = await getMovieReleaseInfo(queryForClaude, yearHint).catch(() => null);
+    const fetched = tmdbIdHint
+      ? await getMovieReleaseInfoById(tmdbIdHint).catch(() => null)
+      : await getMovieReleaseInfo(queryForClaude, yearHint).catch(() => null);
     if (fetched) {
       releaseInfo = {
         tmdbId: fetched.tmdbId,
@@ -198,31 +210,42 @@ export async function runFullPipeline(
   }
   if (mv.error === "not_a_movie" || !mv.title || !mv.sources || mv.sources.length === 0 || claudeYearMismatch) {
     if (releaseInfo) {
-      const details = await fetchComingSoonDetails(releaseInfo.tmdbId).catch(() => null);
+      // v6.7.0 — parallel: comingSoon details (genre/runtime/tagline/overview)
+      // + ID-keyed enrichment (poster/backdrop/cast/streaming/recs/trailer/
+      // videos/popularity). The latter is the killer fix: title-search-based
+      // enrichWithTMDB misses for niche/ambiguous films, leaving ~22% of
+      // Phase-C cache rows as bare fallbacks. enrichByTmdbId bypasses
+      // title-search and uses the known tmdb_id directly.
+      const [details, byId] = await Promise.all([
+        fetchComingSoonDetails(releaseInfo.tmdbId).catch(() => null),
+        enrichByTmdbId(releaseInfo.tmdbId, releaseInfo.officialTitle, yearHint).catch(() => null),
+      ]);
       const safeVerified = verified || { sources: new Map(), allUrls: new Map() };
       const fallbackSources = applyVerifiedRatings([], safeVerified as any);
-      const posterPath = tmdb?.poster_path || releaseInfo.posterPath;
+      const posterPath = byId?.poster_path || tmdb?.poster_path || releaseInfo.posterPath;
       const fallbackMv: any = {
         title: releaseInfo.officialTitle,
         year: releaseInfo.releaseDate ? parseInt(releaseInfo.releaseDate.substring(0, 4)) : yearHint,
         genre: details?.genres || "",
-        director: details?.director || null,
+        director: byId?.director || details?.director || null,
         runtime: details?.runtime || null,
         tagline: details?.tagline || null,
         description: details?.overview || releaseInfo.overview || "",
         sources: fallbackSources,
         no_scores: fallbackSources.length === 0,
-        cast: tmdb?.cast?.map((tc: any) => ({
+        cast: (byId?.cast?.length ? byId.cast : (tmdb?.cast || [])).map((tc: any) => ({
           name: tc.name,
           character: tc.character,
           profile_path: tc.profile_path,
-        })) || [],
-        streaming: (tmdb as any)?.streaming || [],
-        recommendations: (tmdb as any)?.recommendations || [],
-        video_reviews: (tmdb as any)?.video_reviews || [],
-        trailer_key: (tmdb as any)?.trailer_key || null,
+        })),
+        streaming: byId?.streaming?.length ? byId.streaming : ((tmdb as any)?.streaming || []),
+        recommendations: byId?.recommendations?.length ? byId.recommendations : ((tmdb as any)?.recommendations || []),
+        video_reviews: byId?.video_reviews?.length ? byId.video_reviews : ((tmdb as any)?.video_reviews || []),
+        trailer_key: byId?.trailer_key || (tmdb as any)?.trailer_key || null,
         poster_path: posterPath || null,
         poster: posterPath ? `https://image.tmdb.org/t/p/w500${posterPath}` : null,
+        backdrop_path: byId?.backdrop_path || null,
+        popularity: byId?.popularity ?? null,
       };
       console.log(`[fallback] Claude couldn't process "${queryForClaude}" — built TMDB+verified response for "${fallbackMv.title}" (${fallbackMv.year}) with ${fallbackSources.length} verified sources`);
 
@@ -276,6 +299,26 @@ export async function runFullPipeline(
 
   if (verified) {
     mv.sources = applyVerifiedRatings(mv.sources, verified);
+  }
+
+  // v6.7.0 — populate backdrop_path + popularity on the success path too.
+  // enrichWithTMDB doesn't return these (it never fetched /movie/{id} main
+  // detail) but the /discover cinematic hero needs backdrop, and the
+  // Hidden Gems filter needs popularity. One extra /movie/{id} round-trip
+  // when releaseInfo.tmdbId is known. ~200-400ms; one-time cost per cache row.
+  const tmdbIdForFields = releaseInfo?.tmdbId || mv.tmdb_id;
+  if (tmdbIdForFields && (mv.backdrop_path == null || mv.popularity == null)) {
+    try {
+      const detailRes = await fetch(
+        `https://api.themoviedb.org/3/movie/${tmdbIdForFields}?api_key=${process.env.TMDB_API_KEY}&language=en-US`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (detailRes.ok) {
+        const d = (await detailRes.json()) as { backdrop_path?: string | null; popularity?: number };
+        if (d.backdrop_path && mv.backdrop_path == null) mv.backdrop_path = d.backdrop_path;
+        if (typeof d.popularity === "number" && mv.popularity == null) mv.popularity = d.popularity;
+      }
+    } catch { /* non-fatal */ }
   }
 
   // v5.13.4 — apply box-office augmentation in the success path. The same

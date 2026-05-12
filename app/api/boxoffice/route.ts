@@ -1,7 +1,7 @@
 // app/api/boxoffice/route.ts
 //
 // Read endpoint for the /boxoffice page. Reads from box_office_metrics +
-// joins fg_score from movie_cache.data->'score'->>'ten' for each Top-10 entry.
+// joins fg_score from movie_cache.data->'score'->>'ten' for each cached entry.
 //
 // Query params:
 //   period   weekly | monthly | seasonal | yearly  (default 'weekly')
@@ -9,6 +9,9 @@
 //            international currently has no data — returns empty list)
 //   date     YYYY-MM-DD — period_start to display. Default: most recent
 //            available period_start for (period, region).
+//   limit    1..100 (default 100) — how many ranks to return. v6.7.0 D1
+//            lifted the prior hard-cap of 10 after the BOM-deep-rescrape
+//            backfilled every period at topN=100.
 //
 // Response:
 //   {
@@ -69,6 +72,13 @@ export async function GET(req: NextRequest) {
   const period = (searchParams.get("period") || "weekly").toLowerCase();
   const region = (searchParams.get("region") || "domestic").toLowerCase();
   const date = searchParams.get("date");
+
+  // v6.7.0 D1 — caller-driven row count. Default 100 to surface the full
+  // BOM-deep cache; min 1; hard-cap 100 to keep response size bounded.
+  const limitRaw = parseInt(searchParams.get("limit") || "100", 10);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.max(1, Math.min(100, limitRaw))
+    : 100;
 
   if (!VALID_PERIODS.includes(period as PeriodType)) {
     return NextResponse.json(
@@ -141,12 +151,15 @@ export async function GET(req: NextRequest) {
   let available_yearly: { period_start: string; period_label: string }[] = [];
   let available_monthly: { period_start: string; period_label: string }[] = [];
   let available_weekly: { period_start: string; period_label: string }[] = [];
+  let available_seasonal: { period_start: string; period_label: string }[] = [];
   try {
-    [available_yearly, available_monthly, available_weekly] = await Promise.all([
-      fetchAvail("yearly"),
-      fetchAvail("monthly"),
-      fetchAvail("weekly"),
-    ]);
+    [available_yearly, available_monthly, available_weekly, available_seasonal] =
+      await Promise.all([
+        fetchAvail("yearly"),
+        fetchAvail("monthly"),
+        fetchAvail("weekly"),
+        fetchAvail("seasonal"),
+      ]);
   } catch (err) {
     console.error("[boxoffice-read] available periods query failed:", err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -160,7 +173,9 @@ export async function GET(req: NextRequest) {
         ? available_monthly
         : period === "weekly"
           ? available_weekly
-          : [];
+          : period === "seasonal"
+            ? available_seasonal
+            : [];
 
   if (available_periods.length === 0) {
     return NextResponse.json({
@@ -176,6 +191,7 @@ export async function GET(req: NextRequest) {
       available_yearly,
       available_monthly,
       available_weekly,
+      available_seasonal,
       entries: [],
     });
   }
@@ -186,7 +202,11 @@ export async function GET(req: NextRequest) {
       ? date
       : available_periods[0].period_start;
 
-  // 3. Fetch the Top 10 rows for that exact period
+  // 3. Fetch the Top N rows for that exact period. v6.7.0 D1 — `limit` is
+  // caller-driven (default 100). Pre-D1 this was hard-capped at 10 because
+  // the BOM cache only stored topN=10; after the bom-deep-rescrape (May 9)
+  // every period_start in box_office_metrics holds up to 100 ranks, so the
+  // UI can now surface them.
   const { data: rows, error: rowsErr } = await supabaseAdmin
     .from("box_office_metrics")
     .select(
@@ -196,7 +216,7 @@ export async function GET(req: NextRequest) {
     .eq("region", region)
     .eq("period_start", targetPeriodStart)
     .order("rank", { ascending: true })
-    .limit(10);
+    .limit(limit);
 
   if (rowsErr) {
     console.error("[boxoffice-read] rows query failed:", rowsErr);
@@ -218,6 +238,7 @@ export async function GET(req: NextRequest) {
       available_yearly,
       available_monthly,
       available_weekly,
+      available_seasonal,
       entries: [],
     });
   }
@@ -291,6 +312,7 @@ export async function GET(req: NextRequest) {
     available_yearly,
     available_monthly,
     available_weekly,
+    available_seasonal,
     entries,
   });
 }

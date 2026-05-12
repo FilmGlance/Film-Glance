@@ -613,13 +613,14 @@ function platformSearchUrl(providerName: string, movieTitle: string): string {
 async function fetchWatchProviders(
   movieId: number,
   movieTitle: string,
-  region: string = "CA"
+  region: string = "CA",
+  timeoutMs: number = 5000
 ): Promise<StreamingOption[]> {
   if (!TMDB_KEY) return [];
   try {
     const res = await fetch(
       `${TMDB_BASE}/movie/${movieId}/watch/providers?api_key=${TMDB_KEY}`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(timeoutMs) }
     );
     if (!res.ok) return [];
 
@@ -673,6 +674,36 @@ async function fetchWatchProviders(
     return streaming;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Public, latency-bounded JustWatch shim for the search route cache-hit
+ * path. Pulls fresh streaming availability from TMDB's `/movie/{id}/watch/
+ * providers` (the same endpoint JustWatch licenses to TMDB) and returns
+ * `StreamingOption[]` in the exact shape cached entries store.
+ *
+ * v6.7.0 D6: cached `streaming` arrays go stale fast (films rotate between
+ * platforms monthly). Cache hits without this shim could surface "On Hulu"
+ * pills for a movie that moved to Max yesterday. The SWR refresh path
+ * already updates streaming on its next pass, but that's a background
+ * refresh — by the time it runs, the user has already seen the stale
+ * answer. This shim fires inline on the cache-hit path with a tight
+ * deadline (default 1200ms): if TMDB responds in time, the response gets
+ * fresh streaming; if not, we fall back to the cached value. Fail-soft.
+ */
+export async function freshenWatchProviders(
+  tmdbId: number,
+  title: string,
+  region: string = "CA",
+  deadlineMs: number = 1200
+): Promise<StreamingOption[] | null> {
+  if (!TMDB_KEY || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
+  try {
+    const streaming = await fetchWatchProviders(tmdbId, title, region, deadlineMs);
+    return streaming.length > 0 ? streaming : null;
+  } catch {
+    return null;
   }
 }
 
@@ -1070,6 +1101,54 @@ export async function getMovieReleaseInfo(
 }
 
 /**
+ * Same shape as getMovieReleaseInfo, but keyed on a known TMDB id rather
+ * than a title search. Used by the SWR background-refresh path in
+ * app/api/search/route.ts: cached rows that already carry a `tmdb_id`
+ * shouldn't re-resolve via title search (slow + risks drifting to a
+ * different film if TMDB's popularity-ranked search shifts). Direct
+ * `/movie/{id}` is one round-trip and pins the refresh to the same movie.
+ *
+ * v6.7.0 D5.
+ */
+export async function getMovieReleaseInfoById(
+  tmdbId: number
+): Promise<{
+  isReleased: boolean;
+  releaseDate: string | null;
+  tmdbId: number;
+  officialTitle: string;
+  overview: string;
+  posterPath: string | null;
+} | null> {
+  if (!TMDB_KEY || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
+  try {
+    const res = await fetch(
+      `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_KEY}&language=en-US`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    const movie = (await res.json()) as any;
+    if (!movie?.id) return null;
+
+    const releaseDate = movie.release_date || null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isReleased = releaseDate ? new Date(releaseDate) <= today : true;
+
+    return {
+      isReleased,
+      releaseDate,
+      tmdbId: movie.id,
+      officialTitle: movie.title || "",
+      overview: movie.overview || "",
+      posterPath: movie.poster_path || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch detailed movie info from TMDB for Coming Soon display.
  * Gets genre, runtime, tagline, overview, and director — data that
  * normally comes from Claude but is available from TMDB for unreleased films.
@@ -1127,6 +1206,142 @@ export async function fetchComingSoonDetails(movieId: number): Promise<{
 // poster_path, backdrop_path, tmdb_id, imdb_id. Does not fetch credits,
 // trailers, recommendations, or video reviews (the existing `enrichWithTMDB`
 // is too heavy for cron-time enrichment of 10 films per period).
+
+// ─── ID-keyed enrichment (skips title-search) ────────────────────────────
+//
+// Same shape as enrichWithTMDB() but takes a known tmdb_id and bypasses
+// the title-search entirely. This is the killer fix for niche / ambiguous-
+// titled films where TMDB title-search misses (the films that hit the
+// "no title from pipeline" or "fallback rebuilt without TMDB enrichment"
+// paths in runFullPipeline). Also returns backdrop_path + popularity +
+// director — fields enrichWithTMDB does NOT return today (and that the
+// /discover cinematic hero + Hidden Gems filter need).
+//
+// Single /movie/{id} call with append_to_response=credits,images,videos,
+// recommendations,watch/providers — saves ~5 round-trips vs the parallel
+// per-endpoint pattern in enrichWithTMDB. Plus a parallel RapidAPI call
+// for video_reviews. Net: ~2 round-trips total per film.
+export async function enrichByTmdbId(
+  tmdbId: number,
+  title: string,
+  year?: number,
+  region: string = "CA"
+): Promise<TMDBEnrichment & { backdrop_path: string | null; popularity: number | null; director: string | null }> {
+  const blank = {
+    poster_path: null,
+    cast: [],
+    streaming: [],
+    trailer_key: null,
+    recommendations: [],
+    video_reviews: [],
+    backdrop_path: null,
+    popularity: null,
+    director: null,
+  };
+  if (!TMDB_KEY) return blank;
+
+  try {
+    const detailPromise = fetch(
+      `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_KEY}&append_to_response=credits,images,videos,recommendations,watch/providers&include_image_language=en,null&language=en-US`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    const videoReviewsPromise = fetchVideoReviews(title, year, 3);
+
+    const [detailRes, videoReviews] = await Promise.all([
+      detailPromise,
+      videoReviewsPromise,
+    ]);
+
+    if (!detailRes.ok) return blank;
+    const data = (await detailRes.json()) as any;
+
+    // Best English poster — same ranking logic as fetchBestEnglishPoster
+    const posters: Array<{ file_path: string; iso_639_1: string | null; vote_average: number }> =
+      data.images?.posters || [];
+    let bestPoster: string | null = null;
+    if (posters.length > 0) {
+      const sorted = [...posters].sort((a, b) => {
+        const aRank = a.iso_639_1 === "en" ? 2 : a.iso_639_1 == null ? 1 : 0;
+        const bRank = b.iso_639_1 === "en" ? 2 : b.iso_639_1 == null ? 1 : 0;
+        if (aRank !== bRank) return bRank - aRank;
+        return (b.vote_average ?? 0) - (a.vote_average ?? 0);
+      });
+      bestPoster = sorted[0]?.file_path ?? null;
+    }
+
+    // Cast (top 20, mirrors fetchCredits maxCast)
+    const cast = ((data.credits?.cast || []) as any[]).slice(0, 20).map((c) => ({
+      name: c.name,
+      character: c.character || "",
+      profile_path: c.profile_path ?? null,
+    }));
+
+    // Director
+    const director =
+      ((data.credits?.crew || []) as any[]).find((c) => c.job === "Director")?.name ?? null;
+
+    // Trailer — prefer official YouTube, then any YouTube trailer, then teaser
+    const videos = (data.videos?.results || []) as any[];
+    const trailer =
+      videos.find((v) => v.site === "YouTube" && v.type === "Trailer" && v.official === true) ||
+      videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ||
+      videos.find((v) => v.site === "YouTube" && v.type === "Teaser");
+    const trailer_key: string | null = trailer?.key || null;
+
+    // Recommendations (top 3, mirrors fetchRecommendations)
+    const recommendations = ((data.recommendations?.results || []) as any[])
+      .slice(0, 3)
+      .map((r) => ({
+        title: r.title,
+        year: r.release_date ? parseInt(r.release_date.substring(0, 4), 10) : 0,
+        poster_path: r.poster_path ?? null,
+        vote_average: r.vote_average || 0,
+      }));
+
+    // Watch providers — region preferred, US fallback
+    const providers =
+      data["watch/providers"]?.results?.[region] ||
+      data["watch/providers"]?.results?.["US"];
+    const streaming: StreamingOption[] = [];
+    if (providers) {
+      const seen = new Set<string>();
+      const tiers: Array<{ key: "flatrate" | "rent" | "buy"; type: "stream" | "rent" | "buy"; max?: number }> = [
+        { key: "flatrate", type: "stream" },
+        { key: "rent", type: "rent", max: 3 },
+        { key: "buy", type: "buy", max: 2 },
+      ];
+      for (const tier of tiers) {
+        const list = providers[tier.key];
+        if (!Array.isArray(list)) continue;
+        const sliced = tier.max ? list.slice(0, tier.max) : list;
+        for (const p of sliced) {
+          if (seen.has(p.provider_name)) continue;
+          seen.add(p.provider_name);
+          streaming.push({
+            platform: p.provider_name,
+            url: platformSearchUrl(p.provider_name, title),
+            type: tier.type,
+            logo_path: p.logo_path ?? null,
+          });
+        }
+      }
+    }
+
+    return {
+      poster_path: bestPoster ?? data.poster_path ?? null,
+      backdrop_path: data.backdrop_path ?? null,
+      popularity: typeof data.popularity === "number" ? data.popularity : null,
+      cast,
+      streaming,
+      trailer_key,
+      recommendations,
+      video_reviews: videoReviews,
+      director,
+    };
+  } catch {
+    return blank;
+  }
+}
 
 export async function enrichBoxOfficeWithTMDB(
   title: string,

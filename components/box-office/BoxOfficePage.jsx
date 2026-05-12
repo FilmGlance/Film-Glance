@@ -5,12 +5,20 @@
 // v6.6.0 — image-forward redesign. CinematicBoxOfficeHero replaces both
 // PageHero (text-only) and the horizontal #1 PosterCard (featured variant).
 // FilterBar wrapped in a "Browse the Chart" section pill for context. Grid
-// renders #2-#10 with a gross-share bar scaled to #1's gross.
+// renders #2-#N with a gross-share bar scaled to #1's gross.
 //
-// Filter logic (unchanged from v5.12.0 round 9):
-//   • Year only       → yearly Top 10 (period_type=yearly)
-//   • Year + Month    → monthly Top 10 (period_type=monthly)
-//   • Year + Month + Week → weekly Top 10 (period_type=weekly)
+// Filter logic:
+//   • Year only             → yearly Top N (period_type=yearly)
+//   • Year + Season         → seasonal Top N (period_type=seasonal)   ← v6.7.0
+//   • Year + Month          → monthly Top N (period_type=monthly)
+//   • Year + Month + Week   → weekly Top N (period_type=weekly)
+//
+// Season and Month are mutually exclusive — choosing one clears the other
+// (and clears Week below). Year is always required.
+//
+// v6.7.0 D1: lifted the prior `Top 10` cap. Cache now holds up to 100 ranks
+// per period after the bom-deep-rescrape, so the grid renders every rank
+// returned by the API (default `?limit=100`).
 //
 // Default state on first load (no URL params): fetch weekly latest, derive
 // year/month/week from the response's period_start, push to URL. From there
@@ -33,13 +41,17 @@ import { useFavorites } from "@/lib/use-favorites";
 
 const VALID_REGIONS = ["domestic", "international"];
 
+const VALID_SEASONS = ["winter", "spring", "summer", "fall"];
+
 function parseInitialFilters(params) {
   const yearParam = params?.get("year") || null;
+  const seasonParam = (params?.get("season") || "").toLowerCase();
   const monthParam = params?.get("month");
   const weekParam = params?.get("week") || null;
   const regionParam = (params?.get("region") || "domestic").toLowerCase();
   return {
     year: yearParam,
+    season: VALID_SEASONS.includes(seasonParam) ? seasonParam : null,
     month: monthParam ? parseInt(monthParam, 10) || null : null,
     week: weekParam,
     region: VALID_REGIONS.includes(regionParam) ? regionParam : "domestic",
@@ -51,6 +63,7 @@ export default function BoxOfficePage() {
   const params = useSearchParams();
 
   const [year, setYear] = useState(() => parseInitialFilters(params).year);
+  const [season, setSeason] = useState(() => parseInitialFilters(params).season);
   const [month, setMonth] = useState(() => parseInitialFilters(params).month);
   const [week, setWeek] = useState(() => parseInitialFilters(params).week);
   const [region, setRegion] = useState(() => parseInitialFilters(params).region);
@@ -69,14 +82,20 @@ export default function BoxOfficePage() {
     if (!year) return { period: "weekly" }; // initial fetch — latest weekly
     if (week) return { period: "weekly", date: week };
     if (month) return { period: "monthly", date: `${year}-${String(month).padStart(2, "0")}-01` };
+    if (season) {
+      // BOM season bounds — keep in lockstep with lib/bom-scraper.ts
+      const SEASON_MONTH = { winter: "01", spring: "04", summer: "07", fall: "10" };
+      return { period: "seasonal", date: `${year}-${SEASON_MONTH[season]}-01` };
+    }
     return { period: "yearly", date: `${year}-01-01` };
-  }, [year, month, week]);
+  }, [year, season, month, week]);
 
   // Push current filter state to URL (replaces, no scroll, doesn't add history)
   const syncURL = useCallback(
     (next) => {
       const qs = new URLSearchParams();
       if (next.year) qs.set("year", next.year);
+      if (next.season) qs.set("season", next.season);
       if (next.month != null) qs.set("month", String(next.month));
       if (next.week) qs.set("week", next.week);
       if (next.region && next.region !== "domestic") qs.set("region", next.region);
@@ -102,16 +121,18 @@ export default function BoxOfficePage() {
         if (cancelled) return;
         setData(d);
         // First-load default-derivation: if the URL had no year, take it
-        // from the response's period_start and seed the dropdowns.
+        // from the response's period_start and seed the dropdowns to a
+        // weekly view (the initial fetch is the latest weekly chart).
         if (!year && d?.period_start) {
           const ps = d.period_start;
           const y = ps.slice(0, 4);
           const m = parseInt(ps.slice(5, 7), 10) || null;
           const w = ps;
           setYear(y);
+          setSeason(null);
           setMonth(m);
           setWeek(w);
-          syncURL({ year: y, month: m, week: w, region });
+          syncURL({ year: y, season: null, month: m, week: w, region });
         }
       })
       .catch((e) => {
@@ -126,34 +147,53 @@ export default function BoxOfficePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiQuery.period, apiQuery.date, region]);
 
-  // Handle filter changes from FilterBar
+  // Handle filter changes from FilterBar. Season and Month are mutually
+  // exclusive — selecting one clears the other (and Week below it).
   const onFilterChange = useCallback(
     (patch) => {
       let nextYear = year;
+      let nextSeason = season;
       let nextMonth = month;
       let nextWeek = week;
       let nextRegion = region;
       if ("year" in patch) {
         nextYear = patch.year;
+        nextSeason = null;
+        nextMonth = null;
+        nextWeek = null;
+      }
+      if ("season" in patch) {
+        nextSeason = patch.season;
         nextMonth = null;
         nextWeek = null;
       }
       if ("month" in patch) {
+        nextSeason = null;
         nextMonth = patch.month;
         nextWeek = null;
       }
       if ("week" in patch) nextWeek = patch.week;
       if ("region" in patch) nextRegion = patch.region;
       setYear(nextYear);
+      setSeason(nextSeason);
       setMonth(nextMonth);
       setWeek(nextWeek);
       setRegion(nextRegion);
-      syncURL({ year: nextYear, month: nextMonth, week: nextWeek, region: nextRegion });
+      syncURL({
+        year: nextYear,
+        season: nextSeason,
+        month: nextMonth,
+        week: nextWeek,
+        region: nextRegion,
+      });
     },
-    [year, month, week, region, syncURL],
+    [year, season, month, week, region, syncURL],
   );
 
-  const allEntries = (data?.entries || []).slice(0, 10);
+  // v6.7.0 D1 — render every entry the API returns (up to 100). #1 fills
+  // the cinematic hero; #2..N flow into the grid below with the gross-share
+  // bar scaled to #1.
+  const allEntries = data?.entries || [];
   const heroEntry = allEntries[0] || null;
   const restEntries = allEntries.slice(1);
   const maxGross = heroEntry?.gross || null;
@@ -216,6 +256,7 @@ export default function BoxOfficePage() {
         periodType={data?.period_type || apiQuery.period}
         periodStart={data?.period_start || null}
         periodEnd={data?.period_end || null}
+        totalCount={allEntries.length}
         loading={loading}
         favorited={heroEntry ? isFavorited(heroEntry) : false}
         onToggleFavorite={handleHeartClick}
@@ -271,16 +312,18 @@ export default function BoxOfficePage() {
               letterSpacing: 0.2,
             }}
           >
-            Pick a year. Narrow to a month. Drill into a single week. The Top 10
-            updates instantly — every chart back to 1977.
+            Pick a year. Narrow to a season, month, or single week. The chart
+            updates instantly — every BOM ranking back to 1977, up to 100 deep.
           </p>
 
           <FilterBar
             year={year}
+            season={season}
             month={month}
             week={week}
             region={region}
             availableYearly={data?.available_yearly || []}
+            availableSeasonal={data?.available_seasonal || []}
             availableMonthly={data?.available_monthly || []}
             availableWeekly={data?.available_weekly || []}
             onChange={onFilterChange}
@@ -302,9 +345,10 @@ export default function BoxOfficePage() {
         )}
         {data && data.entries?.length > 0 && (
           <>
-            {/* "The Rest of the Top 10" anchor — small uppercase mono label
+            {/* "The Rest of the Top N" anchor — small uppercase mono label
                 so the chart-grid below has a clear identity (the cinematic
-                hero already announced #1; this names #2..#10). */}
+                hero already announced #1; this names #2..#N). The count is
+                dynamic now that v6.7.0 lifted the prior 10-row cap. */}
             {restEntries.length > 0 && (
               <div
                 style={{
@@ -326,7 +370,7 @@ export default function BoxOfficePage() {
                     fontWeight: 600,
                   }}
                 >
-                  The Rest of the Top 10
+                  The Rest of the Top {allEntries.length}
                 </div>
                 <div
                   style={{

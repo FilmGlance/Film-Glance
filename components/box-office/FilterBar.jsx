@@ -1,15 +1,16 @@
 "use client";
 
-// FilterBar — three independent dropdowns (Year / Month / Week) + Region.
+// FilterBar — four independent dropdowns (Year / Season / Month / Week) + Region.
 //
-// Logic per user spec:
-//   • Year only       → yearly Top 10 of that year
-//   • Year + Month    → monthly Top 10 of that month
-//   • Year + Month + Week → weekly Top 10 of that week
+// Logic:
+//   • Year only             → yearly Top N of that year
+//   • Year + Season         → seasonal Top N of that season  (v6.7.0)
+//   • Year + Month          → monthly Top N of that month
+//   • Year + Month + Week   → weekly Top N of that week
 //
-// Selecting "(Whole year)" in the Month dropdown clears month + week (drops to
-// yearly view). Selecting "(Whole month)" in the Week dropdown clears just
-// week (drops to monthly view). Year is always required.
+// Season and Month are mutually exclusive — picking a Season clears Month
+// (and Week), picking a Month clears Season. Selecting the "Whole year"
+// option in either drops back to yearly view. Year is always required.
 //
 // Default state on page load: latest week (= year + month + week all filled to
 // the most recent ingested values), giving the user the freshest weekly chart
@@ -22,6 +23,16 @@ import FilterDropdown from "./FilterDropdown";
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
+];
+
+// BOM season convention — keep in lockstep with lib/bom-scraper.ts
+// SEASON_BOUNDS. period_start month for each season is the floor of the
+// season's first month.
+const SEASON_DEFS = [
+  { value: "winter", label: "Winter (Jan–Mar)", month: "01" },
+  { value: "spring", label: "Spring (Apr–Jun)", month: "04" },
+  { value: "summer", label: "Summer (Jul–Sep)", month: "07" },
+  { value: "fall",   label: "Fall (Oct–Dec)",   month: "10" },
 ];
 
 const REGION_OPTIONS = [
@@ -41,13 +52,15 @@ function formatWeekRange(periodStart) {
 
 export default function FilterBar({
   year,
-  month, // 1-12 (number) or null
-  week, // ISO-week period_start string (YYYY-MM-DD) or null — uniquely identifies the week
+  season,            // "winter" | "spring" | "summer" | "fall" | null
+  month,             // 1-12 (number) or null
+  week,              // ISO-week period_start string (YYYY-MM-DD) or null
   region,
   availableYearly,    // [{ period_start, period_label }, ...]
+  availableSeasonal,  // ...
   availableMonthly,   // ...
   availableWeekly,    // ...
-  onChange,           // ({ year?, month?, week?, region? }) => void
+  onChange,           // ({ year?, season?, month?, week?, region? }) => void
 }) {
   // --- Build year options from available_yearly ---
   const yearOptions = useMemo(
@@ -58,6 +71,27 @@ export default function FilterBar({
       }),
     [availableYearly],
   );
+
+  // --- Build season options for the selected year ---
+  // Each option is { value: "winter"|"spring"|"summer"|"fall", label, disabled }.
+  // A season is enabled only if a row exists in `availableSeasonal` whose
+  // period_start matches `${year}-${month}-01`.
+  const seasonOptions = useMemo(() => {
+    if (!year) return [];
+    const startsWithData = new Set(
+      (availableSeasonal || [])
+        .filter((s) => s.period_start.slice(0, 4) === year)
+        .map((s) => s.period_start.slice(5, 7)),
+    );
+    return [
+      { value: null, label: "(Whole year — no season selected)", italic: true },
+      ...SEASON_DEFS.map((def) => ({
+        value: def.value,
+        label: def.label,
+        disabled: !startsWithData.has(def.month),
+      })),
+    ];
+  }, [year, availableSeasonal]);
 
   // --- Build month options for the selected year ---
   // Each option is { value: 1..12, label: "January", disabled: !hasData }
@@ -127,16 +161,26 @@ export default function FilterBar({
           label="Year"
           value={year}
           options={yearOptions}
-          onChange={(y) => onChange({ year: y, month: null, week: null })}
+          onChange={(y) => onChange({ year: y, season: null, month: null, week: null })}
           placeholder="Pick a year…"
           width={140}
+        />
+
+        <FilterDropdown
+          label="Season"
+          value={season}
+          options={seasonOptions}
+          onChange={(s) => onChange({ season: s, month: null, week: null })}
+          placeholder="(Whole year)"
+          disabled={!year}
+          width={210}
         />
 
         <FilterDropdown
           label="Month"
           value={month}
           options={monthOptions}
-          onChange={(m) => onChange({ month: m, week: null })}
+          onChange={(m) => onChange({ season: null, month: m, week: null })}
           placeholder="(Whole year)"
           disabled={!year}
           width={210}

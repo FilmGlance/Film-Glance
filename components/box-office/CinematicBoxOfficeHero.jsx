@@ -21,14 +21,19 @@ const TMDB_BACKDROP_W1280 = "https://image.tmdb.org/t/p/w1280";
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// Format the headline subline based on period_type + dates.
+// Format the headline subline based on period_type + dates + actual rank count.
 // v6.6.1: dropped the period chip — info was redundant with the subline.
+// v6.7.0 D1: dynamic count (was hard-coded "Top 10"); seasonal support.
 //
-//   weekly  Oct 6 — 12, 2025  → "The Top 10 of Oct 6 — 12, 2025."
-//   monthly Oct 2025          → "The Top 10 of October 2025."
-//   yearly  2025              → "The Top 10 of 2025."
-function formatPeriodSubline(periodType, periodStart, periodEnd) {
-  if (!periodStart) return "The Top 10.";
+//   weekly   Oct 6 — 12, 2025  → "The Top 100 of Oct 6 — 12, 2025."
+//   monthly  Oct 2025          → "The Top 100 of October 2025."
+//   seasonal Spring 2025       → "The Top 100 of Spring 2025."
+//   yearly   2025              → "The Top 100 of 2025."
+const SEASON_LABEL_BY_MONTH = { 0: "Winter", 3: "Spring", 6: "Summer", 9: "Fall" };
+
+function formatPeriodSubline(periodType, periodStart, periodEnd, count) {
+  const topN = count && count > 0 ? `Top ${count}` : "Top";
+  if (!periodStart) return `The ${topN}.`;
   const start = new Date(`${periodStart}T00:00:00Z`);
   const startMonthShort = MONTH_SHORT[start.getUTCMonth()];
   const startMonthLong = MONTH_LONG[start.getUTCMonth()];
@@ -36,10 +41,14 @@ function formatPeriodSubline(periodType, periodStart, periodEnd) {
   const startYear = start.getUTCFullYear();
 
   if (periodType === "yearly") {
-    return `The Top 10 of ${startYear}.`;
+    return `The ${topN} of ${startYear}.`;
+  }
+  if (periodType === "seasonal") {
+    const seasonLabel = SEASON_LABEL_BY_MONTH[start.getUTCMonth()] || startMonthLong;
+    return `The ${topN} of ${seasonLabel} ${startYear}.`;
   }
   if (periodType === "monthly") {
-    return `The Top 10 of ${startMonthLong} ${startYear}.`;
+    return `The ${topN} of ${startMonthLong} ${startYear}.`;
   }
   // weekly — render "Oct 6 — 12, 2025" if start/end share a month, else
   // "Sep 28 — Oct 4, 2025" if it crosses a boundary.
@@ -49,11 +58,11 @@ function formatPeriodSubline(periodType, periodStart, periodEnd) {
     const endDay = end.getUTCDate();
     const endYear = end.getUTCFullYear();
     if (start.getUTCMonth() === end.getUTCMonth() && startYear === endYear) {
-      return `The Top 10 of ${startMonthShort} ${startDay} — ${endDay}, ${startYear}.`;
+      return `The ${topN} of ${startMonthShort} ${startDay} — ${endDay}, ${startYear}.`;
     }
-    return `The Top 10 of ${startMonthShort} ${startDay} — ${endMonthShort} ${endDay}, ${endYear}.`;
+    return `The ${topN} of ${startMonthShort} ${startDay} — ${endMonthShort} ${endDay}, ${endYear}.`;
   }
-  return `The Top 10 of ${startMonthShort} ${startDay}, ${startYear}.`;
+  return `The ${topN} of ${startMonthShort} ${startDay}, ${startYear}.`;
 }
 
 function formatExactDollars(d) {
@@ -109,9 +118,10 @@ function HeartButton({ favorited, onToggle, ariaLabel }) {
 
 export default function CinematicBoxOfficeHero({
   entry,                  // the #1 film (or null while loading)
-  periodType,             // "weekly" | "monthly" | "yearly"
+  periodType,             // "weekly" | "monthly" | "seasonal" | "yearly"
   periodStart,            // YYYY-MM-DD
   periodEnd,              // YYYY-MM-DD
+  totalCount,             // actual number of ranks returned (drives "Top N" subline)
   loading,
   favorited,
   onToggleFavorite,
@@ -129,7 +139,7 @@ export default function CinematicBoxOfficeHero({
   const backdrop = entry?.backdrop_path ? `${TMDB_BACKDROP_W1280}${entry.backdrop_path}` : null;
   const score = entry?.fg_score != null ? Number(entry.fg_score).toFixed(1) : null;
   const buildHref = (e) => `/?q=${encodeURIComponent(e.title)}`;
-  const subline = formatPeriodSubline(periodType, periodStart, periodEnd);
+  const subline = formatPeriodSubline(periodType, periodStart, periodEnd, totalCount);
 
   return (
     <header
