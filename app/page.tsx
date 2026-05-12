@@ -27,7 +27,13 @@ import { supabaseAnon } from "@/lib/supabase-anon";
 import { sanitizeQuery } from "@/lib/sanitize";
 import { movieSchema, serializeJsonLd } from "@/lib/structured-data";
 
-export const revalidate = 600;
+// Reading `searchParams` makes this route dynamic by definition; declaring
+// it explicitly stops Next 16 from attempting a static prerender pass that
+// re-trips the same workStore invariant we worked around in v6.0.0 (see
+// `app/not-found.tsx` / `app/global-error.tsx` headers). Caching is set
+// by vercel.json's `headers` block — Vercel edge caches per full URL,
+// query string included, for 10 min.
+export const dynamic = "force-dynamic";
 
 const SITE_URL = "https://www.filmglance.com";
 

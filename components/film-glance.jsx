@@ -1,3 +1,10 @@
+"use client";
+
+// v6.7.0 GEO Move A: app/page.tsx was converted from a client wrapper to
+// a server component (so the homepage can server-render per-film metadata
+// + JSON-LD for `?q=` URLs). FilmGlance must now declare its own client
+// boundary — previously the parent's "use client" propagated down.
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
