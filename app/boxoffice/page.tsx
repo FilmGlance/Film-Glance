@@ -163,6 +163,30 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: PAGE_JSON_LD }}
       />
+      {/* v6.7.3 Tier-2 #10 — answer-first prose, server-rendered above
+          the client UI. Gives crawlers a definitional summary of the
+          page's data + sources in the initial HTML. */}
+      <section
+        aria-label="About Box Office"
+        style={{
+          maxWidth: 720,
+          margin: "0 auto",
+          padding: "20px 24px 0",
+          color: "rgba(255,255,255,0.78)",
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        <p style={{ margin: 0 }}>
+          Film Glance Box Office tracks the highest-grossing films at the US box office, refreshed
+          weekly from Box Office Mojo. View charts by week, month, season, or year — with historical
+          data back to 1977 and up to 100 ranks deep per period. Each entry combines BOM&apos;s
+          reported gross, theater count, and per-theater average with the film&apos;s aggregated
+          Film Glance Score (drawn from nine critic and audience sources) when available. The data
+          refreshes every Tuesday after BOM publishes the prior week&apos;s final numbers.
+        </p>
+      </section>
       <Suspense fallback={null}>
         <BoxOfficePage />
       </Suspense>

@@ -184,6 +184,32 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: PAGE_JSON_LD }}
       />
+      {/* v6.7.3 Tier-2 #10 — answer-first prose, server-rendered above
+          the client UI. CMU GEO paper (arxiv 2311.09735) measured ~40%
+          citation lift from definitional-opener prose with explicit-source
+          citations. Crawlers see this content in the initial HTML; users
+          see it briefly before the dynamic UI loads in. */}
+      <section
+        aria-label="About Discover"
+        style={{
+          maxWidth: 720,
+          margin: "0 auto",
+          padding: "20px 24px 0",
+          color: "rgba(255,255,255,0.78)",
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        <p style={{ margin: 0 }}>
+          Discover ranks the top 100 films by Film Glance Score — an aggregated rating drawn from
+          nine verified critic and audience sources including Rotten Tomatoes, IMDb, Metacritic,
+          Letterboxd, and TMDB. Browse by genre, decade, or release window (In Theaters / At Home),
+          or spin the Movie Reel Roulette for a random pick rated 8.0+. Every entry passes a
+          quality gate: a calculable Film Glance Score and at least five verified rating sources.
+          The list refreshes every 10 minutes from a cache of 25,000+ films.
+        </p>
+      </section>
       {/* DiscoverPage uses useSearchParams() which Next.js requires to
           live inside a Suspense boundary for static generation to work.
           Wrapping here is identical to the pre-Phase-3 page.tsx pattern.
