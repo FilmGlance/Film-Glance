@@ -107,7 +107,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  let movieUrls: MetadataRoute.Sitemap = [];
+  const movieUrls: MetadataRoute.Sitemap = [];
   try {
     const films = await fetchQualityFilms();
     // Dedup by URL — `movie_cache` upserts one row per `search_key` variant

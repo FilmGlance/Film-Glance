@@ -48,11 +48,18 @@ jobs:
         # user-scoped Supabase client (RLS handles auth, no service-role).
         # Re-introducing `supabaseAdmin` to any of them would now fail this
         # guard, which is exactly the protection we wanted.
+        #
+        # v6.7.2 added `app/sitemap.ts` to the file-level allowlist: the
+        # Next.js sitemap entry is server-rendered only (the SDK runs the
+        # exported function during build/revalidate and ships static XML);
+        # movie_cache has anon-blocking RLS, so the file legitimately needs
+        # the service-role client. Same security posture as /api/posters.
         run: |
           set -e
           MATCHES=$(grep -RIn "supabaseAdmin" app lib --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null \
             | grep -vE "^lib/" \
             | grep -vE "^app/api/(webhooks|cron|admin|seed|patch-video-reviews|search|suggest|enrich|auth|health|csp-report|boxoffice|posters)/" \
+            | grep -vE "^app/sitemap\.ts:" \
             || true)
           if [ -n "$MATCHES" ]; then
             echo "Unexpected supabaseAdmin imports outside the approved surface:"
