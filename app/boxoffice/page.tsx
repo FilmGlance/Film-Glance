@@ -1,23 +1,28 @@
 // app/boxoffice/page.tsx
 //
 // Page shell for /boxoffice. Renders the BoxOfficePage client component
-// which owns URL-state, data fetching, and composition. The Sticky header
+// which owns URL-state, data fetching, and composition. The sticky header
 // + base layout come from app/layout.tsx (shared with the rest of the site).
 //
 // Server-side: full metadata (title/description/OG/Twitter/canonical) +
-// CollectionPage + BreadcrumbList JSON-LD. The ItemList schema enumerating
-// the actual Top 10 films is added in Phase 3 once SSR fetching lands.
+// CollectionPage + BreadcrumbList + ItemList JSON-LD (one Movie schema
+// per Top-10 entry). The ItemList round-trips to /api/boxoffice which is
+// already edge-cached per v6.7.0 D7 (s-maxage=600 SWR=3600), so SSR
+// invocations almost always hit cache.
 
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import BoxOfficePage from "@/components/box-office/BoxOfficePage";
 import {
   collectionPageSchema,
   breadcrumbSchema,
+  movieSchema,
   serializeJsonLd,
 } from "@/lib/structured-data";
 
-const URL = "https://www.filmglance.com/boxoffice";
+const SITE_URL = "https://www.filmglance.com";
+const URL = `${SITE_URL}/boxoffice`;
 const TITLE = "Box Office — Highest-Grossing Films | Film Glance";
 const DESCRIPTION =
   "The highest-grossing films at the box office, refreshed weekly from Box Office Mojo. Filter by week, month, season, or year — historical charts back to 1977, up to 100 ranks deep.";
@@ -49,19 +54,109 @@ export const metadata: Metadata = {
   },
 };
 
-const PAGE_JSON_LD = serializeJsonLd([
-  collectionPageSchema({
-    url: URL,
-    name: "Box Office — Highest-Grossing Films",
-    description: DESCRIPTION,
-  }),
-  breadcrumbSchema([
-    { name: "Home", url: "https://www.filmglance.com/" },
-    { name: "Box Office", url: URL },
-  ]),
-]);
+interface BoxOfficeEntry {
+  rank: number;
+  search_key: string;
+  title: string;
+  year: number | null;
+  director: string | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  gross: number;
+  theaters: number | null;
+  pta: number | null;
+  fg_score: number | null;
+}
 
-export default function Page() {
+interface BoxOfficeResponse {
+  period_label?: string;
+  entries?: BoxOfficeEntry[];
+}
+
+// Server-fetch the default view (latest weekly, domestic, Top 10). Used only
+// to seed the ItemList JSON-LD; the client BoxOfficePage re-fetches on mount
+// + on filter change. The /api/boxoffice route is edge-cached so this almost
+// always hits cache rather than a function execution.
+async function fetchTop10(): Promise<BoxOfficeResponse | null> {
+  try {
+    const h = await headers();
+    const host = h.get("host") ?? "www.filmglance.com";
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    const url = `${proto}://${host}/api/boxoffice?period=weekly&region=domestic&limit=10`;
+    const res = await fetch(url, {
+      // Tie the SSR cache to the page's own `revalidate`; the API route's
+      // edge cache handles repeated hits anyway. AbortSignal keeps an
+      // upstream stall from holding the SSR render forever.
+      next: { revalidate: 600 },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      console.error(`[boxoffice-ssr] /api/boxoffice ${res.status}`);
+      return null;
+    }
+    return (await res.json()) as BoxOfficeResponse;
+  } catch (err) {
+    console.error("[boxoffice-ssr] fetch failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+export default async function Page() {
+  const top10 = await fetchTop10();
+  const entries = top10?.entries ?? [];
+  const periodLabel = top10?.period_label ?? "this week";
+
+  // Each ListItem embeds a full Movie schema, mirroring the /discover ItemList
+  // pattern. Per-item `url` points at the homepage's `?q=<title>` route — the
+  // canonical per-film surface Move A (v6.7.1) introduced.
+  const movieItems = entries.map((e, i) => {
+    const filmUrl = `${SITE_URL}/?q=${encodeURIComponent(e.title)}`;
+    return {
+      "@type": "ListItem",
+      position: e.rank ?? i + 1,
+      url: filmUrl,
+      item: movieSchema({
+        url: filmUrl,
+        title: e.title,
+        year: e.year,
+        releaseDate: null,
+        director: e.director,
+        genre: null,
+        description: null,
+        posterPath: e.poster_path,
+        runtime: null,
+        fgScore: e.fg_score,
+        // Sources aren't in the box-office payload; the /?q=<title> route
+        // emits the full Review[] tail.
+        sources: null,
+      }),
+    } as Record<string, unknown>;
+  });
+
+  const schemas: Record<string, unknown>[] = [
+    collectionPageSchema({
+      url: URL,
+      name: "Box Office — Highest-Grossing Films",
+      description: DESCRIPTION,
+    }),
+    breadcrumbSchema([
+      { name: "Home", url: `${SITE_URL}/` },
+      { name: "Box Office", url: URL },
+    ]),
+  ];
+  if (movieItems.length > 0) {
+    schemas.push({
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: `Top ${movieItems.length} Highest-Grossing Films — ${periodLabel}`,
+      description: DESCRIPTION,
+      numberOfItems: movieItems.length,
+      itemListOrder: "https://schema.org/ItemListOrderAscending",
+      itemListElement: movieItems,
+    });
+  }
+  const PAGE_JSON_LD = serializeJsonLd(schemas);
+
   return (
     <>
       <script

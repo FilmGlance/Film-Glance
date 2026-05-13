@@ -1,5 +1,74 @@
 # Film Glance — Conversation Summary
 
+## Session: May 12, 2026 (continued, post-v6.7.1 merge) — GEO Tier 1 push (v6.7.2): dynamic sitemap + IndexNow + /boxoffice ItemList + crawlable recommendations
+
+User merged PR #71 (v6.7.1 Move A + D7) at session start and asked for a "full complete review" of GEO + SEO optimization opportunities, with one constraint: no individual pages (no per-movie route segments — the Move A `/?q=<title>` single-route approach stays the model for per-film indexability). User clarified mid-session that the scope should be Tier 1 only and the target is "all search engines" not just Bing.
+
+### Research phase
+
+Two parallel agents ran in this turn:
+
+1. **Inventory agent** — audited every GEO/SEO surface in the repo: `app/robots.ts` (18 AI bots allowlisted), `app/sitemap.ts` (static-only, 4 URLs), `public/llms.txt`, `lib/structured-data.ts` (9 helpers), `app/layout.tsx` site-wide schemas, `app/page.tsx`/`/discover`/`/boxoffice` JSON-LD, internal-link patterns, IndexNow/Bing presence (zero), performance/CWV. Returned a 200-line shipped-vs-missing table with file:line references.
+2. **Best-practices research agent** — synthesized May-2026 GEO state-of-the-art: AI-engine citation patterns (Reddit ~40% citation share; Perplexity ~21.87 citations/response live-fetched; ChatGPT cites 87% via Bing's index); llms.txt has ~10% adoption + no measurable citation lift (John Mueller confirmed Google doesn't read it); Google killed the FAQ rich result 2026-05-07 but FAQPage schema is now MORE important for AI extraction; Reviews with `author` as Organization (with `@id` + `sameAs`) earn 16%→50%+ factual-accuracy bump in LLM citations; auto-bumping sitemap `lastmod` to today causes Google to discount the dates; IndexNow → Bing → ChatGPT Search is the single highest-ROI lever (22% of clicked Bing URLs in Feb 2026 came from IndexNow submissions). Sources cited inline.
+
+### Plan presented
+
+Three tiers offered (A: just-the-leaks ~1 day, B: full GEO pass 3-5 days, C: +CWV perf 6-8 days, D: +static authority pages 8-10 days). User picked **Option A** with the expanded "multi-engine" framing — explicitly cast the net beyond Bing to cover Google + Yandex + Seznam + Naver + AI engines via the IndexNow protocol + Google Search Console + Bing Webmaster Tools + Yandex Webmaster (optional). Deferred /about, /faq, /methodology — "might come later, not now."
+
+### What shipped this session
+
+| # | File | Change |
+|---|---|---|
+| 1 | `app/sitemap.ts` | Dynamic enumeration. Paginated `supabaseAdmin` query over `movie_cache` quality-gated by `idx_movie_cache_discover_v2` (`fg_score IS NOT NULL AND source_count >= 5 AND release_year BETWEEN 1888 AND 2100`). Title via JSON projection `title:data->>title`. Per-row `lastmod` from `cached_at`. Dedup loop. `revalidate = 3600`. Cap 45,000 URLs (single-sitemap headroom). Service-role client because `movie_cache` has RLS that blocks anon SELECT. |
+| 2 | `lib/indexnow.ts` (new) | IndexNow client. `notifyIndexNow(urls)` POSTs to `api.indexnow.org/indexnow`. Hardcoded key (not a secret — a public domain-ownership proof). Production-only via `VERCEL_ENV === "production"` guard. 5s `AbortSignal` timeout. Never throws. Logs 200/202 successes + 4xx/5xx failures. |
+| 3 | `public/dc00b483c0824908992644d46df2f737.txt` (new) | IndexNow key ownership file. Web-accessible at `/dc00b483c0824908992644d46df2f737.txt`. Contents = key value. UUID v4 generated via PowerShell `[guid]::NewGuid()`. |
+| 4 | `lib/search-pipeline.ts:writeCacheEntries()` | Added IndexNow ping post-write. Pings `/?q=<officialTitle \|\| resolvedTitle \|\| mv.title>` after the cache write completes. Skipped when `source.includes("swr-refresh")` to avoid quota waste on background refreshes. Off-Vercel scripts (VPS bulk-seed) naturally skip via the env guard. |
+| 5 | `app/api/cron/box-office/refresh/route.ts` | One `notifyIndexNow("/boxoffice")` ping at the cron's success-return path. Individual film pings happen inside the writeCacheEntries inside the score-backfill loop, so the page-level ping is just the `/boxoffice` aggregation. |
+| 6 | `app/boxoffice/page.tsx` | Finished the deferred v6.7.0-D-stage ItemList JSON-LD. Server-component HTTP-loops to `/api/boxoffice?period=weekly&region=domestic&limit=10` (8s timeout, edge-cached via D7), then emits ItemList with one `movieSchema()` per Top-10 entry. Uses `headers()` to derive the loopback hostname so preview deploys SSR correctly too. Fail-soft to CollectionPage + Breadcrumb if the API call errors. |
+| 7 | `components/film-glance.jsx` | "You Might Also Like" carousel: `<button onClick>` → `<a href="/?q=<encoded-title>">` with onClick enhancement. Plain left-clicks `preventDefault()` + run the existing client-side fast search; modifier clicks (Cmd/Ctrl/Shift/Alt + middle/right button) fall through to browser-native handling so right-click→open-in-new-tab and cmd-click work naturally. Style adjusted: `textDecoration: none, color: inherit, display: block` so the anchor renders visually identical to the prior button. |
+| 8 | `tech-specs.md` | §9: new v6.7.2 row above v6.7.1. §10: prior v6.7.1 row demoted to 🚧 SUPERSEDED (PR #71 merged); new v6.7.2 ✅ CURRENT STATE row above. |
+| 9 | `conversation-summary.md` | This entry. |
+
+### Validation
+
+- `tsc --noEmit` clean.
+- Supabase JS projection `title:data->>title` smoke-tested with the real supabase-js client + service-role key: returns clean rows. Quality-pool count confirmed at 24,935 films (matches the 24,940 from the migration-022 verification minus a handful of unicode-edge titles where `data->>title` may evaluate to empty).
+- IndexNow envelope shape conforms to spec: `{host, key, keyLocation, urlList}` with `Content-Type: application/json`. Hardcoded key matches the file's basename — `/dc00b483c0824908992644d46df2f737.txt` is the `keyLocation` Bing/Yandex/etc. will fetch to verify ownership.
+- The recommendations `<a>` change preserves all existing visual styling (verified via inline-style diff: only `textDecoration`, `color`, `display` added).
+- No new env vars needed. `INDEXNOW_KEY` is intentionally a public constant (it's literally a file hosted on the public domain).
+
+### Operational follow-up for the user (~30 min, post-merge)
+
+1. **Google Search Console** — https://search.google.com/search-console
+   - Add property `https://www.filmglance.com`
+   - Verify via DNS TXT (paste the value Google issues into Cloudflare DNS for `filmglance.com`)
+   - Submit sitemap URL: `https://www.filmglance.com/sitemap.xml`
+2. **Bing Webmaster Tools** — https://www.bing.com/webmasters
+   - Add property → verify via DNS TXT
+   - Submit sitemap
+   - Bing automatically picks up the IndexNow key from `/dc00b483c0824908992644d46df2f737.txt` — no separate "register IndexNow" step required
+3. **Yandex Webmaster (optional)** — https://webmaster.yandex.com
+   - Same pattern; Yandex also receives the IndexNow pings via the protocol
+4. **Confirm IndexNow is firing**: after the first prod search post-merge, check Vercel function logs for `[indexnow] notified 1 URL(s) (200)` (or 202). `curl https://www.filmglance.com/dc00b483c0824908992644d46df2f737.txt` should return the key text.
+
+### Key learnings
+
+1. **Supabase JS PostgREST JSON projection works as documented.** `select("alias:column->>jsonpath")` returns the aliased scalar — confirmed against prod with both Management API (raw SQL) and the real supabase-js client. The `app/api/posters/route.ts` existing pattern (`.select("data->poster_path")` without alias) auto-names the result field `poster_path` — either pattern is fine.
+2. **`movie_cache` has anon-blocking RLS; service-role is the correct client for ad-hoc reads.** The `discover_*` RPCs bypass this via `SECURITY DEFINER`, which is why /discover/page.tsx can use `supabaseAnon`. But for a plain SELECT with JSON projection (like the sitemap needs), we have to use `supabaseAdmin`. The trade-off: service-role bypasses RLS so we must keep the call server-only, which the sitemap is by construction.
+3. **`search_key` duplicates require dedup in the sitemap.** `writeCacheEntries` upserts multiple `search_key` variants per film ("the shawshank redemption" + "shawshank redemption") so the same title appears in 2-3 rows. Without dedup, `sitemap.xml` would contain duplicate URLs — technically allowed but a wasted-budget signal. JS dedup by URL is one line.
+4. **IndexNow key is a public ownership proof, not a credential.** The protocol works by Bing/Yandex/etc. fetching `https://<host>/<key>.txt` and verifying the response body matches the key. So the key is literally served by the public domain and there's nothing to leak. Treating it as an env-var secret is unnecessary indirection — hardcode it.
+5. **`headers()` from `next/headers` is the right way to derive the loopback hostname** when a server component needs to call a sibling API route. Cleaner than `process.env.VERCEL_URL` (which only exists in some build contexts) or hardcoded production URLs (which break on preview deploys).
+
+### Next steps (for next chat)
+
+1. **Open and merge v6.7.2 PR** per playbook.
+2. **User performs the 30-min operational checklist above** — GSC + Bing WMT + Yandex WMT property verification + sitemap submission.
+3. **Verify IndexNow firing in prod** after the first organic search post-merge.
+4. **GEO Tier 2 (separate session, reconfirm scope first)**: source-as-Organization in `movieSchema()` Reviews (16%→50%+ factual-accuracy bump), `VideoObject` schema for trailers + the 3 YouTube reviews per film, `FAQPage` schema templated per-movie, forum cross-linking from `?q=` pages → `discuss.filmglance.com` boards, answer-first prose on `/`, `/discover`, `/boxoffice`, ETag on `?q=` route, non-`q` querystring strip + self-canonical.
+5. **Standing-queue items** (unchanged): VPS forum import follow-ups, 6 Dependabot vulns, Supabase PAT rotation Apr 2027, dead `YOUTUBE_API_KEY` in Vercel env, missing `003_anonymous_searches.sql`, optional Stripe teardown.
+
+---
+
 ## Session: May 12, 2026 (continued, after crash recovery) — D7 edge-cache + GEO Move A + migration 022 applied to production + v6.7.1 bundled PR
 
 User's machine died mid-session after the v6.7.0 D1-D6 PR (#70) merged. This session resumed with a "where were you" prompt and rebuilt context from the prior session's bible-doc updates, the `MEMORY.md` index, the 3 staging-ahead-of-main commits (`a694044` D7, `0664332` Move A, `0042c55` Move A hotfix), and the live Vercel deployment-status check confirming the hotfix preview built green at 2026-05-12T16:39 UTC.

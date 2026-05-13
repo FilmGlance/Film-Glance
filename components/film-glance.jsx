@@ -4470,9 +4470,18 @@ export default function FilmGlance() {
                 <Accordion icon={<Film size={13} />} label="You Might Also Like" open={true} toggle={() => {}}>
                   <div style={{ padding: "8px 18px 22px", display: "flex", gap: 10 }}>
                     {result.recommendations.map((rec, i) => (
-                      <button key={`${rec.title}-${i}`}
-                        onClick={() => { setQuery(rec.title); doSearch(rec.title.toLowerCase()); }}
-                        style={{ flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left", transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both` }}
+                      <a key={`${rec.title}-${i}`}
+                        href={`/?q=${encodeURIComponent(rec.title)}`}
+                        onClick={e => {
+                          // Let the browser handle modifier-clicks (Cmd/Ctrl, middle, etc.)
+                          // so right-click → open-in-new-tab and Cmd-click work naturally.
+                          // Plain left-click stays client-side for the fast in-app search.
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                          e.preventDefault();
+                          setQuery(rec.title);
+                          doSearch(rec.title.toLowerCase());
+                        }}
+                        style={{ flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, overflow: "hidden", cursor: "pointer", padding: 0, textAlign: "left", textDecoration: "none", color: "inherit", display: "block", transition: "all 0.3s", animation: `fadeIn 0.5s ${0.1 + i * 0.1}s both` }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,215,0,0.15)"; e.currentTarget.style.background = "rgba(255,215,0,0.03)"; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                       >
@@ -4486,7 +4495,7 @@ export default function FilmGlance() {
                         <div style={{ padding: "6px 8px 8px" }}>
                           <p style={{ fontSize: 10, fontWeight: 600, color: "#aaa", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
                         </div>
-                      </button>
+                      </a>
                     ))}
                   </div>
                 </Accordion>
