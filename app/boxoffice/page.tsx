@@ -163,19 +163,23 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: PAGE_JSON_LD }}
       />
-      {/* v6.7.3 Tier-2 #10 — answer-first prose, server-rendered above
-          the client UI. Gives crawlers a definitional summary of the
-          page's data + sources in the initial HTML. */}
+      <Suspense fallback={null}>
+        <BoxOfficePage />
+      </Suspense>
+      {/* v6.7.3 Tier-2 #10 — answer-first prose at footer. Crawlers parse
+          the entire HTML; position doesn't affect citation extraction.
+          Same subtle gold-rule treatment as /discover + /?q= FAQ. */}
       <section
         aria-label="About Box Office"
         style={{
           maxWidth: 720,
-          margin: "0 auto",
-          padding: "20px 24px 0",
-          color: "rgba(255,255,255,0.78)",
+          margin: "48px auto 64px",
+          padding: "32px 24px",
+          borderTop: "1px solid rgba(255,215,0,0.12)",
+          color: "rgba(255,255,255,0.72)",
           fontFamily: "'Syne',sans-serif",
           fontSize: 14,
-          lineHeight: 1.6,
+          lineHeight: 1.7,
         }}
       >
         <p style={{ margin: 0 }}>
@@ -187,9 +191,6 @@ export default async function Page() {
           refreshes every Tuesday after BOM publishes the prior week&apos;s final numbers.
         </p>
       </section>
-      <Suspense fallback={null}>
-        <BoxOfficePage />
-      </Suspense>
     </>
   );
 }
