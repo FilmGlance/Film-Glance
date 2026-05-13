@@ -25,7 +25,14 @@ import type { Metadata } from "next";
 import FilmGlance from "@/components/film-glance";
 import { supabaseAnon } from "@/lib/supabase-anon";
 import { sanitizeQuery } from "@/lib/sanitize";
-import { movieSchema, serializeJsonLd } from "@/lib/structured-data";
+import {
+  movieSchema,
+  serializeJsonLd,
+  videoReviewSchema,
+  faqForFilm,
+  faqPageSchema,
+  type FaqQA,
+} from "@/lib/structured-data";
 
 // Reading `searchParams` makes this route dynamic by definition; declaring
 // it explicitly stops Next 16 from attempting a static prerender pass that
@@ -47,8 +54,25 @@ interface CachedMovieData {
   runtime?: string | number | null;
   poster_path?: string | null;
   cast?: Array<{ name?: string }> | null;
-  sources?: Array<{ type?: string; score?: number; max?: number; url?: string }> | null;
+  sources?: Array<{
+    name?: string;
+    // `type` is the rating's scale descriptor in the cache ("percentage",
+    // "score", "points") — NOT the source label. Kept here so the typecheck
+    // doesn't flag the legacy field, but we read `name` for schema purposes.
+    type?: string;
+    score?: number;
+    max?: number;
+    url?: string;
+  }> | null;
   score?: { ten?: number | string | null } | null;
+  // v6.7.3 Tier-2 #7 — video schema sources.
+  trailer_key?: string | null;
+  video_reviews?: Array<{
+    video_id?: string;
+    title?: string;
+    channel?: string;
+    thumbnail?: string;
+  }> | null;
 }
 
 interface CachedMovie {
@@ -118,8 +142,14 @@ export async function generateMetadata({
   const rawQ = Array.isArray(params.q) ? params.q[0] : params.q;
   const film = await fetchCachedFilm(rawQ);
   if (!film?.title) {
-    // No q / cache miss → inherit the default site-wide metadata from layout.tsx
-    return {};
+    // v6.7.3 Tier-2 #11 — always emit canonical, even when there's no
+    // matched film, so utm_*, fbclid, and any other tracking params on the
+    // homepage (or unknown ?q values) collapse to the canonical landing in
+    // crawler indices. Without this, every shared link with utm tags would
+    // index as a duplicate page.
+    return {
+      alternates: { canonical: `${SITE_URL}/` },
+    };
   }
   const year = coerceYear(film.year);
   const titleWithYear = year ? `${film.title} (${year})` : film.title;
@@ -166,10 +196,18 @@ export default async function Home({
   // ratingValue + bestRating so a 0-100 RT score reads differently from a
   // 0-10 IMDb score. This is exactly the citation-rich shape ChatGPT
   // Search / Perplexity / Bing extract.
+  //
+  // v6.7.3 Tier-2 #7 — trailer is embedded under Movie.trailer; YouTube
+  // review videos are emitted as additional top-level VideoObject entities
+  // wrapped under @graph by serializeJsonLd. Each VideoObject's `about`
+  // links back to the Movie's `@id`, so crawlers see them as reviews of
+  // this specific film, not orphan videos.
   let perFilmJsonLd: string | null = null;
+  let faqQAs: FaqQA[] = [];
   if (film?.title) {
-    const schema = movieSchema({
-      url: canonicalQUrl(film.title),
+    const filmUrl = canonicalQUrl(film.title);
+    const movie = movieSchema({
+      url: filmUrl,
       title: film.title,
       year: coerceYear(film.year),
       releaseDate: film.release_date || null,
@@ -180,19 +218,71 @@ export default async function Home({
       posterPath: film.poster_path || null,
       runtime: film.runtime ?? null,
       fgScore: coerceFgScore(film.score),
+      // v6.7.3 — pass the canonical source `name` ("RT Critics", "IMDb",
+      // etc.) to movieSchema, not the scale `type` ("percentage", "score").
+      // The latter was a Move A copy-paste bug that put "percentage" /
+      // "score" as Review.author Organization names in the JSON-LD.
       sources:
         Array.isArray(film.sources)
           ? film.sources
-              .filter((s) => s && typeof s.type === "string")
+              .filter((s) => s && typeof s.name === "string" && s.name.trim())
               .map((s) => ({
-                type: String(s.type),
+                name: String(s.name),
+                score: typeof s.score === "number" ? s.score : 0,
+                max: typeof s.max === "number" ? s.max : 10,
+                url: s.url ?? null,
+              }))
+          : null,
+      trailerKey: film.trailer_key || null,
+    });
+    const schemas: Record<string, unknown>[] = [movie];
+    // Up to 3 YouTube review videos as standalone VideoObject entities.
+    if (Array.isArray(film.video_reviews) && film.video_reviews.length > 0) {
+      const titledFilm = coerceYear(film.year)
+        ? `${film.title} (${coerceYear(film.year)})`
+        : film.title;
+      for (const v of film.video_reviews.slice(0, 3)) {
+        if (!v?.video_id || typeof v.video_id !== "string") continue;
+        schemas.push(
+          videoReviewSchema(
+            {
+              videoId: v.video_id,
+              title: v.title ?? null,
+              channel: v.channel ?? null,
+              thumbnail: v.thumbnail ?? null,
+            },
+            { id: filmUrl, name: titledFilm },
+          ),
+        );
+      }
+    }
+    // v6.7.3 Tier-2 #8 — FAQPage with templated Q&As. The same Q&As are
+    // rendered as visible HTML below the FilmGlance UI so the JSON-LD
+    // matches visible content (Google policy) and AI engines have a
+    // structured Q&A signal to extract from.
+    faqQAs = faqForFilm({
+      title: film.title,
+      year: coerceYear(film.year),
+      director: film.director || null,
+      releaseDate: film.release_date || null,
+      description: film.description || null,
+      fgScore: coerceFgScore(film.score),
+      sources:
+        Array.isArray(film.sources)
+          ? film.sources
+              .filter((s) => s && typeof s.name === "string" && s.name.trim())
+              .map((s) => ({
+                name: String(s.name),
                 score: typeof s.score === "number" ? s.score : 0,
                 max: typeof s.max === "number" ? s.max : 10,
                 url: s.url ?? null,
               }))
           : null,
     });
-    perFilmJsonLd = serializeJsonLd(schema);
+    if (faqQAs.length > 0) {
+      schemas.push(faqPageSchema(faqQAs));
+    }
+    perFilmJsonLd = serializeJsonLd(schemas);
   }
 
   return (
@@ -204,6 +294,51 @@ export default async function Home({
         />
       )}
       <FilmGlance />
+      {faqQAs.length > 0 && (
+        <section
+          aria-label="Frequently asked questions"
+          style={{
+            maxWidth: 720,
+            margin: "48px auto 64px",
+            padding: "32px 24px",
+            borderTop: "1px solid rgba(255,215,0,0.12)",
+            color: "rgba(255,255,255,0.82)",
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 15,
+            lineHeight: 1.6,
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: "'Playfair Display',serif",
+              fontStyle: "italic",
+              fontSize: 22,
+              color: "#FFD700",
+              margin: "0 0 20px",
+              letterSpacing: -0.2,
+            }}
+          >
+            Frequently asked questions
+          </h2>
+          <dl style={{ margin: 0 }}>
+            {faqQAs.map((qa, i) => (
+              <div key={i} style={{ marginBottom: 18 }}>
+                <dt
+                  style={{
+                    fontWeight: 600,
+                    color: "rgba(255,215,0,0.92)",
+                    marginBottom: 6,
+                    fontSize: 15,
+                  }}
+                >
+                  {qa.question}
+                </dt>
+                <dd style={{ margin: 0, color: "rgba(255,255,255,0.78)" }}>{qa.answer}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
     </>
   );
 }

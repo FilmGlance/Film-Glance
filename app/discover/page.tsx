@@ -193,6 +193,33 @@ export default async function Page() {
       <Suspense fallback={null}>
         <DiscoverPage {...({ initialData } as Record<string, unknown>)} />
       </Suspense>
+      {/* v6.7.3 Tier-2 #10 — answer-first prose. Crawlers and AI engines
+          parse the entire rendered HTML; position doesn't affect citation
+          extraction. Placed at footer so it doesn't disrupt the cinematic
+          hero + filter UI above. Same styling treatment as the FAQ block
+          on /?q= pages: subtle gold rule + dark/gold dim palette. */}
+      <section
+        aria-label="About Discover"
+        style={{
+          maxWidth: 720,
+          margin: "48px auto 64px",
+          padding: "32px 24px",
+          borderTop: "1px solid rgba(255,215,0,0.12)",
+          color: "rgba(255,255,255,0.72)",
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 14,
+          lineHeight: 1.7,
+        }}
+      >
+        <p style={{ margin: 0 }}>
+          Discover ranks the top 100 films by Film Glance Score — an aggregated rating drawn from
+          nine verified critic and audience sources including Rotten Tomatoes, IMDb, Metacritic,
+          Letterboxd, and TMDB. Browse by genre, decade, or release window (In Theaters / At Home),
+          or spin the Movie Reel Roulette for a random pick rated 8.0+. Every entry passes a
+          quality gate: a calculable Film Glance Score and at least five verified rating sources.
+          The list refreshes every 10 minutes from a cache of 25,000+ films.
+        </p>
+      </section>
     </>
   );
 }
